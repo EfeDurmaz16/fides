@@ -1,10 +1,34 @@
 {
   "name": "@fides/sdk",
   "version": "0.1.0",
-  "description": "FIDES SDK - Identity, trust, and verification primitives",
+  "description": "Decentralized trust and authentication protocol for autonomous AI agents",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropic-ai/fides",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/anthropic-ai/fides#readme",
+  "keywords": [
+    "fides",
+    "trust",
+    "authentication",
+    "ai-agents",
+    "did",
+    "decentralized-identity",
+    "ed25519",
+    "http-signatures",
+    "rfc9421",
+    "web-of-trust"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,7 +39,8 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@fides/shared": "workspace:*",

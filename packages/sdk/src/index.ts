@@ -3,7 +3,7 @@ export * from '@fides/shared'
 
 // Identity module exports
 export { generateKeyPair, sign, verify } from './identity/keypair.js'
-export { generateDID, parseDID } from './identity/did.js'
+export { generateDID, parseDID, isValidDID } from './identity/did.js'
 export {
   type KeyStore,
   MemoryKeyStore,

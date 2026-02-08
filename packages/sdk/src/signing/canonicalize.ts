@@ -2,6 +2,8 @@
  * RFC 9421 HTTP Message Signatures - Canonicalization
  */
 
+import { MAX_REQUEST_BODY_SIZE } from '@fides/shared'
+
 export interface RequestLike {
   method: string
   url: string
@@ -76,6 +78,17 @@ export function createSignatureBase(
   request: RequestLike,
   params: SignatureParams
 ): string {
+  // Validate request body size if present
+  if (request.body) {
+    const bodySize = typeof request.body === 'string'
+      ? Buffer.byteLength(request.body, 'utf8')
+      : request.body.length
+
+    if (bodySize > MAX_REQUEST_BODY_SIZE) {
+      throw new Error(`Request body size ${bodySize} exceeds maximum allowed size ${MAX_REQUEST_BODY_SIZE}`)
+    }
+  }
+
   const lines: string[] = []
 
   // Add each component

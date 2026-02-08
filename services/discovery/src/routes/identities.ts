@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { identities } from '../db/schema.js'
-import { DiscoveryError, DID_PREFIX } from '@fides/shared'
+import { DiscoveryError, DID_PREFIX, ED25519_PUBLIC_KEY_LENGTH } from '@fides/shared'
 import type { RegisterIdentityRequest, IdentityResponse } from '../types.js'
 
 const identitiesRouter = new Hono()
@@ -17,14 +17,25 @@ identitiesRouter.post('/', async (c) => {
       return c.json({ error: 'Missing required fields: did, publicKey' }, 400)
     }
 
-    // Validate DID format
+    // Validate DID format (basic check - could import isValidDID but keeping minimal)
     if (!body.did.startsWith(DID_PREFIX)) {
       return c.json({ error: `Invalid DID format. Must start with ${DID_PREFIX}` }, 400)
+    }
+
+    // Validate DID contains base58 characters after prefix
+    const didSuffix = body.did.slice(DID_PREFIX.length)
+    if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(didSuffix) || didSuffix.length === 0) {
+      return c.json({ error: 'Invalid DID format. Must contain valid base58 encoding' }, 400)
     }
 
     // Validate public key is hex-encoded
     if (!/^[0-9a-fA-F]+$/.test(body.publicKey)) {
       return c.json({ error: 'Public key must be hex-encoded' }, 400)
+    }
+
+    // Validate public key length (32 bytes = 64 hex chars)
+    if (body.publicKey.length !== ED25519_PUBLIC_KEY_LENGTH * 2) {
+      return c.json({ error: `Public key must be ${ED25519_PUBLIC_KEY_LENGTH * 2} hex characters (${ED25519_PUBLIC_KEY_LENGTH} bytes)` }, 400)
     }
 
     // Insert identity into database

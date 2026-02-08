@@ -1,230 +1,304 @@
 # FIDES
 
-**Decentralized Trust & Authentication Protocol for AI Agents**
+> **Latin:** *fides* = trust, faith, confidence
 
-FIDES (Federated Identity and Decentralized Endorsement System) is a protocol enabling autonomous AI agents to establish cryptographic identities, authenticate requests, and build trust relationships through a decentralized attestation network.
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
+[![Build](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/yourusername/fides)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/yourusername/fides/pulls)
+
+**Decentralized trust and authentication protocol for autonomous AI agents**
+
+---
 
 ## Why FIDES?
 
-As AI agents become increasingly autonomous, they need robust mechanisms to identify themselves, authenticate requests, and establish trust with other agents and services. Traditional authentication systems designed for humans don't translate well to autonomous agents operating at scale. FIDES addresses this by providing:
+As AI agents become increasingly autonomous, they face critical challenges in secure communication:
 
-- **Cryptographic Identity**: Ed25519-based DIDs for verifiable agent identities
-- **Request Authentication**: RFC 9421 HTTP message signatures for secure communication
-- **Decentralized Trust**: Distributed trust attestations with graph-based reputation scoring
-- **Agent Autonomy**: Self-sovereign identity without reliance on central authorities
+- **No verifiable identity** — Agents cannot prove who they are without centralized authorities
+- **No trust mechanism** — No standard way to establish trust relationships between agents
+- **Request tampering** — HTTP requests lack cryptographic integrity protection
+- **Reputation opacity** — No way to discover an agent's trustworthiness through network effects
 
-## Prerequisites
+FIDES solves these problems with a decentralized, cryptographically secure trust protocol built specifically for AI agents.
 
-- **Node.js 18+** (recommend Node.js 22)
-- **pnpm** package manager
-- **Docker** (for PostgreSQL)
-- **Git**
+---
+
+## Key Features
+
+- **⚡ Ed25519 Identity** — DID-based identities with secure elliptic curve cryptography
+- **📝 RFC 9421 HTTP Message Signatures** — Standardized request signing and verification
+- **🕸️ Decentralized Trust Graph** — Distributed trust attestations with BFS traversal
+- **🔗 Transitive Trust with Decay** — Reputation propagates through the network (0.85 decay/hop)
+- **🔒 Zero-dependency Crypto** — Pure JavaScript cryptography via @noble/ed25519
+- **📘 TypeScript-first** — End-to-end type safety for robust agent development
+
+---
 
 ## Quick Start
 
-### 1. Install
+### Installation
 
 ```bash
-git clone https://github.com/yourusername/fides.git
-cd fides
-pnpm install
+npm install @fides/sdk
 ```
 
-### 2. Start Services
+### Basic Usage
 
-```bash
-docker compose up -d
-pnpm build
-pnpm dev
+```typescript
+import { Fides, TrustLevel } from '@fides/sdk'
+
+// Initialize FIDES client
+const fides = new Fides({
+  discoveryUrl: 'http://localhost:3000',
+  trustUrl: 'http://localhost:3001'
+})
+
+// Create agent identity
+const { did } = await fides.createIdentity({
+  name: 'My AI Agent'
+})
+
+// Sign a request
+const signed = await fides.signRequest({
+  method: 'POST',
+  url: 'https://agent-b.example.com/api/task',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ task: 'collaborate' })
+})
+
+// Verify incoming request
+const result = await fides.verifyRequest(incomingRequest)
+if (result.valid) {
+  // Request is authentic and unmodified
+}
+
+// Trust another agent
+await fides.trust('did:fides:7nK9fV3h...', TrustLevel.HIGH)
+
+// Check reputation
+const score = await fides.getReputation('did:fides:7nK9fV3h...')
 ```
 
-This starts:
-- PostgreSQL database on port 5432
-- Discovery service on http://localhost:3000
-- Trust graph service on http://localhost:3001
+---
 
-### 3. Create Your First Agent Identity
+## Architecture
 
-```bash
-fides init --name "My Agent"
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        AI Agent                             │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              @fides/sdk                             │   │
+│  │                                                     │   │
+│  │  • Identity (Ed25519 keypairs, DIDs)               │   │
+│  │  • Signing (RFC 9421 HTTP signatures)              │   │
+│  │  • Trust (Attestations, verification)              │   │
+│  │  • Discovery (Identity resolution)                 │   │
+│  └──────────────┬──────────────────┬───────────────────┘   │
+└─────────────────┼──────────────────┼──────────────────────┘
+                  │                  │
+                  ▼                  ▼
+        ┌─────────────────┐  ┌─────────────────┐
+        │   Discovery      │  │  Trust Graph    │
+        │    Service       │  │    Service      │
+        │                  │  │                 │
+        │  • Register DIDs │  │  • Attestations │
+        │  • Resolve keys  │  │  • Reputation   │
+        │  • .well-known   │  │  • BFS graph    │
+        └────────┬─────────┘  └────────┬────────┘
+                 │                     │
+                 └──────────┬──────────┘
+                            ▼
+                    ┌──────────────┐
+                    │  PostgreSQL  │
+                    └──────────────┘
 ```
 
-### 4. Sign and Verify Requests
+---
 
-```bash
-# Sign a request
-fides sign https://api.example.com/data --method GET
+## API Reference
 
-# Verify a signed request
-fides verify --method GET --url https://api.example.com/data --signature-input "..." --signature "..."
-```
+### Core Functions
 
-### 5. Build Trust Relationships
+| Function | Description |
+|----------|-------------|
+| `generateKeyPair()` | Generate Ed25519 keypair for agent identity |
+| `generateDID(publicKey)` | Create DID from public key (did:fides:base58) |
+| `signRequest(request, privateKey, options)` | Sign HTTP request per RFC 9421 |
+| `verifyRequest(request, publicKey)` | Verify HTTP request signature |
+| `createAttestation(issuerDid, subjectDid, level, privateKey)` | Create signed trust attestation |
+| `verifyAttestation(attestation, publicKey)` | Verify attestation signature |
 
-```bash
-# Trust another agent
-fides trust did:fides:7nK9fV3hP8xRqW2mTgJvCz4YpLnH5QbM3kD6sF2gR9Xa --level high
+### Fides Class (High-level API)
 
-# Check reputation
-fides discover did:fides:7nK9fV3hP8xRqW2mTgJvCz4YpLnH5QbM3kD6sF2gR9Xa
-```
+| Method | Description |
+|--------|-------------|
+| `createIdentity(metadata?)` | Create new identity and register with discovery |
+| `signRequest(request)` | Sign request with current identity |
+| `verifyRequest(request)` | Verify request and resolve signer identity |
+| `trust(subjectDid, level)` | Create and submit trust attestation |
+| `getReputation(did)` | Get aggregated reputation score |
+| `resolve(didOrDomain)` | Resolve DID to identity information |
 
-## Monorepo Structure
+### Key Stores
+
+| Class | Description |
+|-------|-------------|
+| `MemoryKeyStore` | In-memory key storage (development only) |
+| `FileKeyStore` | AES-256-GCM encrypted file storage |
+
+---
+
+## Trust Levels
+
+| Level | Value | Description |
+|-------|-------|-------------|
+| `NONE` | 0 | No trust established |
+| `LOW` | 25 | Minimal trust, limited interaction |
+| `MEDIUM` | 50 | Moderate trust, standard collaboration |
+| `HIGH` | 75 | Strong trust, sensitive operations |
+| `ABSOLUTE` | 100 | Complete trust, full delegation |
+
+> **Note:** Trust propagates through the network with 0.85 exponential decay per hop (max 6 hops)
+
+---
+
+## Protocol Specification
+
+FIDES implements a complete decentralized trust protocol with:
+
+- **Identity Layer**: Ed25519 keypairs + `did:fides:<base58-pubkey>` identifiers
+- **Authentication Layer**: RFC 9421 HTTP Message Signatures with ed25519 algorithm
+- **Trust Layer**: Signed attestations stored in distributed trust graph
+- **Reputation Layer**: BFS graph traversal with exponential decay scoring
+
+**Full specification:** [docs/protocol-spec.md](docs/protocol-spec.md)
+
+---
+
+## Project Structure
 
 ```
 fides/
 ├── packages/
-│   ├── shared/         # Shared types, errors, constants
-│   ├── sdk/            # Core FIDES protocol implementation
-│   │   ├── identity/   # Ed25519 identity and DID generation
-│   │   ├── signing/    # RFC 9421 HTTP message signatures
-│   │   ├── discovery/  # Discovery client
-│   │   ├── trust/      # Trust client
-│   │   └── fides.ts    # High-level API
-│   ├── cli/            # Command-line interface
-│   └── rust-sdk/       # Rust SDK (planned)
+│   ├── sdk/              # Core protocol implementation
+│   │   ├── identity/     # Keypairs, DIDs, key storage
+│   │   ├── signing/      # RFC 9421 HTTP signatures
+│   │   ├── trust/        # Attestations, verification
+│   │   └── discovery/    # Identity resolution
+│   ├── cli/              # Command-line interface
+│   └── shared/           # Shared types and constants
 ├── services/
-│   ├── discovery/      # Identity registration & resolution service
-│   ├── trust-graph/    # Trust attestation & reputation service
-│   ├── policy-engine/  # Policy enforcement service (planned)
-│   └── platform-api/   # Platform coordination API (planned)
-├── apps/
-│   └── web/            # Web dashboard (planned)
+│   ├── discovery/        # Identity registration service
+│   └── trust/            # Trust graph service
 ├── docs/
-│   ├── architecture.md     # System architecture overview
-│   ├── protocol-spec.md    # Detailed protocol specification
-│   └── getting-started.md  # Complete setup and usage guide
-└── tests/              # Integration tests
+│   ├── architecture.md   # System design
+│   ├── protocol-spec.md  # Protocol details
+│   └── getting-started.md # Tutorial
+└── scripts/
+    └── two-agents-demo.ts # Demo script
 ```
-
-## Core Components
-
-### @fides/sdk
-TypeScript SDK implementing the complete FIDES protocol:
-- Ed25519 identity generation and management
-- DID creation (`did:fides:<base58-pubkey>`)
-- RFC 9421 HTTP message signatures
-- Discovery and trust clients
-- High-level Fides API
-
-### @fides/cli
-Command-line interface for FIDES operations:
-- `fides init` - Create agent identity
-- `fides sign` - Sign HTTP requests
-- `fides verify` - Verify signed requests
-- `fides trust` - Issue trust attestations
-- `fides discover` - Resolve identities and check reputation
-- `fides status` - View agent status
-
-### Discovery Service
-Identity registration and resolution service (Hono + PostgreSQL):
-- Register DIDs with public keys and metadata
-- Resolve DIDs to identity documents
-- `.well-known/fides.json` support for self-hosted identities
-
-### Trust Graph Service
-Trust attestation and reputation service (Hono + PostgreSQL):
-- Create and verify trust attestations
-- BFS graph traversal with exponential decay (0.85 per hop, max 6 hops)
-- Reputation scoring from direct and transitive trust
-
-## Key Features
-
-### Cryptographic Identity
-- Ed25519 keypairs for signing and verification
-- DID format: `did:fides:<base58-encoded-public-key>`
-- AES-256-GCM encrypted key storage with PBKDF2 derivation
-
-### HTTP Message Signatures
-- RFC 9421 compliant request signing
-- Signature components: `@method`, `@target-uri`, `@authority`, `content-type`
-- Timestamp-based replay protection (300-second validity window)
-
-### Trust Network
-- Signed trust attestations (0-100 trust levels)
-- Graph-based reputation computation
-- Exponential trust decay per hop
-- Multiple trust path aggregation
-
-### Decentralized Resolution
-- Central discovery service for convenience
-- `.well-known` protocol for self-hosted identities
-- Fallback resolution order
-
-## Documentation
-
-- **[Getting Started Guide](./docs/getting-started.md)** - Complete setup and tutorial
-- **[Architecture Overview](./docs/architecture.md)** - System design and components
-- **[Protocol Specification](./docs/protocol-spec.md)** - Detailed protocol documentation
-
-## Development
-
-### Build
-
-```bash
-pnpm build
-```
-
-### Run Tests
-
-```bash
-pnpm test
-```
-
-### Type Check
-
-```bash
-pnpm typecheck
-```
-
-### Run Development Servers
-
-```bash
-pnpm dev
-```
-
-### Lint
-
-```bash
-pnpm lint
-```
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
-
-## Roadmap
-
-### Current (v1.0-alpha)
-- Core protocol implementation
-- TypeScript SDK and CLI
-- Discovery and trust graph services
-- Basic trust attestations and reputation
-
-### Planned (v1.1)
-- Key rotation and revocation
-- Nonce-based replay protection
-- Rate limiting and spam prevention
-- Negative trust attestations
-
-### Future
-- Rust SDK for performance-critical agents
-- Policy engine for automated trust decisions
-- Web dashboard for trust visualization
-- Zero-knowledge proofs for private attestations
-- Threshold signatures for multi-agent identities
-
-## License
-
-MIT
 
 ---
 
-Built with TypeScript, Hono, Drizzle ORM, and PostgreSQL.
+## Development
+
+### Prerequisites
+
+- Node.js >= 20 (recommend v22)
+- pnpm (package manager)
+- Docker (for PostgreSQL)
+
+### Setup
+
+```bash
+# Clone repository
+git clone https://github.com/yourusername/fides.git
+cd fides
+
+# Install dependencies
+pnpm install
+
+# Start PostgreSQL
+docker compose up -d
+
+# Build all packages
+pnpm build
+
+# Start development servers
+pnpm dev
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `pnpm build` | Build all packages |
+| `pnpm test` | Run test suite |
+| `pnpm lint` | Lint codebase |
+| `pnpm typecheck` | Type-check TypeScript |
+| `pnpm dev` | Start services in watch mode |
+| `pnpm clean` | Clean build artifacts |
+
+### Running the Demo
+
+```bash
+# Build packages first
+pnpm build
+
+# Run two-agent demo
+npx tsx scripts/two-agents-demo.ts
+```
+
+---
+
+## Security
+
+FIDES uses industry-standard cryptography and security practices:
+
+- **Ed25519 signatures** — Fast, secure elliptic curve cryptography via @noble/ed25519
+- **Timing-safe comparisons** — Constant-time signature verification prevents timing attacks
+- **AES-256-GCM encryption** — Password-protected private key storage
+- **PBKDF2 key derivation** — 600k iterations with SHA-256
+- **Replay protection** — Timestamp-based signature expiration (300s window)
+
+> **Security disclosure:** Report vulnerabilities to [SECURITY.md](SECURITY.md)
+
+---
+
+## Contributing
+
+We welcome contributions! Here's how to get started:
+
+1. **Fork the repository**
+2. **Create a feature branch** — `git checkout -b feature/amazing-feature`
+3. **Make your changes** — Follow TypeScript best practices
+4. **Add tests** — Ensure `pnpm test` passes
+5. **Commit changes** — `git commit -m 'Add amazing feature'`
+6. **Push to branch** — `git push origin feature/amazing-feature`
+7. **Open a Pull Request**
+
+**Guidelines:**
+- Write clear commit messages
+- Add tests for new features
+- Update documentation as needed
+- Follow existing code style
+- Ensure CI passes
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details
+
+---
+
+<div align="center">
+
+**Built with cryptographic trust** 🔐
+
+[Documentation](docs/) • [Architecture](docs/architecture.md) • [Getting Started](docs/getting-started.md)
+
+</div>

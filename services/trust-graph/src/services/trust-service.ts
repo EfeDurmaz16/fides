@@ -1,5 +1,5 @@
 import { eq, and, isNull } from 'drizzle-orm'
-import { TrustError } from '@fides/shared'
+import { TrustError, MIN_TRUST_LEVEL, MAX_TRUST_LEVEL } from '@fides/shared'
 import type { DbClient } from '../db/client.js'
 import { identities, trustEdges, reputationScores } from '../db/schema.js'
 import { findTrustPath } from './graph.js'
@@ -14,8 +14,21 @@ export class TrustService {
     const { issuerDid, subjectDid, trustLevel, signature, expiresAt } = request
 
     // Validate trust level
-    if (trustLevel < 0 || trustLevel > 100) {
-      throw new TrustError('Trust level must be between 0 and 100')
+    if (!Number.isInteger(trustLevel) || trustLevel < MIN_TRUST_LEVEL || trustLevel > MAX_TRUST_LEVEL) {
+      throw new TrustError(`Trust level must be an integer between ${MIN_TRUST_LEVEL} and ${MAX_TRUST_LEVEL}`)
+    }
+
+    // Validate DIDs are provided
+    if (!issuerDid || typeof issuerDid !== 'string') {
+      throw new TrustError('Invalid issuer DID')
+    }
+    if (!subjectDid || typeof subjectDid !== 'string') {
+      throw new TrustError('Invalid subject DID')
+    }
+
+    // Validate signature is provided
+    if (!signature || typeof signature !== 'string') {
+      throw new TrustError('Invalid signature')
     }
 
     // Ensure both identities exist

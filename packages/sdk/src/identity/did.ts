@@ -1,5 +1,29 @@
 import bs58 from 'bs58'
-import { DID_PREFIX, KeyError } from '@fides/shared'
+import { DID_PREFIX, KeyError, ED25519_PUBLIC_KEY_LENGTH } from '@fides/shared'
+
+/**
+ * Validate DID format
+ * @param did - DID string to validate
+ * @returns True if valid
+ */
+export function isValidDID(did: string): boolean {
+  if (!did.startsWith(DID_PREFIX)) {
+    return false
+  }
+
+  const encoded = did.slice(DID_PREFIX.length)
+  if (encoded.length === 0) {
+    return false
+  }
+
+  // Validate base58 encoding and length
+  try {
+    const decoded = bs58.decode(encoded)
+    return decoded.length === ED25519_PUBLIC_KEY_LENGTH
+  } catch {
+    return false
+  }
+}
 
 /**
  * Generate a DID from an Ed25519 public key
@@ -7,8 +31,8 @@ import { DID_PREFIX, KeyError } from '@fides/shared'
  * @returns DID string in format did:fides:<base58-pubkey>
  */
 export function generateDID(publicKey: Uint8Array): string {
-  if (publicKey.length !== 32) {
-    throw new KeyError('Public key must be 32 bytes')
+  if (publicKey.length !== ED25519_PUBLIC_KEY_LENGTH) {
+    throw new KeyError(`Public key must be ${ED25519_PUBLIC_KEY_LENGTH} bytes`)
   }
 
   const encoded = bs58.encode(publicKey)
@@ -21,9 +45,9 @@ export function generateDID(publicKey: Uint8Array): string {
  * @returns 32-byte Ed25519 public key
  */
 export function parseDID(did: string): Uint8Array {
-  if (!did.startsWith(DID_PREFIX)) {
+  if (!isValidDID(did)) {
     throw new KeyError(
-      `Invalid DID format: expected ${DID_PREFIX} prefix, got ${did}`
+      `Invalid DID format: expected ${DID_PREFIX}<valid-base58-pubkey>`
     )
   }
 
@@ -32,9 +56,9 @@ export function parseDID(did: string): Uint8Array {
   try {
     const publicKey = bs58.decode(encoded)
 
-    if (publicKey.length !== 32) {
+    if (publicKey.length !== ED25519_PUBLIC_KEY_LENGTH) {
       throw new KeyError(
-        `Invalid DID: decoded public key is ${publicKey.length} bytes, expected 32`
+        `Invalid DID: decoded public key is ${publicKey.length} bytes, expected ${ED25519_PUBLIC_KEY_LENGTH}`
       )
     }
 

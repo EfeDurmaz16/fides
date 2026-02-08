@@ -1,7 +1,7 @@
 import * as ed25519 from '@noble/ed25519'
 import { sha512 } from '@noble/hashes/sha512'
 import type { KeyPair } from '@fides/shared'
-import { KeyError } from '@fides/shared'
+import { KeyError, ED25519_PUBLIC_KEY_LENGTH, ED25519_PRIVATE_KEY_LENGTH, ED25519_PRIVATE_KEY_LENGTH_EXTENDED } from '@fides/shared'
 
 // Set the SHA-512 implementation for @noble/ed25519
 ed25519.etc.sha512Sync = (...m) => sha512(ed25519.etc.concatBytes(...m))
@@ -32,7 +32,7 @@ export async function generateKeyPair(): Promise<KeyPair> {
 /**
  * Sign a message with an Ed25519 private key
  * @param message - Message to sign
- * @param privateKey - 32-byte Ed25519 private key
+ * @param privateKey - 32-byte or 64-byte Ed25519 private key
  * @returns Signature as Uint8Array
  */
 export async function sign(
@@ -40,8 +40,8 @@ export async function sign(
   privateKey: Uint8Array
 ): Promise<Uint8Array> {
   try {
-    if (privateKey.length !== 32) {
-      throw new KeyError('Private key must be 32 bytes')
+    if (privateKey.length !== ED25519_PRIVATE_KEY_LENGTH && privateKey.length !== ED25519_PRIVATE_KEY_LENGTH_EXTENDED) {
+      throw new KeyError(`Private key must be ${ED25519_PRIVATE_KEY_LENGTH} or ${ED25519_PRIVATE_KEY_LENGTH_EXTENDED} bytes`)
     }
 
     return await ed25519.signAsync(message, privateKey)
@@ -65,8 +65,8 @@ export async function verify(
   publicKey: Uint8Array
 ): Promise<boolean> {
   try {
-    if (publicKey.length !== 32) {
-      throw new KeyError('Public key must be 32 bytes')
+    if (publicKey.length !== ED25519_PUBLIC_KEY_LENGTH) {
+      throw new KeyError(`Public key must be ${ED25519_PUBLIC_KEY_LENGTH} bytes`)
     }
 
     return await ed25519.verifyAsync(signature, message, publicKey)

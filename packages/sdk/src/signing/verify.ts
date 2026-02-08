@@ -8,6 +8,7 @@ import {
   parseSignatureInput,
   type RequestLike,
 } from './canonicalize.js'
+import { ED25519_PUBLIC_KEY_LENGTH } from '@fides/shared'
 
 export interface VerifyResult {
   valid: boolean
@@ -26,6 +27,14 @@ export async function verifyRequest(
   publicKey: Uint8Array
 ): Promise<VerifyResult> {
   try {
+    // Validate public key length
+    if (publicKey.length !== ED25519_PUBLIC_KEY_LENGTH) {
+      return {
+        valid: false,
+        error: 'Invalid public key length',
+      }
+    }
+
     // Extract headers
     const signatureInput = request.headers['Signature-Input'] || request.headers['signature-input']
     const signature = request.headers['Signature'] || request.headers['signature']

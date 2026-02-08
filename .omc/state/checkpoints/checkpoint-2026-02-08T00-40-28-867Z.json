@@ -1,0 +1,19 @@
+{
+  "created_at": "2026-02-08T00:40:28.864Z",
+  "trigger": "auto",
+  "active_modes": {
+    "ralph": {
+      "iteration": 0,
+      "prompt": ""
+    },
+    "ultrawork": {
+      "original_prompt": "/oh-my-claudecode:ralph Start building with phase 1, go through each and every phase. Finish comprehensive testling cli styling, everything. \n\n\nUse /Users/efebarandurmaz/fides/.omc/plans/fides-trust-protocol.md\n\n\ngit init first, commit in every atomic task "
+    }
+  },
+  "todo_summary": {
+    "pending": 0,
+    "in_progress": 0,
+    "completed": 0
+  },
+  "wisdom_exported": false
+}

@@ -1,0 +1,69 @@
+{
+  "agents": [
+    {
+      "agent_id": "a435d51",
+      "agent_type": "oh-my-claudecode:planner",
+      "started_at": "2026-02-08T00:23:54.361Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-02-08T00:27:24.113Z",
+      "duration_ms": 209752
+    },
+    {
+      "agent_id": "a6f17e6",
+      "agent_type": "oh-my-claudecode:architect",
+      "started_at": "2026-02-08T00:24:06.133Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-02-08T00:26:59.491Z",
+      "duration_ms": 173358
+    },
+    {
+      "agent_id": "a9ad66e",
+      "agent_type": "oh-my-claudecode:critic",
+      "started_at": "2026-02-08T00:28:08.451Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-02-08T00:30:01.585Z",
+      "duration_ms": 113134
+    },
+    {
+      "agent_id": "a031ce6",
+      "agent_type": "oh-my-claudecode:planner",
+      "started_at": "2026-02-08T00:30:47.796Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-02-08T00:35:19.007Z",
+      "duration_ms": 271211
+    },
+    {
+      "agent_id": "a83b714",
+      "agent_type": "oh-my-claudecode:critic",
+      "started_at": "2026-02-08T00:35:47.782Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-02-08T00:36:44.107Z",
+      "duration_ms": 56325
+    },
+    {
+      "agent_id": "ac86dc5",
+      "agent_type": "oh-my-claudecode:executor",
+      "started_at": "2026-02-08T00:40:10.398Z",
+      "parent_mode": "ultrawork",
+      "status": "running"
+    },
+    {
+      "agent_id": "ae7fc15",
+      "agent_type": "oh-my-claudecode:executor-low",
+      "started_at": "2026-02-08T00:40:28.730Z",
+      "parent_mode": "ultrawork",
+      "status": "completed",
+      "completed_at": "2026-02-08T00:40:48.202Z",
+      "duration_ms": 19472
+    }
+  ],
+  "total_spawned": 7,
+  "total_completed": 6,
+  "total_failed": 0,
+  "last_updated": "2026-02-08T00:40:48.204Z"
+}

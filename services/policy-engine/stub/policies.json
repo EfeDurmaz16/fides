@@ -1,0 +1,38 @@
+{
+  "description": "Example policies showing what the NL parser would produce",
+  "policies": [
+    {
+      "name": "default-deny",
+      "rules": [
+        {
+          "if": { "trust_level": { "gte": 70 }, "scope": "read" },
+          "then": "allow"
+        },
+        {
+          "if": { "trust_level": { "gte": 90 }, "scope": "write" },
+          "then": "allow"
+        }
+      ],
+      "default": "deny"
+    },
+    {
+      "name": "payment-limits",
+      "rules": [
+        {
+          "if": { "amount": { "lte": 100 }, "trust_level": { "gte": 50 } },
+          "then": "allow"
+        },
+        {
+          "if": { "amount": { "lte": 500 }, "trust_level": { "gte": 80 } },
+          "then": "allow"
+        },
+        {
+          "if": { "amount": { "gt": 500 } },
+          "then": "require_approval",
+          "metadata": { "approval_agent": "admin-agent" }
+        }
+      ],
+      "default": "deny"
+    }
+  ]
+}

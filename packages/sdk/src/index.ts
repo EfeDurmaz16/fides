@@ -9,3 +9,13 @@ export {
   MemoryKeyStore,
   FileKeyStore,
 } from './identity/keystore.js'
+
+// Signing module exports
+export {
+  type RequestLike,
+  type SignatureParams,
+  createSignatureBase,
+  parseSignatureInput,
+} from './signing/canonicalize.js'
+export { type SignOptions, signRequest } from './signing/http-signature.js'
+export { type VerifyResult, verifyRequest } from './signing/verify.js'

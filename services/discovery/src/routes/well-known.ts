@@ -9,7 +9,7 @@ wellKnown.get('/fides.json', (c) => {
     publicKey: process.env.SERVICE_PUBLIC_KEY || '',
     algorithm: ALGORITHM,
     endpoints: {
-      discovery: process.env.DISCOVERY_ENDPOINT || 'http://localhost:3001',
+      discovery: process.env.DISCOVERY_ENDPOINT || 'http://localhost:3100',
       trust: process.env.TRUST_ENDPOINT,
     },
     createdAt: new Date().toISOString(),

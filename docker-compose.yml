@@ -9,6 +9,42 @@ services:
       POSTGRES_DB: fides
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fides"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  discovery:
+    build:
+      context: .
+      dockerfile: services/discovery/Dockerfile
+    ports:
+      - "3100:3100"
+    environment:
+      DATABASE_URL: postgresql://fides:fides@postgres:5432/fides
+      DISCOVERY_PORT: "3100"
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  trust-graph:
+    build:
+      context: .
+      dockerfile: services/trust-graph/Dockerfile
+    ports:
+      - "3200:3200"
+    environment:
+      DATABASE_URL: postgresql://fides:fides@postgres:5432/fides
+      TRUST_GRAPH_PORT: "3200"
+      DISCOVERY_URL: http://discovery:3100
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      discovery:
+        condition: service_started
 
 volumes:
   postgres_data:

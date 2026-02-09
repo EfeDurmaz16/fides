@@ -75,13 +75,13 @@ pnpm dev
 ```
 
 This starts:
-- **Discovery Service** on `http://localhost:3000`
-- **Trust Graph Service** on `http://localhost:3001`
+- **Discovery Service** on `http://localhost:3100`
+- **Trust Graph Service** on `http://localhost:3200`
 
 **Verify services are running:**
 ```bash
-curl http://localhost:3000/.well-known/fides.json
-curl http://localhost:3001/trust
+curl http://localhost:3100/.well-known/fides.json
+curl http://localhost:3200/trust
 ```
 
 ## Quick Start Tutorial
@@ -264,8 +264,8 @@ import { Fides } from '@fides/sdk'
 
 // Initialize FIDES client
 const fides = new Fides({
-  discoveryUrl: 'http://localhost:3000',
-  trustUrl: 'http://localhost:3001',
+  discoveryUrl: 'http://localhost:3100',
+  trustUrl: 'http://localhost:3200',
 })
 
 // Create a new identity
@@ -308,8 +308,8 @@ console.log(`Trust paths: ${reputation.pathCount}`)
 import { Fides } from '@fides/sdk'
 
 const fides = new Fides({
-  discoveryUrl: 'http://localhost:3000',
-  trustUrl: 'http://localhost:3001',
+  discoveryUrl: 'http://localhost:3100',
+  trustUrl: 'http://localhost:3200',
 })
 
 // Verify a signed request
@@ -335,8 +335,8 @@ if (isValid) {
 import { Fides } from '@fides/sdk'
 
 const fides = new Fides({
-  discoveryUrl: 'http://localhost:3000',
-  trustUrl: 'http://localhost:3001',
+  discoveryUrl: 'http://localhost:3100',
+  trustUrl: 'http://localhost:3200',
 })
 
 // Resolve a DID to identity information
@@ -352,8 +352,8 @@ console.log(`Created: ${identity.createdAt}`)
 import { Fides } from '@fides/sdk'
 
 const fides = new Fides({
-  discoveryUrl: 'http://localhost:3000',
-  trustUrl: 'http://localhost:3001',
+  discoveryUrl: 'http://localhost:3100',
+  trustUrl: 'http://localhost:3200',
 })
 
 // Trust multiple agents
@@ -395,7 +395,7 @@ Update your CLI or SDK configuration:
 ```typescript
 const fides = new Fides({
   discoveryUrl: 'http://localhost:4000',
-  trustUrl: 'http://localhost:3001',
+  trustUrl: 'http://localhost:3200',
 })
 ```
 

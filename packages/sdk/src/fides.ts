@@ -140,7 +140,8 @@ export class Fides {
       this.currentDid,
       subjectDid,
       level,
-      attestation.signature
+      attestation.signature,
+      attestation.payload
     )
 
     return attestation
@@ -158,5 +159,32 @@ export class Fides {
    */
   async resolve(didOrDomain: string): Promise<AgentIdentity | null> {
     return this.resolver.resolve(didOrDomain)
+  }
+
+  /**
+   * Rotate the current identity's keypair
+   */
+  async rotateKey(reason?: string): Promise<{ oldDid: string; newDid: string; newPublicKey: string }> {
+    if (!this.currentDid) {
+      throw new Error('No identity available. Call createIdentity() first.')
+    }
+
+    const { rotateKey: rotate } = await import('./identity/rotation.js')
+    const result = await rotate(this.currentDid, this.keyStore, { reason })
+
+    // Register new identity with discovery
+    await this.discoveryClient.register({
+      did: result.newDid,
+      publicKey: result.newPublicKey,
+    })
+
+    const oldDid = this.currentDid
+    this.currentDid = result.newDid
+
+    return {
+      oldDid,
+      newDid: result.newDid,
+      newPublicKey: result.newPublicKey,
+    }
   }
 }

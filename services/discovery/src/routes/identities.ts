@@ -4,6 +4,7 @@ import { db } from '../db/client.js'
 import { identities } from '../db/schema.js'
 import { DiscoveryError, DID_PREFIX, ED25519_PUBLIC_KEY_LENGTH } from '@fides/shared'
 import type { RegisterIdentityRequest, IdentityResponse } from '../types.js'
+import bs58 from 'bs58'
 
 const identitiesRouter = new Hono()
 
@@ -38,6 +39,17 @@ identitiesRouter.post('/', async (c) => {
       return c.json({ error: `Public key must be ${ED25519_PUBLIC_KEY_LENGTH * 2} hex characters (${ED25519_PUBLIC_KEY_LENGTH} bytes)` }, 400)
     }
 
+    // Verify DID matches public key (prevent identity hijacking)
+    try {
+      const didPubKeyBytes = bs58.decode(didSuffix)
+      const didPubKeyHex = Buffer.from(didPubKeyBytes).toString('hex')
+      if (didPubKeyHex !== body.publicKey.toLowerCase()) {
+        return c.json({ error: 'DID does not match provided public key' }, 403)
+      }
+    } catch {
+      return c.json({ error: 'Invalid DID encoding' }, 400)
+    }
+
     // Insert identity into database
     const [identity] = await db.insert(identities).values({
       did: body.did,
@@ -64,7 +76,7 @@ identitiesRouter.post('/', async (c) => {
       if (error.message.includes('duplicate key')) {
         return c.json({ error: 'Identity already exists' }, 409)
       }
-      return c.json({ error: error.message }, 500)
+      return c.json({ error: 'Internal server error' }, 500)
     }
     return c.json({ error: 'Internal server error' }, 500)
   }
@@ -92,9 +104,6 @@ identitiesRouter.get('/:did', async (c) => {
 
     return c.json(response)
   } catch (error) {
-    if (error instanceof Error) {
-      return c.json({ error: error.message }, 500)
-    }
     return c.json({ error: 'Internal server error' }, 500)
   }
 })
@@ -121,9 +130,6 @@ identitiesRouter.get('/', async (c) => {
 
     return c.json(response)
   } catch (error) {
-    if (error instanceof Error) {
-      return c.json({ error: error.message }, 500)
-    }
     return c.json({ error: 'Internal server error' }, 500)
   }
 })

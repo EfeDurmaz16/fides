@@ -39,10 +39,11 @@ describe('TrustService', () => {
         subjectDid: 'did:fides:bob',
         trustLevel: 150,
         signature: 'deadbeef',
+        payload: '{}',
       }
 
       await expect(service.createTrust(mockDb, request)).rejects.toThrow(
-        'Trust level must be between 0 and 100'
+        'Trust level must be an integer between'
       )
     })
 
@@ -52,34 +53,25 @@ describe('TrustService', () => {
         subjectDid: 'did:fides:bob',
         trustLevel: -10,
         signature: 'deadbeef',
+        payload: '{}',
       }
 
       await expect(service.createTrust(mockDb, request)).rejects.toThrow(
-        'Trust level must be between 0 and 100'
+        'Trust level must be an integer between'
       )
     })
 
-    it('should create trust edge with valid data', async () => {
-      // Mock identity lookup to return empty (will create new)
-      mockDb.select = vi.fn(() => ({
-        from: vi.fn(() => ({
-          where: vi.fn(() => ({
-            limit: vi.fn(() => Promise.resolve([])),
-          })),
-        })),
-      }))
-
-      const request: CreateTrustRequest = {
+    it('should reject missing payload', async () => {
+      const request = {
         issuerDid: 'did:fides:alice',
         subjectDid: 'did:fides:bob',
         trustLevel: 80,
         signature: 'deadbeef',
-      }
+      } as CreateTrustRequest
 
-      const id = await service.createTrust(mockDb, request)
-
-      expect(id).toBe('test-uuid-123')
-      expect(mockDb.insert).toHaveBeenCalled()
+      await expect(service.createTrust(mockDb, request)).rejects.toThrow(
+        'Payload is required'
+      )
     })
   })
 

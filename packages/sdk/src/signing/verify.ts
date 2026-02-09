@@ -2,18 +2,26 @@
  * RFC 9421 HTTP Message Signatures - Verification
  */
 
+import { createHash } from 'node:crypto'
 import { verify } from '../identity/keypair.js'
 import {
   createSignatureBase,
   parseSignatureInput,
   type RequestLike,
 } from './canonicalize.js'
-import { ED25519_PUBLIC_KEY_LENGTH } from '@fides/shared'
+import { ED25519_PUBLIC_KEY_LENGTH, DEFAULT_CLOCK_DRIFT_SECONDS } from '@fides/shared'
+import { NonceStore } from './nonce-store.js'
 
 export interface VerifyResult {
   valid: boolean
   keyId?: string
   error?: string
+}
+
+export interface VerifyOptions {
+  nonceStore?: NonceStore
+  /** Clock drift tolerance in seconds (default: 30) */
+  clockDriftSeconds?: number
 }
 
 /**
@@ -24,7 +32,8 @@ export interface VerifyResult {
  */
 export async function verifyRequest(
   request: RequestLike,
-  publicKey: Uint8Array
+  publicKey: Uint8Array,
+  options?: VerifyOptions
 ): Promise<VerifyResult> {
   try {
     // Validate public key length
@@ -49,13 +58,34 @@ export async function verifyRequest(
     // Parse Signature-Input
     const { label, params } = parseSignatureInput(signatureInput)
 
-    // Check expiry
+    // Enforce algorithm whitelist - prevent downgrade attacks
+    if (params.alg !== 'ed25519') {
+      return {
+        valid: false,
+        keyId: params.keyid,
+        error: `Unsupported algorithm: ${params.alg}. Only ed25519 is supported.`,
+      }
+    }
+
+    // Check expiry with clock drift tolerance
+    const clockDrift = options?.clockDriftSeconds ?? DEFAULT_CLOCK_DRIFT_SECONDS
     const now = Math.floor(Date.now() / 1000)
-    if (params.expires < now) {
+    if (params.expires + clockDrift < now) {
       return {
         valid: false,
         keyId: params.keyid,
         error: `Signature expired at ${params.expires}, current time is ${now}`,
+      }
+    }
+
+    // Check for replay attack
+    if (options?.nonceStore && params.nonce) {
+      if (!options.nonceStore.check(params.nonce)) {
+        return {
+          valid: false,
+          keyId: params.keyid,
+          error: 'Replay detected: nonce already used',
+        }
       }
     }
 
@@ -80,10 +110,42 @@ export async function verifyRequest(
     // Verify signature
     const isValid = await verify(signatureBaseBytes, signatureBytes, publicKey)
 
+    if (!isValid) {
+      return {
+        valid: false,
+        keyId: params.keyid,
+        error: 'Signature verification failed',
+      }
+    }
+
+    // Verify Content-Digest if present (body integrity check)
+    const contentDigest = request.headers['Content-Digest'] || request.headers['content-digest']
+    if (contentDigest && request.body) {
+      const digestMatch = contentDigest.match(/sha-256=:([^:]+):/)
+      if (!digestMatch) {
+        return {
+          valid: false,
+          keyId: params.keyid,
+          error: 'Invalid Content-Digest header format',
+        }
+      }
+      const expectedHash = digestMatch[1]
+      const bodyBytes = typeof request.body === 'string'
+        ? new TextEncoder().encode(request.body)
+        : request.body
+      const actualHash = createHash('sha256').update(bodyBytes).digest('base64')
+      if (actualHash !== expectedHash) {
+        return {
+          valid: false,
+          keyId: params.keyid,
+          error: 'Content-Digest mismatch: body has been tampered with',
+        }
+      }
+    }
+
     return {
-      valid: isValid,
+      valid: true,
       keyId: params.keyid,
-      error: isValid ? undefined : 'Signature verification failed',
     }
   } catch (error) {
     return {

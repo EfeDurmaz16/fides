@@ -51,8 +51,8 @@ import { Fides, TrustLevel } from '@fides/sdk'
 
 // Initialize FIDES client
 const fides = new Fides({
-  discoveryUrl: 'http://localhost:3000',
-  trustUrl: 'http://localhost:3001'
+  discoveryUrl: 'http://localhost:3100',
+  trustUrl: 'http://localhost:3200'
 })
 
 // Create agent identity

@@ -130,7 +130,9 @@ describe('RFC 9421 HTTP Message Signatures', () => {
     // Advance time by 301 seconds (past expiry)
     vi.advanceTimersByTime(301 * 1000)
 
-    const result = await verifyRequest(signedRequest, keyPair.publicKey)
+    const result = await verifyRequest(signedRequest, keyPair.publicKey, {
+      clockDriftSeconds: 0,
+    })
 
     expect(result.valid).toBe(false)
     expect(result.error).toContain('expired')
@@ -205,6 +207,155 @@ describe('RFC 9421 HTTP Message Signatures', () => {
     expect(result.valid).toBe(true)
   })
 
+  it('should add Content-Digest header when body is present', async () => {
+    const request: RequestLike = {
+      method: 'POST',
+      url: 'https://api.example.com/users',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Alice' }),
+    }
+
+    const signedRequest = await signRequest(request, keyPair.privateKey, {
+      keyid: 'did:fides:test123',
+    })
+
+    expect(signedRequest.headers['Content-Digest']).toBeDefined()
+    expect(signedRequest.headers['Content-Digest']).toMatch(/^sha-256=:.+:$/)
+
+    // Verify should pass with original body
+    const result = await verifyRequest(signedRequest, keyPair.publicKey)
+    expect(result.valid).toBe(true)
+  })
+
+  it('should detect body tampering via Content-Digest', async () => {
+    const request: RequestLike = {
+      method: 'POST',
+      url: 'https://api.example.com/users',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Alice' }),
+    }
+
+    const signedRequest = await signRequest(request, keyPair.privateKey, {
+      keyid: 'did:fides:test123',
+    })
+
+    // Tamper with body
+    const tamperedRequest = {
+      ...signedRequest,
+      body: JSON.stringify({ name: 'Eve' }),
+    }
+
+    const result = await verifyRequest(tamperedRequest, keyPair.publicKey)
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('Content-Digest mismatch')
+  })
+
+  it('should detect Content-Digest header tampering', async () => {
+    const request: RequestLike = {
+      method: 'POST',
+      url: 'https://api.example.com/users',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Alice' }),
+    }
+
+    const signedRequest = await signRequest(request, keyPair.privateKey, {
+      keyid: 'did:fides:test123',
+    })
+
+    // Tamper with Content-Digest header
+    const tamperedRequest = {
+      ...signedRequest,
+      headers: {
+        ...signedRequest.headers,
+        'Content-Digest': 'sha-256=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:',
+      },
+    }
+
+    const result = await verifyRequest(tamperedRequest, keyPair.publicKey)
+    // Should fail because Content-Digest is a signed component
+    expect(result.valid).toBe(false)
+  })
+
+  it('should not add Content-Digest when no body', async () => {
+    const request: RequestLike = {
+      method: 'GET',
+      url: 'https://api.example.com/users',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+
+    const signedRequest = await signRequest(request, keyPair.privateKey, {
+      keyid: 'did:fides:test123',
+    })
+
+    expect(signedRequest.headers['Content-Digest']).toBeUndefined()
+
+    const result = await verifyRequest(signedRequest, keyPair.publicKey)
+    expect(result.valid).toBe(true)
+  })
+
+  it('should tolerate clock drift within configured tolerance', async () => {
+    vi.useFakeTimers()
+    const now = new Date('2024-01-01T00:00:00Z')
+    vi.setSystemTime(now)
+
+    const request: RequestLike = {
+      method: 'GET',
+      url: 'https://api.example.com/users',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+
+    const signedRequest = await signRequest(request, keyPair.privateKey, {
+      keyid: 'did:fides:test123',
+      expirySeconds: 300,
+    })
+
+    // Advance time by 310 seconds (past expiry but within 30s drift tolerance)
+    vi.advanceTimersByTime(310 * 1000)
+
+    const result = await verifyRequest(signedRequest, keyPair.publicKey, {
+      clockDriftSeconds: 30,
+    })
+    expect(result.valid).toBe(true)
+  })
+
+  it('should reject beyond clock drift tolerance', async () => {
+    vi.useFakeTimers()
+    const now = new Date('2024-01-01T00:00:00Z')
+    vi.setSystemTime(now)
+
+    const request: RequestLike = {
+      method: 'GET',
+      url: 'https://api.example.com/users',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+
+    const signedRequest = await signRequest(request, keyPair.privateKey, {
+      keyid: 'did:fides:test123',
+      expirySeconds: 300,
+    })
+
+    // Advance time by 350 seconds (past expiry + 30s drift)
+    vi.advanceTimersByTime(350 * 1000)
+
+    const result = await verifyRequest(signedRequest, keyPair.publicKey, {
+      clockDriftSeconds: 30,
+    })
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain('expired')
+  })
+
   it('should include correct signature format', async () => {
     const request: RequestLike = {
       method: 'GET',
@@ -219,9 +370,9 @@ describe('RFC 9421 HTTP Message Signatures', () => {
       label: 'sig1',
     })
 
-    // Check Signature-Input format
+    // Check Signature-Input format (now includes nonce)
     const sigInput = signedRequest.headers['Signature-Input']
-    expect(sigInput).toMatch(/^sig1=\("@method" "@target-uri" "@authority" "content-type"\);created=\d+;expires=\d+;keyid="did:fides:abc";alg="ed25519"$/)
+    expect(sigInput).toMatch(/^sig1=\("@method" "@target-uri" "@authority" "content-type"\);created=\d+;expires=\d+;nonce="[0-9a-f-]+";keyid="did:fides:abc";alg="ed25519"$/)
 
     // Check Signature format
     const sig = signedRequest.headers['Signature']

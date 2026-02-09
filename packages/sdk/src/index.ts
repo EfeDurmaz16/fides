@@ -18,7 +18,8 @@ export {
   parseSignatureInput,
 } from './signing/canonicalize.js'
 export { type SignOptions, signRequest } from './signing/http-signature.js'
-export { type VerifyResult, verifyRequest } from './signing/verify.js'
+export { type VerifyResult, type VerifyOptions, verifyRequest } from './signing/verify.js'
+export { NonceStore } from './signing/nonce-store.js'
 
 // Discovery module exports
 export { DiscoveryClient } from './discovery/client.js'
@@ -28,6 +29,20 @@ export { IdentityResolver } from './discovery/resolver.js'
 export { TrustLevel } from './trust/types.js'
 export { createAttestation, verifyAttestation } from './trust/attestation.js'
 export { TrustClient } from './trust/client.js'
+
+// Security module exports
+export { RateLimiter, type RateLimiterOptions } from './security/rate-limiter.js'
+export {
+  validateContent,
+  validateRequestContent,
+  type ContentValidationResult,
+  type ContentThreat,
+} from './security/content-validator.js'
+export { rateLimitMiddleware, type RateLimitMiddlewareOptions } from './security/rate-limit-middleware.js'
+export { contentValidationMiddleware } from './security/content-validation-middleware.js'
+
+// Key rotation exports
+export { rotateKey, createRevocation, type KeyRotationResult, type RotationRecord, type RevocationRecord } from './identity/rotation.js'
 
 // High-level API
 export { Fides } from './fides.js'

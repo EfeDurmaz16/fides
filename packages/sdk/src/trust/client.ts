@@ -11,7 +11,8 @@ export class TrustClient {
     issuerDid: string,
     subjectDid: string,
     level: number,
-    signature: string
+    signature: string,
+    payload: string
   ): Promise<void> {
     try {
       const response = await fetch(`${this.options.baseUrl}/v1/trust`, {
@@ -24,6 +25,7 @@ export class TrustClient {
           subjectDid,
           trustLevel: level,
           signature,
+          payload,
         }),
       })
 

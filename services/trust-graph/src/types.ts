@@ -40,6 +40,7 @@ export interface CreateTrustRequest {
   subjectDid: string
   trustLevel: number
   signature: string
+  payload: string  // The signed JSON payload (required for signature verification)
   expiresAt?: string
 }
 

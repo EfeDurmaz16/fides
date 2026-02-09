@@ -3,9 +3,9 @@ import type { DbClient } from '../db/client.js'
 import { TrustService } from '../services/trust-service.js'
 import type { CreateTrustRequest } from '../types.js'
 
-export function createTrustRoutes(db: DbClient) {
+export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
   const app = new Hono()
-  const trustService = new TrustService()
+  const trustService = new TrustService(discoveryUrl)
 
   // Create trust edge
   app.post('/v1/trust', async (c) => {
@@ -26,8 +26,7 @@ export function createTrustRoutes(db: DbClient) {
       const score = await trustService.getScore(db, did)
       return c.json(score)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      return c.json({ error: message }, 500)
+      return c.json({ error: 'Internal server error' }, 500)
     }
   })
 
@@ -39,8 +38,7 @@ export function createTrustRoutes(db: DbClient) {
       const path = await trustService.getTrustPath(db, from, to)
       return c.json(path)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      return c.json({ error: message }, 500)
+      return c.json({ error: 'Internal server error' }, 500)
     }
   })
 

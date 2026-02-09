@@ -211,7 +211,9 @@ describe('FIDES E2E: Full Authentication and Trust Flow', () => {
       expirySeconds: -1, // This should create a signature that's already expired
     })
 
-    const result = await verifyRequest(signed, keyPair.publicKey)
+    const result = await verifyRequest(signed, keyPair.publicKey, {
+      clockDriftSeconds: 0,
+    })
     expect(result.valid).toBe(false)
     expect(result.error).toContain('expired')
   })

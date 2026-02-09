@@ -1,14 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { app } from '../src/index.js'
 
+// Valid test identity: 32 bytes of 0xaa
+const TEST_PUBLIC_KEY = 'aa'.repeat(32)
+const TEST_DID = 'did:fides:CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB'
+
 // Mock the database module
 vi.mock('../src/db/client.js', () => {
   const mockDb = {
     insert: vi.fn().mockReturnValue({
       values: vi.fn().mockReturnValue({
         returning: vi.fn().mockResolvedValue([{
-          did: 'did:fides:test123',
-          publicKey: 'abcdef1234567890',
+          did: 'did:fides:CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB',
+          publicKey: 'aa'.repeat(32),
           metadata: {},
           domain: null,
           createdAt: new Date('2024-01-01T00:00:00.000Z'),
@@ -19,8 +23,8 @@ vi.mock('../src/db/client.js', () => {
     select: vi.fn().mockReturnValue({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValue([{
-          did: 'did:fides:test123',
-          publicKey: 'abcdef1234567890',
+          did: 'did:fides:CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB',
+          publicKey: 'aa'.repeat(32),
           metadata: {},
           domain: null,
           createdAt: new Date('2024-01-01T00:00:00.000Z'),
@@ -30,9 +34,15 @@ vi.mock('../src/db/client.js', () => {
     }),
   }
 
+  // Create a mock sql that supports template literal calls (e.g., sql`SELECT 1`)
+  const mockSql = Object.assign(
+    vi.fn().mockResolvedValue([{ '?column?': 1 }]),
+    { end: vi.fn().mockResolvedValue(undefined) }
+  )
+
   return {
     db: mockDb,
-    sql: {},
+    sql: mockSql,
   }
 })
 
@@ -47,8 +57,8 @@ describe('Discovery Service Routes', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          did: 'did:fides:test123',
-          publicKey: 'abcdef1234567890',
+          did: TEST_DID,
+          publicKey: TEST_PUBLIC_KEY,
           metadata: { name: 'Test Agent' },
         }),
       })
@@ -58,8 +68,8 @@ describe('Discovery Service Routes', () => {
       expect(res.status).toBe(201)
       const data = await res.json()
       expect(data).toMatchObject({
-        did: 'did:fides:test123',
-        publicKey: 'abcdef1234567890',
+        did: TEST_DID,
+        publicKey: TEST_PUBLIC_KEY,
         metadata: {},
       })
     })
@@ -69,7 +79,7 @@ describe('Discovery Service Routes', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          did: 'did:fides:test123',
+          did: TEST_DID,
           // missing publicKey
         }),
       })
@@ -87,7 +97,7 @@ describe('Discovery Service Routes', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           did: 'invalid:did:format',
-          publicKey: 'abcdef1234567890',
+          publicKey: TEST_PUBLIC_KEY,
         }),
       })
 
@@ -103,7 +113,7 @@ describe('Discovery Service Routes', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          did: 'did:fides:test123',
+          did: TEST_DID,
           publicKey: 'not-hex-zzz',
         }),
       })
@@ -118,7 +128,7 @@ describe('Discovery Service Routes', () => {
 
   describe('GET /identities/:did', () => {
     it('should return identity by DID', async () => {
-      const req = new Request('http://localhost/identities/did:fides:test123', {
+      const req = new Request(`http://localhost/identities/${TEST_DID}`, {
         method: 'GET',
       })
 
@@ -127,8 +137,8 @@ describe('Discovery Service Routes', () => {
       expect(res.status).toBe(200)
       const data = await res.json()
       expect(data).toMatchObject({
-        did: 'did:fides:test123',
-        publicKey: 'abcdef1234567890',
+        did: TEST_DID,
+        publicKey: TEST_PUBLIC_KEY,
       })
     })
 

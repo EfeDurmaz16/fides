@@ -6,143 +6,59 @@ Decentralized trust and authentication protocol for autonomous AI agents.
 
 ```bash
 npm install @fides/sdk
-# or
-pnpm add @fides/sdk
-# or
-yarn add @fides/sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { Fides } from '@fides/sdk'
+import { Fides, TrustLevel } from '@fides/sdk'
 
-// Initialize FIDES client
 const fides = new Fides({
-  discoveryUrl: 'http://localhost:3000',
-  trustGraphUrl: 'http://localhost:3001',
+  discoveryUrl: 'http://localhost:3100',
+  trustUrl: 'http://localhost:3200',
 })
 
-// Generate identity
-const identity = await fides.createIdentity('My Agent')
-console.log('DID:', identity.did)
+// Create identity
+const { did } = await fides.createIdentity({ name: 'My Agent' })
 
-// Sign HTTP request
-const signature = await fides.signRequest({
-  method: 'GET',
-  url: 'https://api.example.com/data',
-  headers: { 'content-type': 'application/json' },
-})
-
-// Verify signed request
-const result = await fides.verifyRequest({
-  method: 'GET',
-  url: 'https://api.example.com/data',
-  headers: {
-    'signature-input': signature.signatureInput,
-    'signature': signature.signature,
-  },
-})
-
-// Build trust
-await fides.attestTrust('did:fides:...', 80)
-
-// Check reputation
-const reputation = await fides.getReputation('did:fides:...')
-```
-
-## Features
-
-- **Cryptographic Identity**: Ed25519-based DIDs for verifiable agent identities
-- **Request Authentication**: RFC 9421 HTTP message signatures for secure communication
-- **Decentralized Trust**: Distributed trust attestations with graph-based reputation scoring
-- **Agent Autonomy**: Self-sovereign identity without reliance on central authorities
-
-## Core APIs
-
-### Identity Management
-
-```typescript
-import { generateKeyPair, generateDID, MemoryKeyStore } from '@fides/sdk'
-
-// Generate keypair
-const keyPair = await generateKeyPair()
-
-// Create DID
-const did = generateDID(keyPair.publicKey)
-
-// Store keys securely
-const keystore = new MemoryKeyStore()
-await keystore.storeKey(did, keyPair)
-```
-
-### HTTP Signature Signing
-
-```typescript
-import { signRequest } from '@fides/sdk'
-
-const signature = await signRequest({
+// Sign HTTP requests (with automatic Content-Digest for body integrity)
+const signed = await fides.signRequest({
   method: 'POST',
-  url: 'https://api.example.com/endpoint',
-  headers: {
-    'content-type': 'application/json',
-  },
-  keyId: did,
-  privateKey: keyPair.privateKey,
+  url: 'https://example.com/api',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ data: 'hello' }),
 })
 
-// Add to request headers
-headers['signature-input'] = signature.signatureInput
-headers['signature'] = signature.signature
+// Verify requests
+const result = await fides.verifyRequest(incomingRequest)
+
+// Trust attestations
+await fides.trust('did:fides:...', TrustLevel.HIGH)
+
+// Reputation scores
+const score = await fides.getReputation('did:fides:...')
 ```
 
-### HTTP Signature Verification
+## API
 
-```typescript
-import { verifyRequest, IdentityResolver } from '@fides/sdk'
+| Function | Description |
+|----------|-------------|
+| `generateKeyPair()` | Generate Ed25519 keypair |
+| `generateDID(publicKey)` | Create DID from public key |
+| `signRequest(request, privateKey, options)` | Sign HTTP request (RFC 9421) |
+| `verifyRequest(request, publicKey, options)` | Verify HTTP request signature |
+| `createAttestation(issuer, subject, level, key)` | Create signed trust attestation |
+| `verifyAttestation(attestation, publicKey)` | Verify attestation signature |
 
-const resolver = new IdentityResolver('http://localhost:3000')
+### Trust Levels
 
-const result = await verifyRequest({
-  method: 'POST',
-  url: 'https://api.example.com/endpoint',
-  headers: {
-    'content-type': 'application/json',
-    'signature-input': req.headers['signature-input'],
-    'signature': req.headers['signature'],
-  },
-  resolver,
-})
-
-if (result.verified) {
-  console.log('Request verified from:', result.did)
-}
-```
-
-### Trust Attestations
-
-```typescript
-import { TrustClient, TrustLevel } from '@fides/sdk'
-
-const trustClient = new TrustClient({
-  baseUrl: 'http://localhost:3001',
-  keystore,
-  did,
-})
-
-// Create attestation
-await trustClient.attest('did:fides:...', TrustLevel.HIGH)
-
-// Get reputation
-const reputation = await trustClient.getReputation('did:fides:...')
-console.log('Score:', reputation.score)
-console.log('Attestations:', reputation.attestations.length)
-```
-
-## Documentation
-
-For complete documentation, examples, and protocol specifications, visit:
-[https://github.com/anthropic-ai/fides](https://github.com/anthropic-ai/fides)
+| Level | Value | Description |
+|-------|-------|-------------|
+| `NONE` | 0 | No trust |
+| `LOW` | 25 | Minimal trust |
+| `MEDIUM` | 50 | Standard collaboration |
+| `HIGH` | 75 | Sensitive operations |
+| `ABSOLUTE` | 100 | Full delegation |
 
 ## Requirements
 

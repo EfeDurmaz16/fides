@@ -79,7 +79,8 @@ async function createTrust(agentDid: string, options: { level: string }): Promis
     config.activeDid,
     agentDid,
     trustLevel,
-    attestation.signature
+    attestation.signature,
+    attestation.payload
   );
 
   console.log('');

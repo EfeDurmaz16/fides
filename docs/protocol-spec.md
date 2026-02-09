@@ -408,7 +408,7 @@ reputation_score = (
 
 ### Central Discovery Service
 
-**Base URL:** Configurable (default: `http://localhost:3000`)
+**Base URL:** Configurable (default: `http://localhost:3100`)
 
 **Endpoints:**
 

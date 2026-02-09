@@ -10,8 +10,8 @@ export interface FidesConfig {
 }
 
 const DEFAULT_CONFIG: FidesConfig = {
-  discoveryUrl: 'http://localhost:3000',
-  trustUrl: 'http://localhost:3001',
+  discoveryUrl: 'http://localhost:3100',
+  trustUrl: 'http://localhost:3200',
   keyDir: path.join(os.homedir(), '.fides', 'keys'),
 };
 

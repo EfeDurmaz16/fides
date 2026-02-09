@@ -1,0 +1,22 @@
+services:
+  discovery:
+    build: !reset null
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm dev"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+
+  trust-graph:
+    build: !reset null
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm --filter trust-graph dev"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development

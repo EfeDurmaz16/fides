@@ -50,3 +50,24 @@ jobs:
         run: pnpm test
         env:
           DATABASE_URL: postgresql://fides:fides@localhost:5432/fides
+
+  docker-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [discovery, trust-graph]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

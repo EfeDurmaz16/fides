@@ -15,3 +15,9 @@ export const ED25519_PRIVATE_KEY_LENGTH = 32
 export const ED25519_PRIVATE_KEY_LENGTH_EXTENDED = 64
 export const MIN_TRUST_LEVEL = 0
 export const MAX_TRUST_LEVEL = 100
+
+// Content-Digest constants (RFC 9530)
+export const CONTENT_DIGEST_ALGORITHM = 'sha-256' as const
+
+// Clock drift tolerance for signature verification
+export const DEFAULT_CLOCK_DRIFT_SECONDS = 30

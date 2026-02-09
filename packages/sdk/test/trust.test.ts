@@ -152,22 +152,29 @@ describe('TrustClient', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', mockFetch)
     mockFetch.mockReset()
-    client = new TrustClient({ baseUrl: 'http://localhost:3001' })
+    client = new TrustClient({ baseUrl: 'http://localhost:3200' })
   })
 
-  it('should submit attestation', async () => {
+  it('should submit attestation with payload', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
+    })
+
+    const payload = JSON.stringify({
+      issuerDid: 'did:fides:issuer123',
+      subjectDid: 'did:fides:subject456',
+      trustLevel: TrustLevel.HIGH,
     })
 
     await client.attest(
       'did:fides:issuer123',
       'did:fides:subject456',
       TrustLevel.HIGH,
-      'deadbeef'
+      'deadbeef',
+      payload
     )
 
-    expect(mockFetch).toHaveBeenCalledWith('http://localhost:3001/v1/trust', {
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:3200/v1/trust', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -175,6 +182,7 @@ describe('TrustClient', () => {
         subjectDid: 'did:fides:subject456',
         trustLevel: TrustLevel.HIGH,
         signature: 'deadbeef',
+        payload,
       }),
     })
   })
@@ -191,7 +199,8 @@ describe('TrustClient', () => {
         'did:fides:issuer123',
         'did:fides:subject456',
         TrustLevel.HIGH,
-        'deadbeef'
+        'deadbeef',
+        '{"issuerDid":"did:fides:issuer123"}'
       )
     ).rejects.toThrow(TrustError)
   })
@@ -213,7 +222,7 @@ describe('TrustClient', () => {
     const result = await client.getScore('did:fides:abc123')
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:3001/v1/trust/did%3Afides%3Aabc123/score'
+      'http://localhost:3200/v1/trust/did%3Afides%3Aabc123/score'
     )
     expect(result).toEqual(score)
   })
@@ -248,7 +257,7 @@ describe('TrustClient', () => {
     const result = await client.getPath('did:fides:alice', 'did:fides:bob')
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:3001/v1/trust/did%3Afides%3Aalice/did%3Afides%3Abob'
+      'http://localhost:3200/v1/trust/did%3Afides%3Aalice/did%3Afides%3Abob'
     )
     expect(result).toEqual(path)
   })

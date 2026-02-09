@@ -22,6 +22,7 @@ export interface SignatureParams {
   expires: number
   keyid: string
   alg: string
+  nonce?: string
 }
 
 /**
@@ -100,7 +101,11 @@ export function createSignatureBase(
 
   // Build signature params line
   const componentList = params.components.map(c => `"${c}"`).join(' ')
-  const paramsLine = `"@signature-params": (${componentList});created=${params.created};expires=${params.expires};keyid="${params.keyid}";alg="${params.alg}"`
+  let paramsLine = `"@signature-params": (${componentList});created=${params.created};expires=${params.expires}`
+  if (params.nonce) {
+    paramsLine += `;nonce="${params.nonce}"`
+  }
+  paramsLine += `;keyid="${params.keyid}";alg="${params.alg}"`
   lines.push(paramsLine)
 
   return lines.join('\n')
@@ -166,6 +171,10 @@ export function parseSignatureInput(signatureInput: string): {
   }
   const alg = algMatch[1]
 
+  // Parse nonce (optional for backwards compatibility)
+  const nonceMatch = paramsStr.match(/nonce="([^"]+)"/)
+  const nonce = nonceMatch ? nonceMatch[1] : undefined
+
   return {
     label,
     params: {
@@ -174,6 +183,7 @@ export function parseSignatureInput(signatureInput: string): {
       expires,
       keyid,
       alg,
+      nonce,
     },
   }
 }

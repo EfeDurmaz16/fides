@@ -1,4 +1,4 @@
-import { eq, and, isNull } from 'drizzle-orm'
+import { eq, and, isNull, or, gt } from 'drizzle-orm'
 import { TrustError, MIN_TRUST_LEVEL, MAX_TRUST_LEVEL } from '@fides/shared'
 import type { DbClient } from '../db/client.js'
 import { identities, trustEdges, reputationScores } from '../db/schema.js'
@@ -7,11 +7,17 @@ import { computeReputationScore } from './scoring.js'
 import type { CreateTrustRequest, TrustPathResult } from '../types.js'
 
 export class TrustService {
+  private discoveryUrl: string
+
+  constructor(discoveryUrl?: string) {
+    this.discoveryUrl = discoveryUrl || process.env.DISCOVERY_URL || 'http://localhost:3100'
+  }
+
   /**
    * Create a new trust edge
    */
   async createTrust(db: DbClient, request: CreateTrustRequest): Promise<string> {
-    const { issuerDid, subjectDid, trustLevel, signature, expiresAt } = request
+    const { issuerDid, subjectDid, trustLevel, signature, payload, expiresAt } = request
 
     // Validate trust level
     if (!Number.isInteger(trustLevel) || trustLevel < MIN_TRUST_LEVEL || trustLevel > MAX_TRUST_LEVEL) {
@@ -31,16 +37,89 @@ export class TrustService {
       throw new TrustError('Invalid signature')
     }
 
+    // Validate payload is provided
+    if (!payload || typeof payload !== 'string') {
+      throw new TrustError('Payload is required for signature verification')
+    }
+
     // Ensure both identities exist
     await this.ensureIdentity(db, issuerDid)
     await this.ensureIdentity(db, subjectDid)
 
+    // Verify cryptographic signature
+    const issuerIdentity = await db
+      .select()
+      .from(identities)
+      .where(eq(identities.did, issuerDid))
+      .limit(1)
+
+    if (issuerIdentity.length === 0 || !issuerIdentity[0].publicKey) {
+      throw new TrustError('Cannot verify signature: issuer identity not found')
+    }
+
+    // Get public key bytes
+    const pubKeyBuffer = issuerIdentity[0].publicKey
+    if (pubKeyBuffer.length === 0) {
+      throw new TrustError('Cannot verify signature: issuer has no public key')
+    }
+
+    // Validate signature format
+    let signatureBytes: Buffer
+    try {
+      signatureBytes = Buffer.from(signature, 'hex')
+      if (signatureBytes.length !== 64) {
+        throw new TrustError('Invalid signature: must be 64 bytes (Ed25519)')
+      }
+    } catch (error) {
+      throw new TrustError('Invalid signature format: must be hex-encoded')
+    }
+
+    // Import ed25519 for verification
+    const ed25519 = await import('@noble/ed25519')
+    const { sha512 } = await import('@noble/hashes/sha512')
+    ed25519.etc.sha512Sync = (...m: Uint8Array[]) => sha512(ed25519.etc.concatBytes(...m))
+
+    const publicKeyBytes = new Uint8Array(pubKeyBuffer)
+
+    // Verify the signature over the provided payload
+    const payloadBytes = new TextEncoder().encode(payload)
+
+    try {
+      const isValid = await ed25519.verifyAsync(signatureBytes, payloadBytes, publicKeyBytes)
+      if (!isValid) {
+        throw new TrustError('Invalid signature: attestation signature verification failed')
+      }
+    } catch (error) {
+      if (error instanceof TrustError) throw error
+      throw new TrustError('Signature verification failed')
+    }
+
+    // Parse and validate the payload matches the request fields
+    let parsedPayload: any
+    try {
+      parsedPayload = JSON.parse(payload)
+    } catch {
+      throw new TrustError('Invalid payload: must be valid JSON')
+    }
+
+    // Verify the signed payload matches the request parameters
+    if (parsedPayload.issuerDid !== issuerDid) {
+      throw new TrustError('Invalid attestation: issuerDid mismatch')
+    }
+    if (parsedPayload.subjectDid !== subjectDid) {
+      throw new TrustError('Invalid attestation: subjectDid mismatch')
+    }
+    if (parsedPayload.trustLevel !== trustLevel) {
+      throw new TrustError('Invalid attestation: trustLevel mismatch')
+    }
+
     // Create trust edge
+    const issuedAt = new Date().toISOString()
     const attestation = {
       issuerDid,
       subjectDid,
       trustLevel,
-      issuedAt: new Date().toISOString(),
+      issuedAt,
       ...(expiresAt && { expiresAt }),
     }
 
@@ -60,7 +139,8 @@ export class TrustService {
    * Get trust path between two DIDs
    */
   async getTrustPath(db: DbClient, fromDid: string, toDid: string): Promise<TrustPathResult> {
-    // Fetch all active trust edges
+    // Fetch all active trust edges (not revoked, not expired)
+    const now = new Date()
     const edges = await db
       .select({
         sourceDid: trustEdges.sourceDid,
@@ -70,7 +150,10 @@ export class TrustService {
         expiresAt: trustEdges.expiresAt,
       })
       .from(trustEdges)
-      .where(isNull(trustEdges.revokedAt))
+      .where(and(
+        isNull(trustEdges.revokedAt),
+        or(isNull(trustEdges.expiresAt), gt(trustEdges.expiresAt, now))
+      ))
 
     return findTrustPath(edges, fromDid, toDid)
   }
@@ -104,7 +187,8 @@ export class TrustService {
       }
     }
 
-    // Compute fresh score
+    // Compute fresh score (exclude revoked and expired edges)
+    const scoreNow = new Date()
     const edges = await db
       .select({
         sourceDid: trustEdges.sourceDid,
@@ -114,7 +198,10 @@ export class TrustService {
         expiresAt: trustEdges.expiresAt,
       })
       .from(trustEdges)
-      .where(isNull(trustEdges.revokedAt))
+      .where(and(
+        isNull(trustEdges.revokedAt),
+        or(isNull(trustEdges.expiresAt), gt(trustEdges.expiresAt, scoreNow))
+      ))
 
     const result = computeReputationScore(edges, did)
 
@@ -145,7 +232,7 @@ export class TrustService {
   }
 
   /**
-   * Ensure identity exists in database
+   * Ensure identity exists in database, fetching from discovery if needed
    */
   private async ensureIdentity(db: DbClient, did: string): Promise<void> {
     const existing = await db
@@ -155,11 +242,25 @@ export class TrustService {
       .limit(1)
 
     if (existing.length === 0) {
-      // Create stub identity (would be populated by discovery service)
+      // Fetch identity from discovery service
+      let identity: { did: string; publicKey: string; metadata?: Record<string, unknown> } | null = null
+      try {
+        const response = await fetch(`${this.discoveryUrl}/identities/${encodeURIComponent(did)}`)
+        if (response.ok) {
+          identity = await response.json()
+        }
+      } catch {
+        // Discovery service unavailable
+      }
+
+      if (!identity || !identity.publicKey) {
+        throw new TrustError(`Identity not found: ${did}. Register with discovery service first.`)
+      }
+
       await db.insert(identities).values({
         did,
-        publicKey: Buffer.from(''),
-        metadata: {},
+        publicKey: Buffer.from(identity.publicKey, 'hex'),
+        metadata: identity.metadata || {},
       })
     } else {
       // Update last seen

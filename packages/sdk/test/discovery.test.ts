@@ -11,7 +11,7 @@ describe('DiscoveryClient', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', mockFetch)
     mockFetch.mockReset()
-    client = new DiscoveryClient({ baseUrl: 'http://localhost:3000' })
+    client = new DiscoveryClient({ baseUrl: 'http://localhost:3100' })
   })
 
   it('should register an identity', async () => {
@@ -34,7 +34,7 @@ describe('DiscoveryClient', () => {
 
     const result = await client.register(identity)
 
-    expect(mockFetch).toHaveBeenCalledWith('http://localhost:3000/identities', {
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:3100/identities', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(identity),
@@ -73,7 +73,7 @@ describe('DiscoveryClient', () => {
     const result = await client.resolve('did:fides:abc123')
 
     expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:3000/identities/did%3Afides%3Aabc123'
+      'http://localhost:3100/identities/did%3Afides%3Aabc123'
     )
     expect(result).toEqual(identity)
   })
@@ -106,7 +106,7 @@ describe('DiscoveryClient', () => {
       publicKey: 'deadbeef',
       algorithm: 'ed25519',
       endpoints: {
-        discovery: 'http://localhost:3000',
+        discovery: 'http://localhost:3100',
       },
       createdAt: '2024-01-01T00:00:00Z',
     }
@@ -143,7 +143,7 @@ describe('IdentityResolver', () => {
     vi.stubGlobal('fetch', mockFetch)
     mockFetch.mockReset()
     resolver = new IdentityResolver({
-      discoveryUrl: 'http://localhost:3000',
+      discoveryUrl: 'http://localhost:3100',
       cacheTtlMs: 1000, // 1 second for testing
     })
   })
@@ -165,7 +165,7 @@ describe('IdentityResolver', () => {
 
     expect(result).toEqual(identity)
     expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:3000/identities/did%3Afides%3Aabc123'
+      'http://localhost:3100/identities/did%3Afides%3Aabc123'
     )
   })
 
@@ -175,7 +175,7 @@ describe('IdentityResolver', () => {
       publicKey: 'deadbeef',
       algorithm: 'ed25519',
       endpoints: {
-        discovery: 'http://localhost:3000',
+        discovery: 'http://localhost:3100',
       },
       createdAt: '2024-01-01T00:00:00Z',
     }

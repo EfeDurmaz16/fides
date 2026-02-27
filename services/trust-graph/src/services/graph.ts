@@ -1,5 +1,6 @@
 import { DEFAULT_TRUST_DECAY, MAX_TRUST_DEPTH } from '@fides/shared'
 import type { TrustPathResult, TrustPathNode } from '../types.js'
+import { filterValidEdges, buildForwardIndex } from './edge-utils.js'
 
 export interface GraphEdge {
   sourceDid: string
@@ -13,6 +14,11 @@ export interface GraphEdge {
  * Find trust path between two DIDs using BFS traversal.
  * Pure function - no database dependency, easy to test.
  *
+ * Optimizations:
+ * - Index-based dequeue instead of queue.shift() (O(1) vs O(n))
+ * - Parent pointer chain instead of path array cloning per edge
+ * - Pre-computed decay powers array
+ *
  * @param edges - Array of trust edges
  * @param fromDid - Source DID
  * @param toDid - Target DID
@@ -25,53 +31,47 @@ export function findTrustPath(
   toDid: string,
   maxDepth: number = MAX_TRUST_DEPTH
 ): TrustPathResult {
-  // Filter valid edges (not revoked, not expired)
-  const now = new Date()
-  const validEdges = edges.filter(edge => {
-    if (edge.revokedAt) return false
-    if (edge.expiresAt && edge.expiresAt < now) return false
-    return true
-  })
+  // Filter valid edges and build adjacency list using shared utilities
+  const validEdges = filterValidEdges(edges)
+  const adjacency = buildForwardIndex(validEdges)
 
-  // Build adjacency list
-  const adjacency = new Map<string, Array<{ target: string; trust: number }>>()
-  for (const edge of validEdges) {
-    if (!adjacency.has(edge.sourceDid)) {
-      adjacency.set(edge.sourceDid, [])
-    }
-    adjacency.get(edge.sourceDid)!.push({
-      target: edge.targetDid,
-      trust: edge.trustLevel,
-    })
+  // Pre-compute decay powers: decayPowers[i] = DEFAULT_TRUST_DECAY^i
+  const decayPowers = new Array(maxDepth + 1)
+  decayPowers[0] = 1.0
+  for (let i = 1; i <= maxDepth; i++) {
+    decayPowers[i] = decayPowers[i - 1] * DEFAULT_TRUST_DECAY
   }
 
-  // BFS with path tracking
+  // BFS with parent pointers (avoids path cloning per edge)
   interface QueueItem {
     did: string
-    path: TrustPathNode[]
+    parentIndex: number // -1 for root
+    trustLevel: number  // trust level of the edge leading to this node
     cumulativeTrust: number
     depth: number
   }
 
   const queue: QueueItem[] = [{
     did: fromDid,
-    path: [{ did: fromDid, trustLevel: 100 }],
+    parentIndex: -1,
+    trustLevel: 100,
     cumulativeTrust: 1.0,
     depth: 0,
   }]
 
   const visited = new Set<string>([fromDid])
+  let head = 0 // Index-based dequeue: O(1) instead of queue.shift() O(n)
 
-  while (queue.length > 0) {
-    const current = queue.shift()!
+  while (head < queue.length) {
+    const current = queue[head++]
 
-    // Found target
+    // Found target — reconstruct path from parent pointers
     if (current.did === toDid) {
       return {
         from: fromDid,
         to: toDid,
         found: true,
-        path: current.path,
+        path: reconstructPath(queue, head - 1),
         cumulativeTrust: current.cumulativeTrust,
         hops: current.depth,
       }
@@ -88,13 +88,14 @@ export function findTrustPath(
       if (!visited.has(neighbor.target)) {
         visited.add(neighbor.target)
 
-        // Calculate trust decay: trust_level/100 * decay^depth
-        const trustFactor = (neighbor.trust / 100) * Math.pow(DEFAULT_TRUST_DECAY, current.depth)
+        // Calculate trust decay using pre-computed powers
+        const trustFactor = (neighbor.trust / 100) * decayPowers[current.depth]
         const newCumulativeTrust = current.cumulativeTrust * trustFactor
 
         queue.push({
           did: neighbor.target,
-          path: [...current.path, { did: neighbor.target, trustLevel: neighbor.trust }],
+          parentIndex: head - 1, // points to current item in queue
+          trustLevel: neighbor.trust,
           cumulativeTrust: newCumulativeTrust,
           depth: current.depth + 1,
         })
@@ -111,4 +112,23 @@ export function findTrustPath(
     cumulativeTrust: 0,
     hops: 0,
   }
+}
+
+/**
+ * Reconstruct path by walking parent pointers from target back to root.
+ * Only called when target is found — avoids path cloning during BFS.
+ */
+function reconstructPath(
+  queue: Array<{ did: string; parentIndex: number; trustLevel: number }>,
+  targetIndex: number
+): TrustPathNode[] {
+  const path: TrustPathNode[] = []
+  let idx = targetIndex
+  while (idx >= 0) {
+    const item = queue[idx]
+    path.push({ did: item.did, trustLevel: item.trustLevel })
+    idx = item.parentIndex
+  }
+  path.reverse()
+  return path
 }

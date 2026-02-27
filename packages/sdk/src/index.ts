@@ -46,3 +46,12 @@ export { rotateKey, createRevocation, type KeyRotationResult, type RotationRecor
 
 // High-level API
 export { Fides } from './fides.js'
+
+// Integration exports
+export {
+  AgitCommitSigner,
+  TrustGatedAccess,
+  type CommitSignature,
+  type CommitVerification,
+  type TrustGateResult,
+} from './integrations/agit.js'

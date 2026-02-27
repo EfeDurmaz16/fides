@@ -44,6 +44,10 @@ export { contentValidationMiddleware } from './security/content-validation-middl
 // Key rotation exports
 export { rotateKey, createRevocation, type KeyRotationResult, type RotationRecord, type RevocationRecord } from './identity/rotation.js'
 
+// Observability module exports
+export { MetricsCollector } from './observability/metrics.js'
+export { metricsMiddleware } from './observability/metrics-middleware.js'
+
 // High-level API
 export { Fides } from './fides.js'
 

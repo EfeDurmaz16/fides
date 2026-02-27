@@ -17,6 +17,7 @@ export const logger = (): MiddlewareHandler => {
     const logEntry = JSON.stringify({
       timestamp: new Date().toISOString(),
       level: status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info',
+      service: 'discovery',
       requestId,
       method,
       path,

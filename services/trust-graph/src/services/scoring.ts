@@ -1,9 +1,14 @@
 import { DEFAULT_TRUST_DECAY } from '@fides/shared'
 import type { GraphEdge } from './graph.js'
+import { filterValidEdges, buildReverseIndex } from './edge-utils.js'
 
 /**
  * Compute reputation score for a DID based on trust edges.
  * Pure function - aggregates direct trust + transitive trust with decay.
+ *
+ * Optimizations:
+ * - Reverse-index map for O(1) incoming-edge lookup (was O(V×N) filter per BFS step)
+ * - Index-based dequeue instead of queue.shift()
  *
  * @param edges - Array of all trust edges
  * @param did - DID to compute score for
@@ -14,16 +19,12 @@ export function computeReputationScore(edges: GraphEdge[], did: string): {
   directTrusters: number
   transitiveTrusters: number
 } {
-  // Filter valid edges (not revoked, not expired)
-  const now = new Date()
-  const validEdges = edges.filter(edge => {
-    if (edge.revokedAt) return false
-    if (edge.expiresAt && edge.expiresAt < now) return false
-    return true
-  })
+  // Filter valid edges and build reverse-index using shared utilities
+  const validEdges = filterValidEdges(edges)
+  const reverseIndex = buildReverseIndex(validEdges)
 
-  // Find all direct trusters
-  const directEdges = validEdges.filter(edge => edge.targetDid === did)
+  // Find all direct trusters using reverse index — O(1) lookup
+  const directEdges = reverseIndex.get(did) || []
   const directTrusters = new Set(directEdges.map(e => e.sourceDid))
 
   // Calculate direct trust score (average of trust levels)
@@ -31,18 +32,6 @@ export function computeReputationScore(edges: GraphEdge[], did: string): {
   if (directEdges.length > 0) {
     const avgTrustLevel = directEdges.reduce((sum, e) => sum + e.trustLevel, 0) / directEdges.length
     directScore = avgTrustLevel / 100 // Normalize to 0-1
-  }
-
-  // Build adjacency list for transitive trust
-  const adjacency = new Map<string, Array<{ target: string; trust: number }>>()
-  for (const edge of validEdges) {
-    if (!adjacency.has(edge.sourceDid)) {
-      adjacency.set(edge.sourceDid, [])
-    }
-    adjacency.get(edge.sourceDid)!.push({
-      target: edge.targetDid,
-      trust: edge.trustLevel,
-    })
   }
 
   // BFS to find transitive trusters (2-hop and 3-hop)
@@ -64,14 +53,16 @@ export function computeReputationScore(edges: GraphEdge[], did: string): {
     visited.add(truster)
   }
 
-  while (queue.length > 0) {
-    const current = queue.shift()!
+  let head = 0 // Index-based dequeue: O(1) instead of queue.shift() O(n)
+
+  while (head < queue.length) {
+    const current = queue[head++]
 
     // Only go up to 3 hops total
     if (current.depth >= 3) continue
 
-    // Explore who trusts the current node
-    const incomingEdges = validEdges.filter(e => e.targetDid === current.did)
+    // Explore who trusts the current node — O(1) reverse-index lookup
+    const incomingEdges = reverseIndex.get(current.did) || []
 
     for (const edge of incomingEdges) {
       if (!visited.has(edge.sourceDid)) {

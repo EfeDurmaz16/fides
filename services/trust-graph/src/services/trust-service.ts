@@ -6,8 +6,22 @@ import { findTrustPath } from './graph.js'
 import { computeReputationScore } from './scoring.js'
 import type { CreateTrustRequest, TrustPathResult } from '../types.js'
 
+const IDENTITY_CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
+const CIRCUIT_BREAKER_THRESHOLD = 5
+const CIRCUIT_BREAKER_RESET_MS = 30 * 1000 // 30 seconds
+const FETCH_TIMEOUT_MS = 3000 // 3 seconds
+
 export class TrustService {
   private discoveryUrl: string
+
+  // In-memory identity cache with TTL
+  private identityCache = new Map<string, { cachedAt: number }>()
+
+  // Circuit breaker state for discovery service
+  private circuitBreaker = {
+    failureCount: 0,
+    openUntil: 0,
+  }
 
   constructor(discoveryUrl?: string) {
     this.discoveryUrl = discoveryUrl || process.env.DISCOVERY_URL || 'http://localhost:3100'
@@ -42,9 +56,11 @@ export class TrustService {
       throw new TrustError('Payload is required for signature verification')
     }
 
-    // Ensure both identities exist
-    await this.ensureIdentity(db, issuerDid)
-    await this.ensureIdentity(db, subjectDid)
+    // Ensure both identities exist — parallel resolution
+    await Promise.all([
+      this.ensureIdentity(db, issuerDid),
+      this.ensureIdentity(db, subjectDid),
+    ])
 
     // Verify cryptographic signature
     const issuerIdentity = await db
@@ -131,6 +147,11 @@ export class TrustService {
       signature: Buffer.from(signature, 'hex'),
       ...(expiresAt && { expiresAt: new Date(expiresAt) }),
     }).returning({ id: trustEdges.id })
+
+    // Invalidate reputation cache for subjectDid
+    await db.update(reputationScores)
+      .set({ lastComputed: new Date(0) })
+      .where(eq(reputationScores.did, subjectDid))
 
     return result[0].id
   }
@@ -232,9 +253,17 @@ export class TrustService {
   }
 
   /**
-   * Ensure identity exists in database, fetching from discovery if needed
+   * Ensure identity exists in database, fetching from discovery if needed.
+   * Uses in-memory cache to avoid redundant DB queries and a circuit breaker
+   * for the discovery service fetch.
    */
   private async ensureIdentity(db: DbClient, did: string): Promise<void> {
+    // Check in-memory cache first
+    const cached = this.identityCache.get(did)
+    if (cached && (Date.now() - cached.cachedAt) < IDENTITY_CACHE_TTL_MS) {
+      return
+    }
+
     const existing = await db
       .select()
       .from(identities)
@@ -242,15 +271,35 @@ export class TrustService {
       .limit(1)
 
     if (existing.length === 0) {
-      // Fetch identity from discovery service
+      // Fetch identity from discovery service (with circuit breaker + timeout)
       let identity: { did: string; publicKey: string; metadata?: Record<string, unknown> } | null = null
+
+      const circuitOpen = Date.now() < this.circuitBreaker.openUntil
+      if (circuitOpen) {
+        throw new TrustError(`Identity not found: ${did}. Discovery service circuit breaker open.`)
+      }
+
       try {
-        const response = await fetch(`${this.discoveryUrl}/identities/${encodeURIComponent(did)}`)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+
+        const response = await fetch(
+          `${this.discoveryUrl}/identities/${encodeURIComponent(did)}`,
+          { signal: controller.signal }
+        )
+        clearTimeout(timeoutId)
+
         if (response.ok) {
           identity = await response.json()
+          // Reset circuit breaker on success
+          this.circuitBreaker.failureCount = 0
         }
       } catch {
-        // Discovery service unavailable
+        // Discovery service unavailable — increment circuit breaker
+        this.circuitBreaker.failureCount++
+        if (this.circuitBreaker.failureCount >= CIRCUIT_BREAKER_THRESHOLD) {
+          this.circuitBreaker.openUntil = Date.now() + CIRCUIT_BREAKER_RESET_MS
+        }
       }
 
       if (!identity || !identity.publicKey) {
@@ -269,5 +318,8 @@ export class TrustService {
         .set({ lastSeen: new Date() })
         .where(eq(identities.did, did))
     }
+
+    // Cache the identity
+    this.identityCache.set(did, { cachedAt: Date.now() })
   }
 }

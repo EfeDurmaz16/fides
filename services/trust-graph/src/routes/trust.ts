@@ -12,6 +12,7 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
     try {
       const body = await c.req.json() as CreateTrustRequest
       const id = await trustService.createTrust(db, body)
+      c.header('Cache-Control', 'no-store')
       return c.json({ id }, 201)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -24,6 +25,7 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
     try {
       const did = c.req.param('did')
       const score = await trustService.getScore(db, did)
+      c.header('Cache-Control', 'public, max-age=300')
       return c.json(score)
     } catch (error) {
       return c.json({ error: 'Internal server error' }, 500)
@@ -36,6 +38,7 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
       const from = c.req.param('from')
       const to = c.req.param('to')
       const path = await trustService.getTrustPath(db, from, to)
+      c.header('Cache-Control', 'public, max-age=60')
       return c.json(path)
     } catch (error) {
       return c.json({ error: 'Internal server error' }, 500)

@@ -4,13 +4,13 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: fides
-      POSTGRES_PASSWORD: fides
-      POSTGRES_DB: fides
+      POSTGRES_USER: ${POSTGRES_USER:-fides}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-fides}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fides"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fides}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,9 +22,10 @@ services:
     ports:
       - "3100:3100"
     environment:
-      DATABASE_URL: postgresql://fides:fides@postgres:5432/fides
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fides}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-fides}
       DISCOVERY_PORT: "3100"
       NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,10 +37,11 @@ services:
     ports:
       - "3200:3200"
     environment:
-      DATABASE_URL: postgresql://fides:fides@postgres:5432/fides
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fides}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-fides}
       TRUST_GRAPH_PORT: "3200"
       DISCOVERY_URL: http://discovery:3100
       NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
     depends_on:
       postgres:
         condition: service_healthy

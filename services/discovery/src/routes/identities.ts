@@ -69,6 +69,7 @@ identitiesRouter.post('/', async (c) => {
       updatedAt: identity.updatedAt.toISOString(),
     }
 
+    c.header('Cache-Control', 'no-store')
     return c.json(response, 201)
   } catch (error) {
     if (error instanceof Error) {
@@ -102,6 +103,7 @@ identitiesRouter.get('/:did', async (c) => {
       updatedAt: identity.updatedAt.toISOString(),
     }
 
+    c.header('Cache-Control', 'public, max-age=600')
     return c.json(response)
   } catch (error) {
     return c.json({ error: 'Internal server error' }, 500)

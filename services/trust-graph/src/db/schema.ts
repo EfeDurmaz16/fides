@@ -1,4 +1,4 @@
-import { pgTable, text, jsonb, timestamp, uuid, smallint, doublePrecision, integer, primaryKey, customType } from 'drizzle-orm/pg-core'
+import { pgTable, text, jsonb, timestamp, uuid, smallint, doublePrecision, integer, primaryKey, customType, index, uniqueIndex } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
@@ -26,10 +26,9 @@ export const trustEdges = pgTable('trust_edges', {
   expiresAt: timestamp('expires_at'),
   revokedAt: timestamp('revoked_at'),
 }, (table) => ({
-  uniqueSourceTarget: {
-    name: 'unique_source_target',
-    columns: [table.sourceDid, table.targetDid],
-  },
+  uniqueSourceTarget: uniqueIndex('unique_source_target').on(table.sourceDid, table.targetDid),
+  idxSource: index('idx_trust_edges_source').on(table.sourceDid),
+  idxTarget: index('idx_trust_edges_target').on(table.targetDid),
 }))
 
 export const keyHistory = pgTable('key_history', {

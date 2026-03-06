@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { eq, sql, and } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { agents, identities } from '../db/schema.js'
-import { DID_PREFIX, ALGORITHM } from '@fides/shared'
+import { DID_PREFIX, ALGORITHM, DEFAULT_HEARTBEAT_TTL_SECONDS } from '@fides/shared'
 import type { RegisterAgentRequest, AgentResponse } from '../types.js'
 
 const agentsRouter = new Hono()
@@ -190,6 +190,28 @@ agentsRouter.put('/:did', async (c) => {
   }
 })
 
+// PUT /agents/:did/heartbeat - Send heartbeat signal
+agentsRouter.put('/:did/heartbeat', async (c) => {
+  try {
+    const did = c.req.param('did')
+    const now = new Date()
+
+    const [updated] = await db
+      .update(agents)
+      .set({ heartbeatAt: now, status: 'online', updatedAt: now })
+      .where(eq(agents.did, did))
+      .returning()
+
+    if (!updated) {
+      return c.json({ error: 'Agent not found' }, 404)
+    }
+
+    return c.json({ status: 'online', heartbeatAt: now.toISOString() })
+  } catch (error) {
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
 // DELETE /agents/:did - Deregister agent
 agentsRouter.delete('/:did', async (c) => {
   try {
@@ -209,5 +231,24 @@ agentsRouter.delete('/:did', async (c) => {
     return c.json({ error: 'Internal server error' }, 500)
   }
 })
+
+/**
+ * Mark agents as offline if their heartbeat has expired.
+ * Call this periodically (e.g. every 60s) from the service entrypoint.
+ */
+export async function sweepOfflineAgents(ttlSeconds: number = DEFAULT_HEARTBEAT_TTL_SECONDS): Promise<number> {
+  const cutoff = new Date(Date.now() - ttlSeconds * 1000)
+  const result = await db
+    .update(agents)
+    .set({ status: 'offline' })
+    .where(
+      and(
+        eq(agents.status, 'online'),
+        sql`${agents.heartbeatAt} < ${cutoff}`
+      )
+    )
+    .returning()
+  return result.length
+}
 
 export default agentsRouter

@@ -5,7 +5,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
 import healthRouter from './routes/health.js'
 import identitiesRouter from './routes/identities.js'
-import agentsRouter from './routes/agents.js'
+import agentsRouter, { sweepOfflineAgents } from './routes/agents.js'
 import wellKnownRouter from './routes/well-known.js'
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
@@ -80,6 +80,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   }
 
+  // Sweep offline agents every 60 seconds
+  const sweepInterval = setInterval(async () => {
+    try {
+      const count = await sweepOfflineAgents()
+      if (count > 0) console.log(`Swept ${count} agent(s) to offline`)
+    } catch (err) {
+      console.error('Agent sweep error:', err)
+    }
+  }, 60_000)
+
   console.log(`Discovery service starting on port ${port}`)
 
   const server = serve({
@@ -103,6 +113,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       console.warn(`Force closing with ${inFlightRequests} in-flight requests`)
     }
 
+    clearInterval(sweepInterval)
     server.close()
     await sql.end()
     process.exit(0)

@@ -1,5 +1,7 @@
 import type {
   AgentIdentity,
+  AgentCard,
+  AgentCardQuery,
   TrustAttestation,
   TrustScore,
 } from '@fides/shared'
@@ -13,6 +15,7 @@ import { DiscoveryClient } from './discovery/client.js'
 import { IdentityResolver } from './discovery/resolver.js'
 import { TrustClient } from './trust/client.js'
 import { createAttestation } from './trust/attestation.js'
+import { AgentDiscoveryClient, type RegisterAgentParams } from './discovery/agent-client.js'
 
 export interface FidesOptions {
   discoveryUrl: string
@@ -22,13 +25,16 @@ export interface FidesOptions {
 
 export class Fides {
   private discoveryClient: DiscoveryClient
+  private agentClient: AgentDiscoveryClient
   private resolver: IdentityResolver
   private trustClient: TrustClient
   private keyStore: KeyStore
   private currentDid?: string
+  private heartbeatTimer?: ReturnType<typeof setInterval>
 
   constructor(options: FidesOptions) {
     this.discoveryClient = new DiscoveryClient({ baseUrl: options.discoveryUrl })
+    this.agentClient = new AgentDiscoveryClient({ baseUrl: options.discoveryUrl })
     this.resolver = new IdentityResolver({ discoveryUrl: options.discoveryUrl })
     this.trustClient = new TrustClient({ baseUrl: options.trustUrl })
     this.keyStore = options.keyStore ?? new MemoryKeyStore()
@@ -159,6 +165,73 @@ export class Fides {
    */
   async resolve(didOrDomain: string): Promise<AgentIdentity | null> {
     return this.resolver.resolve(didOrDomain)
+  }
+
+  /**
+   * Register this agent with capabilities for discovery by other agents.
+   * Starts automatic heartbeat to maintain online status.
+   */
+  async registerAgent(
+    params: Omit<RegisterAgentParams, 'did'>
+  ): Promise<AgentCard> {
+    if (!this.currentDid) {
+      throw new Error('No identity available. Call createIdentity() first.')
+    }
+
+    const card = await this.agentClient.registerAgent({
+      ...params,
+      did: this.currentDid,
+    })
+
+    // Start automatic heartbeat every 60 seconds
+    this.startHeartbeat()
+
+    return card
+  }
+
+  /**
+   * Discover other agents by capability, status, tag, or provider
+   */
+  async discoverAgents(query?: AgentCardQuery): Promise<AgentCard[]> {
+    return this.agentClient.discoverAgents(query)
+  }
+
+  /**
+   * Get a specific agent's card by DID
+   */
+  async getAgent(did: string): Promise<AgentCard | null> {
+    return this.agentClient.getAgent(did)
+  }
+
+  /**
+   * Stop heartbeat and deregister this agent
+   */
+  async deregisterAgent(): Promise<void> {
+    if (!this.currentDid) return
+    this.stopHeartbeat()
+    await this.agentClient.deregisterAgent(this.currentDid)
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat()
+    this.heartbeatTimer = setInterval(async () => {
+      if (this.currentDid) {
+        try {
+          await this.agentClient.heartbeat(this.currentDid)
+        } catch {
+          // Silently ignore heartbeat failures
+        }
+      }
+    }, 60_000)
+    // Allow process to exit even if heartbeat is running
+    if (this.heartbeatTimer.unref) this.heartbeatTimer.unref()
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = undefined
+    }
   }
 
   /**

@@ -24,6 +24,7 @@ export { NonceStore } from './signing/nonce-store.js'
 // Discovery module exports
 export { DiscoveryClient } from './discovery/client.js'
 export { IdentityResolver } from './discovery/resolver.js'
+export { AgentDiscoveryClient, type RegisterAgentParams } from './discovery/agent-client.js'
 
 // Trust module exports
 export { TrustLevel } from './trust/types.js'

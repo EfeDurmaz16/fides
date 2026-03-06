@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { eq } from 'drizzle-orm'
+import { eq, sql, and } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { agents, identities } from '../db/schema.js'
 import { DID_PREFIX, ALGORITHM } from '@fides/shared'
@@ -27,6 +27,63 @@ function toAgentResponse(agent: typeof agents.$inferSelect, identity: typeof ide
     updatedAt: agent.updatedAt.toISOString(),
   }
 }
+
+// GET /agents - Search agents by capability, status, tag, provider
+agentsRouter.get('/', async (c) => {
+  try {
+    const capability = c.req.query('capability')
+    const status = c.req.query('status')
+    const tag = c.req.query('tag')
+    const provider = c.req.query('provider')
+    const limit = Math.min(parseInt(c.req.query('limit') || '50', 10), 100)
+    const offset = parseInt(c.req.query('offset') || '0', 10)
+
+    const conditions = []
+
+    if (status) {
+      conditions.push(eq(agents.status, status))
+    }
+
+    if (capability) {
+      // Search skills by id matching
+      conditions.push(
+        sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${agents.skills}) AS s WHERE s->>'id' = ${capability})`
+      )
+    }
+
+    if (tag) {
+      // Search skills by tag
+      conditions.push(
+        sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${agents.skills}) AS s, jsonb_array_elements_text(COALESCE(s->'tags', '[]'::jsonb)) AS t WHERE t = ${tag})`
+      )
+    }
+
+    if (provider) {
+      conditions.push(
+        sql`${agents.provider}->>'organization' = ${provider}`
+      )
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
+
+    const results = await db
+      .select()
+      .from(agents)
+      .innerJoin(identities, eq(agents.did, identities.did))
+      .where(whereClause)
+      .limit(limit)
+      .offset(offset)
+
+    const response = results.map(({ agents: agent, identities: identity }) =>
+      toAgentResponse(agent, identity)
+    )
+
+    c.header('Cache-Control', 'public, max-age=30')
+    return c.json(response)
+  } catch (error) {
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
 
 // POST /agents - Register an agent with capabilities
 agentsRouter.post('/', async (c) => {

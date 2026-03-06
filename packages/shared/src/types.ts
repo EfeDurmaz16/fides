@@ -132,3 +132,44 @@ export interface AgentCardQuery {
   limit?: number
   offset?: number
 }
+
+// --- A2A Protocol Compatibility Types ---
+
+export interface A2AAgentCard {
+  id: string                     // DID
+  name: string
+  description?: string
+  url: string
+  version: string
+  provider?: {
+    organization: string
+    url?: string
+  }
+  capabilities?: {
+    streaming?: boolean
+    pushNotifications?: boolean
+    stateTransitionHistory?: boolean
+  }
+  skills?: Array<{
+    id: string
+    name: string
+    description?: string
+    tags?: string[]
+    examples?: string[]
+    inputModes?: string[]
+    outputModes?: string[]
+  }>
+  defaultInputModes?: string[]
+  defaultOutputModes?: string[]
+  securitySchemes?: Record<string, {
+    type: string
+    scheme?: string
+    description?: string
+  }>
+  security?: string[]
+  // FIDES extensions
+  'x-fides-did'?: string
+  'x-fides-publicKey'?: string
+  'x-fides-algorithm'?: string
+  'x-fides-trust-endpoint'?: string
+}

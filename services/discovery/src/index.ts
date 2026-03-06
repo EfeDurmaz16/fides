@@ -5,6 +5,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
 import healthRouter from './routes/health.js'
 import identitiesRouter from './routes/identities.js'
+import agentsRouter from './routes/agents.js'
 import wellKnownRouter from './routes/well-known.js'
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
@@ -49,6 +50,7 @@ app.get('/metrics', (c) => {
 // Register routes
 app.route('/health', healthRouter)
 app.route('/identities', identitiesRouter)
+app.route('/agents', agentsRouter)
 app.route('/.well-known', wellKnownRouter)
 
 // Export app for testing

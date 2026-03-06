@@ -78,3 +78,57 @@ export interface SignatureResult {
   components?: string[]
   error?: string
 }
+
+// --- Agent Discovery Types (A2A-compatible) ---
+
+export type AgentStatus = 'online' | 'offline' | 'unknown'
+
+export interface AgentSkill {
+  id: string
+  name: string
+  description?: string
+  tags?: string[]
+  examples?: string[]
+  inputModes?: string[]  // MIME types: "text/plain", "application/json"
+  outputModes?: string[] // MIME types
+}
+
+export interface AgentCapabilities {
+  streaming?: boolean
+  pushNotifications?: boolean
+  stateTransitionHistory?: boolean
+  a2aCompatible?: boolean
+}
+
+export interface AgentProvider {
+  organization: string
+  url?: string
+}
+
+export interface AgentCard {
+  did: string
+  name: string
+  description?: string
+  url: string                    // agent's service endpoint
+  version: string
+  publicKey: string              // hex-encoded Ed25519
+  algorithm: string
+  provider?: AgentProvider
+  capabilities?: AgentCapabilities
+  skills?: AgentSkill[]
+  defaultInputModes?: string[]
+  defaultOutputModes?: string[]
+  status: AgentStatus
+  heartbeatAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AgentCardQuery {
+  capability?: string            // skill id or tag
+  status?: AgentStatus
+  tag?: string
+  provider?: string
+  limit?: number
+  offset?: number
+}

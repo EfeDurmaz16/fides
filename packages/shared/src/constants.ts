@@ -21,3 +21,8 @@ export const CONTENT_DIGEST_ALGORITHM = 'sha-256' as const
 
 // Clock drift tolerance for signature verification
 export const DEFAULT_CLOCK_DRIFT_SECONDS = 30
+
+// Agent discovery constants
+export const AGENT_CARD_PATH = '/.well-known/agent.json' as const
+export const DEFAULT_HEARTBEAT_TTL_SECONDS = 120
+export const DEFAULT_AGENT_CACHE_TTL_MS = 60 * 1000 // 1 minute

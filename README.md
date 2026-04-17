@@ -5,8 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
-[![Build](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/yourusername/fides)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/yourusername/fides/pulls)
+[![Build](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/EfeDurmaz16/fides)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/EfeDurmaz16/fides/pulls)
 
 **Decentralized trust and authentication protocol for autonomous AI agents**
 
@@ -215,7 +215,7 @@ fides/
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/fides.git
+git clone https://github.com/EfeDurmaz16/fides.git
 cd fides
 
 # Install dependencies

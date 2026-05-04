@@ -1,5 +1,5 @@
 {
-  "name": "trust-graph",
+  "name": "@fides/trust-graph",
   "version": "0.1.0",
   "type": "module",
   "private": true,

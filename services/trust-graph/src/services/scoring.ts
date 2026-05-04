@@ -1,13 +1,19 @@
-import { DEFAULT_TRUST_DECAY } from '@fides/shared'
+import { MAX_TRUST_DEPTH } from '@fides/shared'
 import type { GraphEdge } from './graph.js'
 import { filterValidEdges, buildReverseIndex } from './edge-utils.js'
 
 /**
  * Compute reputation score for a DID based on trust edges.
- * Pure function - aggregates direct trust + transitive trust with decay.
+ * Pure function - aggregates direct trust + transitive trust with weighted decay.
+ *
+ * Algorithm (spec-compliant):
+ * - Direct trust (depth 1): weight 1.0
+ * - Transitive depth 2: weight 0.5
+ * - Transitive depth 3-MAX_TRUST_DEPTH: weight 0.25
+ * - Final score = weighted sum / total paths
  *
  * Optimizations:
- * - Reverse-index map for O(1) incoming-edge lookup (was O(V×N) filter per BFS step)
+ * - Reverse-index map for O(1) incoming-edge lookup
  * - Index-based dequeue instead of queue.shift()
  *
  * @param edges - Array of all trust edges
@@ -27,16 +33,19 @@ export function computeReputationScore(edges: GraphEdge[], did: string): {
   const directEdges = reverseIndex.get(did) || []
   const directTrusters = new Set(directEdges.map(e => e.sourceDid))
 
-  // Calculate direct trust score (average of trust levels)
-  let directScore = 0
-  if (directEdges.length > 0) {
-    const avgTrustLevel = directEdges.reduce((sum, e) => sum + e.trustLevel, 0) / directEdges.length
-    directScore = avgTrustLevel / 100 // Normalize to 0-1
+  // Calculate direct trust total (sum of normalized trust levels)
+  let directTotal = 0
+  const directPaths = directEdges.length
+  for (const edge of directEdges) {
+    directTotal += edge.trustLevel / 100
   }
 
-  // BFS to find transitive trusters (2-hop and 3-hop)
+  // BFS to find transitive trusters up to MAX_TRUST_DEPTH hops
   const transitiveTrusters = new Set<string>()
-  let transitiveScore = 0
+  let depth2Score = 0
+  let depth2Paths = 0
+  let depth3PlusScore = 0
+  let depth3PlusPaths = 0
 
   interface QueueItem {
     did: string
@@ -58,8 +67,8 @@ export function computeReputationScore(edges: GraphEdge[], did: string): {
   while (head < queue.length) {
     const current = queue[head++]
 
-    // Only go up to 3 hops total
-    if (current.depth >= 3) continue
+    // Only go up to MAX_TRUST_DEPTH hops total
+    if (current.depth >= MAX_TRUST_DEPTH) continue
 
     // Explore who trusts the current node — O(1) reverse-index lookup
     const incomingEdges = reverseIndex.get(current.did) || []
@@ -69,23 +78,35 @@ export function computeReputationScore(edges: GraphEdge[], did: string): {
         visited.add(edge.sourceDid)
         transitiveTrusters.add(edge.sourceDid)
 
-        // Calculate path trust with decay
+        // Calculate path trust
         const edgeTrust = edge.trustLevel / 100
-        const pathTrust = current.pathTrust * edgeTrust * Math.pow(DEFAULT_TRUST_DECAY, current.depth)
-        transitiveScore += pathTrust
+        const pathTrust = current.pathTrust * edgeTrust
+        const nextDepth = current.depth + 1
+
+        if (nextDepth === 2) {
+          depth2Score += pathTrust
+          depth2Paths++
+        } else if (nextDepth >= 3) {
+          depth3PlusScore += pathTrust
+          depth3PlusPaths++
+        }
 
         queue.push({
           did: edge.sourceDid,
-          depth: current.depth + 1,
+          depth: nextDepth,
           pathTrust,
         })
       }
     }
   }
 
-  // Combine direct and transitive scores
-  // Weight: 70% direct, 30% transitive
-  const combinedScore = (directScore * 0.7) + (Math.min(transitiveScore, 1.0) * 0.3)
+  // Weighted aggregation per spec:
+  // direct * 1.0 + depth2 * 0.5 + depth3+ * 0.25, divided by total paths
+  const totalPaths = directPaths + depth2Paths + depth3PlusPaths
+  let combinedScore = 0
+  if (totalPaths > 0) {
+    combinedScore = (directTotal * 1.0 + depth2Score * 0.5 + depth3PlusScore * 0.25) / totalPaths
+  }
 
   return {
     score: Math.min(combinedScore, 1.0), // Cap at 1.0

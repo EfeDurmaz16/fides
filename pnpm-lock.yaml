@@ -20,6 +20,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../core
       '@fides/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -35,6 +38,110 @@ importers:
       ora:
         specifier: ^8.0.0
         version: 8.2.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.10)
+
+  packages/core:
+    dependencies:
+      '@fides/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@noble/ed25519':
+        specifier: ^2.1.0
+        version: 2.3.0
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
+      bs58:
+        specifier: ^6.0.0
+        version: 6.0.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.10)
+
+  packages/discovery:
+    dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fides/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.10)
+
+  packages/evidence:
+    dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fides/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.10)
+
+  packages/policy:
+    dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fides/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.10)
+
+  packages/runtime:
+    dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../core
+      '@fides/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@types/node':
         specifier: ^22.10.5
@@ -77,6 +184,34 @@ importers:
         specifier: ^5.5.0
         version: 5.9.3
 
+  services/agentd:
+    dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@fides/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@hono/node-server':
+        specifier: ^1.13.7
+        version: 1.19.9(hono@4.11.8)
+      hono:
+        specifier: ^4.6.14
+        version: 4.11.8
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.10
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.10)
+
   services/discovery:
     dependencies:
       '@fides/sdk':
@@ -107,6 +242,59 @@ importers:
       drizzle-kit:
         specifier: ^0.29.1
         version: 0.29.1
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.10)
+
+  services/registry:
+    dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@fides/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@hono/node-server':
+        specifier: ^1.13.7
+        version: 1.19.9(hono@4.11.8)
+      hono:
+        specifier: ^4.6.14
+        version: 4.11.8
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.10
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.10)
+
+  services/relay:
+    dependencies:
+      '@fides/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@hono/node-server':
+        specifier: ^1.13.7
+        version: 1.19.9(hono@4.11.8)
+      hono:
+        specifier: ^4.6.14
+        version: 4.11.8
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.10
       tsx:
         specifier: ^4.19.2
         version: 4.21.0

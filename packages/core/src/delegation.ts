@@ -4,6 +4,8 @@
  * Ported from OAPS DelegationToken with FIDES signing.
  */
 
+import type { SignedObject } from './canonical-signer.js'
+
 export interface DelegationConstraint {
   maxActions?: number
   maxSpend?: string
@@ -24,6 +26,8 @@ export interface DelegationToken {
   signature: string
 }
 
+export type SignedDelegationToken = SignedObject<DelegationToken>
+
 export interface SessionGrant {
   id: string
   token: DelegationToken
@@ -38,4 +42,16 @@ export function isDelegationExpired(token: DelegationToken): boolean {
 
 export function isSessionExpired(session: SessionGrant): boolean {
   return new Date(session.expiresAt) < new Date()
+}
+
+export function validateDelegationToken(token: DelegationToken): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+  if (!token.id) errors.push('DelegationToken.id is required')
+  if (!token.delegator) errors.push('DelegationToken.delegator is required')
+  if (!token.delegatee) errors.push('DelegationToken.delegatee is required')
+  if (!token.capabilities || token.capabilities.length === 0) errors.push('DelegationToken.capabilities must not be empty')
+  if (!token.nonce) errors.push('DelegationToken.nonce is required')
+  if (!token.signature) errors.push('DelegationToken.signature is required')
+  if (isDelegationExpired(token)) errors.push('DelegationToken is expired')
+  return { valid: errors.length === 0, errors }
 }

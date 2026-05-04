@@ -37,6 +37,37 @@ function hashEvent(event: Omit<EvidenceEvent, 'hash'>): string {
   return bytesToHex(sha256(new TextEncoder().encode(canonical)))
 }
 
+/**
+ * Build a Merkle tree from event hashes and return the root.
+ */
+export function buildMerkleRoot(eventHashes: string[]): string {
+  if (eventHashes.length === 0) return '0'
+  if (eventHashes.length === 1) return eventHashes[0]
+
+  let level = [...eventHashes]
+  while (level.length > 1) {
+    const nextLevel: string[] = []
+    for (let i = 0; i < level.length; i += 2) {
+      if (i + 1 < level.length) {
+        const combined = level[i] + level[i + 1]
+        nextLevel.push(bytesToHex(sha256(new TextEncoder().encode(combined))))
+      } else {
+        nextLevel.push(level[i])
+      }
+    }
+    level = nextLevel
+  }
+  return level[0]
+}
+
+/**
+ * Compute the Merkle root of an evidence chain.
+ */
+export function computeMerkleRoot(chain: EvidenceChain): string {
+  const hashes = chain.events.map(e => e.hash)
+  return buildMerkleRoot(hashes)
+}
+
 export function createEvidenceChain(): EvidenceChain {
   return { events: [] }
 }
@@ -54,7 +85,9 @@ export function appendEvidenceEvent(
   }
   const hash = hashEvent(eventWithoutHash)
   const event: EvidenceEvent = { ...eventWithoutHash, hash }
-  return { events: [...chain.events, event] }
+  const newChain: EvidenceChain = { events: [...chain.events, event] }
+  newChain.merkleRoot = computeMerkleRoot(newChain)
+  return newChain
 }
 
 export function verifyEvidenceChain(chain: EvidenceChain): boolean {
@@ -65,6 +98,9 @@ export function verifyEvidenceChain(chain: EvidenceChain): boolean {
     const { hash, ...withoutHash } = event
     if (hashEvent(withoutHash) !== hash) return false
   }
+  // Verify Merkle root
+  const expectedRoot = computeMerkleRoot(chain)
+  if (chain.merkleRoot && chain.merkleRoot !== expectedRoot) return false
   return true
 }
 

@@ -20,15 +20,43 @@ export const trustEdges = pgTable('trust_edges', {
   sourceDid: text('source_did').notNull().references(() => identities.did),
   targetDid: text('target_did').notNull().references(() => identities.did),
   trustLevel: smallint('trust_level').notNull(),
+  capabilityId: text('capability_id'),
+  context: text('context'),
   attestation: jsonb('attestation').notNull(),
   signature: bytea('signature').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   expiresAt: timestamp('expires_at'),
   revokedAt: timestamp('revoked_at'),
 }, (table) => ({
-  uniqueSourceTarget: uniqueIndex('unique_source_target').on(table.sourceDid, table.targetDid),
+  uniqueSourceTarget: uniqueIndex('unique_source_target').on(table.sourceDid, table.targetDid, table.capabilityId),
   idxSource: index('idx_trust_edges_source').on(table.sourceDid),
   idxTarget: index('idx_trust_edges_target').on(table.targetDid),
+  idxCapability: index('idx_trust_edges_capability').on(table.capabilityId),
+}))
+
+export const incidentRecords = pgTable('incident_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  actorDid: text('actor_did').notNull().references(() => identities.did),
+  type: text('type').notNull(),
+  severity: text('severity').notNull(),
+  description: text('description').notNull(),
+  evidenceRefs: jsonb('evidence_refs').notNull().default([]),
+  reportedAt: timestamp('reported_at').notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at'),
+  trustPenalty: doublePrecision('trust_penalty').notNull().default(0),
+  reputationPenalty: doublePrecision('reputation_penalty').notNull().default(0),
+  capabilitiesRevoked: jsonb('capabilities_revoked').notNull().default([]),
+})
+
+export const capabilityScores = pgTable('capability_scores', {
+  did: text('did').notNull().references(() => identities.did),
+  capabilityId: text('capability_id').notNull(),
+  score: doublePrecision('score').notNull(),
+  invocationCount: integer('invocation_count').notNull().default(0),
+  incidentCount: integer('incident_count').notNull().default(0),
+  lastComputed: timestamp('last_computed').notNull().defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.did, table.capabilityId] }),
 }))
 
 export const keyHistory = pgTable('key_history', {

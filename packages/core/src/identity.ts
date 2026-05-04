@@ -66,6 +66,20 @@ export function isValidFidesDid(did: string): boolean {
 }
 
 /**
+ * Creates an AgentIdentity with a random Ed25519 key pair.
+ */
+export function createIdentity(did: string, type: 'agent' | 'publisher' | 'principal' | 'trust-anchor', metadata: Record<string, unknown> = {}): AgentIdentity & { metadata: Record<string, unknown> } {
+  const publicKey = crypto.getRandomValues(new Uint8Array(32))
+  return {
+    did,
+    publicKey,
+    keyType: 'Ed25519',
+    createdAt: new Date().toISOString(),
+    metadata,
+  }
+}
+
+/**
  * Creates a display name for an identity, falling back to DID short form.
  */
 export function identityDisplayName(identity: AgentIdentity | PrincipalIdentity | PublisherIdentity): string {

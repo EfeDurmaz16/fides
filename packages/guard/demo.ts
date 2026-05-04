@@ -10,7 +10,7 @@ import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { evaluatePolicy } from '@fides/policy'
 import { createEvidenceChain, appendEvidenceEvent, buildMerkleRoot, verifyEvidenceChain } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
-import { evaluateGuard, createTrustContext } from './index.js'
+import { evaluateGuard, createTrustContext } from './src/index.js'
 
 async function demo() {
   console.log('═'.repeat(60))

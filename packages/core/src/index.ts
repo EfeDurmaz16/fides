@@ -1,0 +1,15 @@
+/**
+ * FIDES v2 Core Primitives
+ *
+ * This module exports the foundational types and functions for the
+ * FIDES Agent Trust Fabric:
+ * - Identity v2 (Agent, Publisher, Principal)
+ * - Canonical object signing
+ * - Delegation tokens
+ * - Policy bundles
+ * - Evidence events
+ * - Runtime attestations
+ */
+
+export * from './identity.js'
+export * from './canonical-signer.js'

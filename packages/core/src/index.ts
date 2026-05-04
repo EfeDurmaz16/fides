@@ -13,3 +13,5 @@
 
 export * from './identity.js'
 export * from './canonical-signer.js'
+export * from './agent-card.js'
+export * from './capability.js'

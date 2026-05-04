@@ -36,6 +36,30 @@ export interface SessionGrant {
   boundTo?: string
 }
 
+export interface DelegationInput {
+  delegator: string
+  delegatee: string
+  capabilities: string[]
+  constraints: DelegationConstraint
+  expiresAt: string
+  audience?: string[]
+}
+
+export function createDelegationToken(input: DelegationInput): DelegationToken {
+  return {
+    id: crypto.randomUUID(),
+    delegator: input.delegator,
+    delegatee: input.delegatee,
+    capabilities: input.capabilities,
+    constraints: input.constraints,
+    issuedAt: new Date().toISOString(),
+    expiresAt: input.expiresAt,
+    nonce: crypto.randomUUID(),
+    audience: input.audience,
+    signature: '', // Must be signed separately using CanonicalSigner
+  }
+}
+
 export function isDelegationExpired(token: DelegationToken): boolean {
   return new Date(token.expiresAt) < new Date()
 }

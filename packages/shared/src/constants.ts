@@ -1,3 +1,4 @@
+export const PROTOCOL_VERSION = 'fides-v2.0.0' as const
 export const ALGORITHM = 'ed25519' as const
 export const SIGNATURE_HEADER = 'signature' as const
 export const SIGNATURE_INPUT_HEADER = 'signature-input' as const

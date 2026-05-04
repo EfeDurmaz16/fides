@@ -1,0 +1,53 @@
+{
+  "name": "@fides/core",
+  "version": "0.1.0",
+  "description": "FIDES v2 core primitives: identity, signing, delegation, policy, evidence",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EfeDurmaz16/fides",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/EfeDurmaz16/fides#readme",
+  "keywords": [
+    "fides",
+    "trust",
+    "agent-identity",
+    "delegation",
+    "policy",
+    "evidence",
+    "canonical-signing"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@fides/shared": "workspace:*",
+    "@noble/ed25519": "^2.1.0",
+    "@noble/hashes": "^1.5.0",
+    "bs58": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

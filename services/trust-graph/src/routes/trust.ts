@@ -45,5 +45,52 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
     }
   })
 
+  // Get capability-specific score
+  app.get('/v1/trust/:did/capability/:capabilityId', async (c) => {
+    try {
+      const did = c.req.param('did')
+      const capabilityId = c.req.param('capabilityId')
+      const score = await trustService.getCapabilityScore(db, did, decodeURIComponent(capabilityId))
+      c.header('Cache-Control', 'public, max-age=300')
+      return c.json(score)
+    } catch (error) {
+      return c.json({ error: 'Internal server error' }, 500)
+    }
+  })
+
+  // Record capability invocation
+  app.post('/v1/trust/:did/capability/:capabilityId/invoke', async (c) => {
+    try {
+      const did = c.req.param('did')
+      const capabilityId = c.req.param('capabilityId')
+      await trustService.recordCapabilityInvocation(db, did, decodeURIComponent(capabilityId))
+      return c.json({ ok: true }, 201)
+    } catch (error) {
+      return c.json({ error: 'Internal server error' }, 500)
+    }
+  })
+
+  // Record incident
+  app.post('/v1/incidents', async (c) => {
+    try {
+      const body = await c.req.json()
+      const id = await trustService.recordIncident(db, body)
+      return c.json({ id }, 201)
+    } catch (error) {
+      return c.json({ error: 'Internal server error' }, 500)
+    }
+  })
+
+  // Get incidents for a DID
+  app.get('/v1/incidents/:did', async (c) => {
+    try {
+      const did = c.req.param('did')
+      const incidents = await trustService.getIncidents(db, did)
+      return c.json({ incidents })
+    } catch (error) {
+      return c.json({ error: 'Internal server error' }, 500)
+    }
+  })
+
   return app
 }

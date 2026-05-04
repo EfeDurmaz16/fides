@@ -4,7 +4,9 @@ import type { DbClient } from '../db/client.js'
 import { identities, trustEdges, reputationScores } from '../db/schema.js'
 import { findTrustPath } from './graph.js'
 import { computeReputationScore } from './scoring.js'
+import { computeCapabilityScore, recordCapabilityInvocation, recordIncident, getIncidents } from './capability-scoring.js'
 import type { CreateTrustRequest, TrustPathResult } from '../types.js'
+import type { IncidentRecordInput, CapabilityScoreResult } from './capability-scoring.js'
 
 const IDENTITY_CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
 const CIRCUIT_BREAKER_THRESHOLD = 5
@@ -321,5 +323,33 @@ export class TrustService {
 
     // Cache the identity
     this.identityCache.set(did, { cachedAt: Date.now() })
+  }
+
+  /**
+   * Get capability-specific score for a DID.
+   */
+  async getCapabilityScore(db: DbClient, did: string, capabilityId: string): Promise<CapabilityScoreResult> {
+    return computeCapabilityScore(db, did, capabilityId)
+  }
+
+  /**
+   * Record a capability invocation.
+   */
+  async recordCapabilityInvocation(db: DbClient, did: string, capabilityId: string): Promise<void> {
+    return recordCapabilityInvocation(db, did, capabilityId)
+  }
+
+  /**
+   * Record an incident against an agent.
+   */
+  async recordIncident(db: DbClient, input: IncidentRecordInput): Promise<string> {
+    return recordIncident(db, input)
+  }
+
+  /**
+   * Get all incidents for a DID.
+   */
+  async getIncidents(db: DbClient, did: string) {
+    return getIncidents(db, did)
   }
 }

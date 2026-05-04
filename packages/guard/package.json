@@ -1,0 +1,24 @@
+{
+  "name": "@fides/guard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fides/core": "workspace:*",
+    "@fides/policy": "workspace:*",
+    "@fides/runtime": "workspace:*",
+    "@fides/evidence": "workspace:*",
+    "@fides/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

@@ -113,15 +113,16 @@ export interface Guard {
 export async function runPreExecutionPipeline(
   guards: Guard[],
   context: PolicyContext
-): Promise<{ decision: GuardDecision; blockingGuard?: string }> {
+): Promise<{ decision: GuardDecision; blockingGuard?: string; warnings: string[] }> {
+  const warnings: string[] = []
   for (const guard of guards) {
     const decision = await guard.evaluate(context)
     if (decision === 'block') {
-      return { decision: 'block', blockingGuard: guard.name }
+      return { decision: 'block', blockingGuard: guard.name, warnings }
     }
     if (decision === 'warn') {
-      // Continue but remember warning
+      warnings.push(guard.name)
     }
   }
-  return { decision: 'allow' }
+  return { decision: warnings.length > 0 ? 'warn' : 'allow', warnings }
 }

@@ -19,6 +19,9 @@ export interface AuthorityStore extends SessionStore {
   getRevocation(did: string): Promise<RevocationRecord | null>
   putIncident(record: IncidentRecord): Promise<void>
   listIncidents(did: string): Promise<IncidentRecord[]>
+  enqueuePropagation(record: AuthorityPropagationRecord): Promise<void>
+  listPendingPropagations(now?: string, limit?: number): Promise<AuthorityPropagationRecord[]>
+  updatePropagationAttempt(id: string, result: AuthorityPropagationAttemptResult): Promise<AuthorityPropagationRecord | null>
   healthCheck(): Promise<AuthorityStoreHealth>
   close?(): Promise<void>
 }
@@ -29,12 +32,43 @@ export interface AuthorityStoreHealth {
   detail?: string
 }
 
+export type AuthorityPropagationRecordType = 'revocation' | 'incident'
+export type AuthorityPropagationStatus = 'pending' | 'confirmed' | 'failed'
+
+export interface AuthorityPropagationRecord {
+  id: string
+  actor: string
+  recordType: AuthorityPropagationRecordType
+  recordId: string
+  target: string
+  path: string
+  body: Record<string, unknown>
+  status: AuthorityPropagationStatus
+  attempts: number
+  maxAttempts: number
+  nextAttemptAt: string
+  createdAt: string
+  updatedAt: string
+  lastAttemptAt?: string
+  lastStatus?: number
+  lastError?: string
+}
+
+export interface AuthorityPropagationAttemptResult {
+  ok: boolean
+  status: number
+  error?: string
+  attemptedAt: string
+  nextAttemptAt?: string
+}
+
 interface AuthoritySnapshot {
   nonces: NonceUseRecord[]
   sessions: StoredSession[]
   evidenceChains: Record<string, EvidenceChain>
   revocations: Record<string, RevocationRecord>
   incidents: Record<string, IncidentRecord[]>
+  propagations: AuthorityPropagationRecord[]
 }
 
 function emptySnapshot(): AuthoritySnapshot {
@@ -44,6 +78,7 @@ function emptySnapshot(): AuthoritySnapshot {
     evidenceChains: {},
     revocations: {},
     incidents: {},
+    propagations: [],
   }
 }
 
@@ -54,6 +89,7 @@ export class InMemoryAuthorityStore implements AuthorityStore {
   private evidenceChains = new Map<string, EvidenceChain>()
   private revocations = new Map<string, RevocationRecord>()
   private incidents = new Map<string, IncidentRecord[]>()
+  private propagations = new Map<string, AuthorityPropagationRecord>()
 
   async hasNonce(nonce: string): Promise<boolean> {
     return this.nonces.has(nonce)
@@ -106,6 +142,25 @@ export class InMemoryAuthorityStore implements AuthorityStore {
 
   async listIncidents(did: string): Promise<IncidentRecord[]> {
     return this.incidents.get(did) ?? []
+  }
+
+  async enqueuePropagation(record: AuthorityPropagationRecord): Promise<void> {
+    this.propagations.set(record.id, record)
+  }
+
+  async listPendingPropagations(now = new Date().toISOString(), limit = 25): Promise<AuthorityPropagationRecord[]> {
+    return Array.from(this.propagations.values())
+      .filter(record => record.status === 'pending' && record.nextAttemptAt <= now)
+      .sort((a, b) => a.nextAttemptAt.localeCompare(b.nextAttemptAt))
+      .slice(0, limit)
+  }
+
+  async updatePropagationAttempt(id: string, result: AuthorityPropagationAttemptResult): Promise<AuthorityPropagationRecord | null> {
+    const record = this.propagations.get(id)
+    if (!record) return null
+    const updated = applyPropagationAttempt(record, result)
+    this.propagations.set(id, updated)
+    return updated
   }
 
   async healthCheck(): Promise<AuthorityStoreHealth> {
@@ -184,6 +239,33 @@ export class FileAuthorityStore implements AuthorityStore {
 
   async listIncidents(did: string): Promise<IncidentRecord[]> {
     return (await this.read()).incidents[did] ?? []
+  }
+
+  async enqueuePropagation(record: AuthorityPropagationRecord): Promise<void> {
+    const snapshot = await this.read()
+    await this.write({
+      ...snapshot,
+      propagations: [...snapshot.propagations.filter(existing => existing.id !== record.id), record],
+    })
+  }
+
+  async listPendingPropagations(now = new Date().toISOString(), limit = 25): Promise<AuthorityPropagationRecord[]> {
+    return (await this.read()).propagations
+      .filter(record => record.status === 'pending' && record.nextAttemptAt <= now)
+      .sort((a, b) => a.nextAttemptAt.localeCompare(b.nextAttemptAt))
+      .slice(0, limit)
+  }
+
+  async updatePropagationAttempt(id: string, result: AuthorityPropagationAttemptResult): Promise<AuthorityPropagationRecord | null> {
+    const snapshot = await this.read()
+    const record = snapshot.propagations.find(existing => existing.id === id)
+    if (!record) return null
+    const updated = applyPropagationAttempt(record, result)
+    await this.write({
+      ...snapshot,
+      propagations: snapshot.propagations.map(existing => existing.id === id ? updated : existing),
+    })
+    return updated
   }
 
   async healthCheck(): Promise<AuthorityStoreHealth> {
@@ -319,6 +401,57 @@ export class PostgresAuthorityStore implements AuthorityStore {
     return rows.map(row => row.record as IncidentRecord)
   }
 
+  async enqueuePropagation(record: AuthorityPropagationRecord): Promise<void> {
+    await this.initialized
+    await this.sql`
+      INSERT INTO agentd_authority_propagations (
+        id, actor_did, record_type, record_id, target, path, body, status,
+        attempts, max_attempts, next_attempt_at, record, created_at, updated_at
+      )
+      VALUES (
+        ${record.id}, ${record.actor}, ${record.recordType}, ${record.recordId},
+        ${record.target}, ${record.path}, ${this.sql.json(record.body as any)}, ${record.status},
+        ${record.attempts}, ${record.maxAttempts}, ${record.nextAttemptAt}, ${this.sql.json(record as any)},
+        ${record.createdAt}, ${record.updatedAt}
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        actor_did = EXCLUDED.actor_did,
+        record_type = EXCLUDED.record_type,
+        record_id = EXCLUDED.record_id,
+        target = EXCLUDED.target,
+        path = EXCLUDED.path,
+        body = EXCLUDED.body,
+        status = EXCLUDED.status,
+        attempts = EXCLUDED.attempts,
+        max_attempts = EXCLUDED.max_attempts,
+        next_attempt_at = EXCLUDED.next_attempt_at,
+        record = EXCLUDED.record,
+        updated_at = EXCLUDED.updated_at
+    `
+  }
+
+  async listPendingPropagations(now = new Date().toISOString(), limit = 25): Promise<AuthorityPropagationRecord[]> {
+    await this.initialized
+    const rows = await this.sql`
+      SELECT record
+      FROM agentd_authority_propagations
+      WHERE status = 'pending' AND next_attempt_at <= ${now}
+      ORDER BY next_attempt_at ASC
+      LIMIT ${limit}
+    `
+    return rows.map(row => row.record as AuthorityPropagationRecord)
+  }
+
+  async updatePropagationAttempt(id: string, result: AuthorityPropagationAttemptResult): Promise<AuthorityPropagationRecord | null> {
+    await this.initialized
+    const rows = await this.sql`SELECT record FROM agentd_authority_propagations WHERE id = ${id} LIMIT 1`
+    const record = rows[0]?.record as AuthorityPropagationRecord | undefined
+    if (!record) return null
+    const updated = applyPropagationAttempt(record, result)
+    await this.enqueuePropagation(updated)
+    return updated
+  }
+
   async close(): Promise<void> {
     await this.sql.end()
   }
@@ -348,8 +481,10 @@ export async function runAuthorityMigrations(sql: postgres.Sql): Promise<void> {
   await sql`CREATE TABLE IF NOT EXISTS agentd_evidence_chains (did TEXT PRIMARY KEY, chain JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`
   await sql`CREATE TABLE IF NOT EXISTS agentd_revocations (did TEXT PRIMARY KEY, record JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`
   await sql`CREATE TABLE IF NOT EXISTS agentd_incidents (id TEXT PRIMARY KEY, actor_did TEXT NOT NULL, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`
+  await sql`CREATE TABLE IF NOT EXISTS agentd_authority_propagations (id TEXT PRIMARY KEY, actor_did TEXT NOT NULL, record_type TEXT NOT NULL, record_id TEXT NOT NULL, target TEXT NOT NULL, path TEXT NOT NULL, body JSONB NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 5, next_attempt_at TIMESTAMPTZ NOT NULL, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`
   await sql`CREATE INDEX IF NOT EXISTS idx_agentd_sessions_delegatee ON agentd_sessions(delegatee_did)`
   await sql`CREATE INDEX IF NOT EXISTS idx_agentd_incidents_actor ON agentd_incidents(actor_did)`
+  await sql`CREATE INDEX IF NOT EXISTS idx_agentd_propagations_pending ON agentd_authority_propagations(status, next_attempt_at)`
 }
 
 async function assertAuthoritySchema(sql: postgres.Sql): Promise<void> {
@@ -362,12 +497,43 @@ async function assertAuthoritySchema(sql: postgres.Sql): Promise<void> {
         'agentd_sessions',
         'agentd_evidence_chains',
         'agentd_revocations',
-        'agentd_incidents'
+        'agentd_incidents',
+        'agentd_authority_propagations'
       )
   `
-  if (rows.length !== 5) {
+  if (rows.length !== 6) {
     throw new Error('agentd authority store schema is not migrated')
   }
+}
+
+function applyPropagationAttempt(
+  record: AuthorityPropagationRecord,
+  result: AuthorityPropagationAttemptResult
+): AuthorityPropagationRecord {
+  const attempts = record.attempts + 1
+  const status = propagationAttemptStatus(result.status, result.ok, attempts, record.maxAttempts)
+  return {
+    ...record,
+    status,
+    attempts,
+    lastAttemptAt: result.attemptedAt,
+    lastStatus: result.status,
+    lastError: result.error,
+    nextAttemptAt: result.ok ? record.nextAttemptAt : result.nextAttemptAt ?? record.nextAttemptAt,
+    updatedAt: result.attemptedAt,
+  }
+}
+
+function propagationAttemptStatus(
+  status: number,
+  ok: boolean,
+  attempts: number,
+  maxAttempts: number
+): AuthorityPropagationStatus {
+  if (ok) return 'confirmed'
+  if (attempts >= maxAttempts) return 'failed'
+  if (status >= 400 && status < 500 && status !== 408 && status !== 409 && status !== 429) return 'failed'
+  return 'pending'
 }
 
 export function createAuthorityStore(): AuthorityStore {

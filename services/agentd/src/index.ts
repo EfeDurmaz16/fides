@@ -23,6 +23,11 @@ import {
   type DelegationToken,
 } from '@fides/core'
 import { createAuthorityStore } from './storage.js'
+import type {
+  AuthorityPropagationRecord,
+  AuthorityPropagationRecordType,
+  AuthorityPropagationStatus,
+} from './storage.js'
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
@@ -35,6 +40,7 @@ const DISCOVERY_URL = process.env.DISCOVERY_URL || 'http://localhost:3100'
 const TRUST_GRAPH_URL = process.env.TRUST_GRAPH_URL || 'http://localhost:3200'
 const REGISTRY_URL = process.env.REGISTRY_URL || 'http://localhost:7346'
 const TRUST_GRAPH_SERVICE_ID = 'trust-graph'
+const PROPAGATION_MAX_ATTEMPTS = parseInt(process.env.AGENTD_PROPAGATION_MAX_ATTEMPTS || '5', 10)
 
 const teeProvider = new MockTEEProvider()
 const killSwitch = new InMemoryKillSwitch()
@@ -247,9 +253,9 @@ app.post('/v1/revocations', async (c) => {
   }
   await authorityStore.putRevocation(record)
   const propagation = await propagateRevocation(record)
-  await appendPropagationEvidence(record.did, 'revocation', record.id, propagation)
+  const outbox = await persistPropagationOutcome(record.did, 'revocation', record.id, propagation)
 
-  return c.json({ revoked: true, record, propagation }, 201)
+  return c.json({ revoked: true, record, propagation: propagationResponse(propagation, outbox) }, 201)
 })
 
 app.get('/v1/revocations/:did', async (c) => {
@@ -274,15 +280,28 @@ app.post('/v1/incidents', async (c) => {
   await authorityStore.putIncident(record)
   const incidents = await authorityStore.listIncidents(record.actor)
   const propagation = await propagateIncident(record)
-  await appendPropagationEvidence(record.actor, 'incident', record.id, propagation)
+  const outbox = await persistPropagationOutcome(record.actor, 'incident', record.id, propagation)
 
-  return c.json({ recorded: true, record, impact: aggregateIncidentImpact(incidents), propagation }, 201)
+  return c.json({ recorded: true, record, impact: aggregateIncidentImpact(incidents), propagation: propagationResponse(propagation, outbox) }, 201)
 })
 
 app.get('/v1/incidents/:did', async (c) => {
   const did = c.req.param('did')
   const incidents = await authorityStore.listIncidents(did)
   return c.json({ did, incidents, impact: aggregateIncidentImpact(incidents) })
+})
+
+app.get('/v1/authority/propagations/pending', async (c) => {
+  const limit = parsePositiveInt(c.req.query('limit'), 25)
+  const pending = await authorityStore.listPendingPropagations(new Date().toISOString(), limit)
+  return c.json({ count: pending.length, propagations: pending })
+})
+
+app.post('/v1/authority/propagations/retry', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const limit = parsePositiveInt(body.limit, 25)
+  const result = await retryPendingPropagations(limit)
+  return c.json(result)
 })
 
 // ─── Unified Authorization (local) ───────────────────────────────
@@ -424,7 +443,7 @@ async function appendLocalEvidence(actor: string, action: string, payload: Recor
 
 async function appendPropagationEvidence(
   actor: string,
-  recordType: 'revocation' | 'incident',
+  recordType: AuthorityPropagationRecordType,
   recordId: string,
   propagation: PropagationResult
 ) {
@@ -438,6 +457,54 @@ async function appendPropagationEvidence(
   })
 }
 
+async function persistPropagationOutcome(
+  actor: string,
+  recordType: AuthorityPropagationRecordType,
+  recordId: string,
+  propagation: PropagationResult
+): Promise<AuthorityPropagationRecord | null> {
+  await appendPropagationEvidence(actor, recordType, recordId, propagation)
+  if (propagation.ok) return null
+
+  const now = propagation.attemptedAt
+  const status = propagationStatusForFailure(propagation.status, 1, PROPAGATION_MAX_ATTEMPTS)
+  const outbox: AuthorityPropagationRecord = {
+    id: crypto.randomUUID(),
+    actor,
+    recordType,
+    recordId,
+    target: propagation.target,
+    path: propagation.path,
+    body: propagation.body,
+    status,
+    attempts: 1,
+    maxAttempts: PROPAGATION_MAX_ATTEMPTS,
+    nextAttemptAt: now,
+    lastAttemptAt: now,
+    lastStatus: propagation.status,
+    lastError: propagation.error,
+    createdAt: now,
+    updatedAt: now,
+  }
+  await authorityStore.enqueuePropagation(outbox)
+  return outbox
+}
+
+function propagationResponse(propagation: PropagationResult, outbox: AuthorityPropagationRecord | null) {
+  return {
+    attempted: propagation.attempted,
+    ok: propagation.ok,
+    status: propagation.status,
+    target: propagation.target,
+    path: propagation.path,
+    attemptedAt: propagation.attemptedAt,
+    error: propagation.error,
+    queued: Boolean(outbox && outbox.status === 'pending'),
+    outboxId: outbox?.id,
+    attempts: outbox?.attempts ?? 1,
+  }
+}
+
 function redactSessionKey<T extends { sessionKey: string }>(session: T): Omit<T, 'sessionKey'> & { sessionKey: string } {
   return { ...session, sessionKey: 'redacted' }
 }
@@ -447,7 +514,8 @@ function clampScore(score: number): number {
 }
 
 async function propagateRevocation(record: ReturnType<typeof createRevocationRecord> & { signature: string }) {
-  return postToTrustGraph('/v1/revocations', {
+  const path = '/v1/revocations'
+  return postToTrustGraph(path, {
     did: record.did,
     reason: record.reason,
     revokedBy: record.revokedBy,
@@ -458,7 +526,8 @@ async function propagateRevocation(record: ReturnType<typeof createRevocationRec
 }
 
 async function propagateIncident(record: ReturnType<typeof createIncidentRecord> & { signature: string }) {
-  return postToTrustGraph('/v1/incidents', {
+  const path = '/v1/incidents'
+  return postToTrustGraph(path, {
     actor: record.actor,
     type: record.type,
     severity: record.severity,
@@ -476,6 +545,7 @@ interface PropagationResult {
   status: number
   target: string
   path: string
+  body: Record<string, unknown>
   attemptedAt: string
   error?: string
 }
@@ -485,10 +555,10 @@ async function postToTrustGraph(path: string, body: Record<string, unknown>): Pr
   try {
     const resp = await fetch(`${TRUST_GRAPH_URL}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': propagationIdempotencyKey(path, body) },
       body: JSON.stringify(body),
     })
-    return { attempted: true, ok: resp.ok, status: resp.status, target: TRUST_GRAPH_SERVICE_ID, path, attemptedAt }
+    return { attempted: true, ok: resp.ok, status: resp.status, target: TRUST_GRAPH_SERVICE_ID, path, body, attemptedAt }
   } catch (error) {
     return {
       attempted: true,
@@ -496,10 +566,60 @@ async function postToTrustGraph(path: string, body: Record<string, unknown>): Pr
       status: 0,
       target: TRUST_GRAPH_SERVICE_ID,
       path,
+      body,
       attemptedAt,
       error: error instanceof Error ? error.message : String(error),
     }
   }
+}
+
+async function retryPendingPropagations(limit = 25) {
+  const pending = await authorityStore.listPendingPropagations(new Date().toISOString(), limit)
+  const results = []
+  for (const record of pending) {
+    const result = await postToTrustGraph(record.path, record.body)
+    const attemptedAt = result.attemptedAt
+    const nextAttemptAt = result.ok ? undefined : nextPropagationAttemptAt(record.attempts + 1, attemptedAt)
+    const updated = await authorityStore.updatePropagationAttempt(record.id, {
+      ok: result.ok,
+      status: result.status,
+      error: result.error,
+      attemptedAt,
+      nextAttemptAt,
+    })
+    await appendPropagationEvidence(record.actor, record.recordType, record.recordId, result)
+    results.push({
+      id: record.id,
+      ok: result.ok,
+      status: result.status,
+      attempts: updated?.attempts,
+      outboxStatus: updated?.status,
+      nextAttemptAt: updated?.nextAttemptAt,
+      error: result.error,
+    })
+  }
+  return { attempted: results.length, results }
+}
+
+function propagationIdempotencyKey(path: string, body: Record<string, unknown>): string {
+  const record = body.record as { id?: string } | undefined
+  return `${TRUST_GRAPH_SERVICE_ID}:${path}:${record?.id ?? crypto.randomUUID()}`
+}
+
+function propagationStatusForFailure(status: number, attempts: number, maxAttempts: number): AuthorityPropagationStatus {
+  if (attempts >= maxAttempts) return 'failed'
+  if (status >= 400 && status < 500 && status !== 408 && status !== 409 && status !== 429) return 'failed'
+  return 'pending'
+}
+
+function nextPropagationAttemptAt(attempts: number, from = new Date().toISOString()): string {
+  const delayMs = Math.min(60_000, 1000 * 2 ** Math.max(0, attempts - 1))
+  return new Date(new Date(from).getTime() + delayMs).toISOString()
+}
+
+function parsePositiveInt(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
 // ─── Runtime Attestation (local) ──────────────────────────────────

@@ -3,7 +3,7 @@ services:
     build: !reset null
     image: node:22-alpine
     working_dir: /app
-    command: sh -c "corepack enable && pnpm dev"
+    command: sh -c "corepack enable && pnpm --filter @fides/discovery-service dev"
     volumes:
       - .:/app
       - /app/node_modules
@@ -14,7 +14,7 @@ services:
     build: !reset null
     image: node:22-alpine
     working_dir: /app
-    command: sh -c "corepack enable && pnpm --filter trust-graph dev"
+    command: sh -c "corepack enable && pnpm --filter @fides/trust-graph dev"
     volumes:
       - .:/app
       - /app/node_modules
@@ -25,7 +25,7 @@ services:
     build: !reset null
     image: node:22-alpine
     working_dir: /app
-    command: sh -c "corepack enable && pnpm --filter registry-service dev"
+    command: sh -c "corepack enable && pnpm --filter @fides/registry-service dev"
     volumes:
       - .:/app
       - /app/node_modules
@@ -36,7 +36,7 @@ services:
     build: !reset null
     image: node:22-alpine
     working_dir: /app
-    command: sh -c "corepack enable && pnpm --filter relay-service dev"
+    command: sh -c "corepack enable && pnpm --filter @fides/relay-service dev"
     volumes:
       - .:/app
       - /app/node_modules
@@ -47,7 +47,7 @@ services:
     build: !reset null
     image: node:22-alpine
     working_dir: /app
-    command: sh -c "corepack enable && pnpm --filter agentd dev"
+    command: sh -c "corepack enable && pnpm --filter @fides/agentd dev"
     volumes:
       - .:/app
       - /app/node_modules

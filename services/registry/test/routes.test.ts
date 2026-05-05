@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const ORIGINAL_SERVICE_API_KEY = process.env.SERVICE_API_KEY
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV
 
 beforeEach(() => {
   delete process.env.SERVICE_API_KEY
+  process.env.NODE_ENV = 'test'
 })
 
 afterEach(() => {
@@ -11,6 +13,11 @@ afterEach(() => {
     process.env.SERVICE_API_KEY = ORIGINAL_SERVICE_API_KEY
   } else {
     delete process.env.SERVICE_API_KEY
+  }
+  if (ORIGINAL_NODE_ENV) {
+    process.env.NODE_ENV = ORIGINAL_NODE_ENV
+  } else {
+    delete process.env.NODE_ENV
   }
 })
 
@@ -233,6 +240,20 @@ describe('Registry Service Routes', () => {
   })
 
   describe('API Key Authentication', () => {
+    it('fails closed for mutations in production when API key is not configured', async () => {
+      process.env.NODE_ENV = 'production'
+      delete process.env.SERVICE_API_KEY
+
+      const res = await app.request('/v1/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(TEST_CARD),
+      })
+      expect(res.status).toBe(503)
+      const data = await res.json()
+      expect(data.error).toContain('SERVICE_API_KEY is required in production')
+    })
+
     it('returns 401 when API key is required but not provided', async () => {
       process.env.SERVICE_API_KEY = 'test-api-key-for-registry'
 

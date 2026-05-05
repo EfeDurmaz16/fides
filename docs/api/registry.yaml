@@ -49,7 +49,8 @@ paths:
       summary: Register an AgentCard
       description: |
         Publishes an AgentCard to the registry. Requires API key authentication
-        when `SERVICE_API_KEY` is configured.
+        with the `X-API-Key` header. In production, the endpoint returns `503`
+        when `SERVICE_API_KEY` is not configured.
       security:
         - ApiKeyAuth: []
       requestBody:
@@ -69,6 +70,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -99,7 +102,9 @@ paths:
       operationId: deleteCard
       tags: [Cards]
       summary: Delete AgentCard
-      description: Requires API key authentication when `SERVICE_API_KEY` is configured.
+      description: |
+        Requires API key authentication with the `X-API-Key` header. In production,
+        the endpoint returns `503` when `SERVICE_API_KEY` is not configured.
       security:
         - ApiKeyAuth: []
       parameters:
@@ -117,6 +122,8 @@ paths:
                     example: true
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -125,6 +132,9 @@ paths:
       operationId: setCardMode
       tags: [Cards]
       summary: Toggle card visibility mode
+      description: |
+        Requires API key authentication with the `X-API-Key` header. In production,
+        the endpoint returns `503` when `SERVICE_API_KEY` is not configured.
       security:
         - ApiKeyAuth: []
       parameters:
@@ -156,6 +166,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -164,6 +176,9 @@ paths:
       operationId: updateMetadata
       tags: [Cards]
       summary: Update card metadata
+      description: |
+        Requires API key authentication with the `X-API-Key` header. In production,
+        the endpoint returns `503` when `SERVICE_API_KEY` is not configured.
       security:
         - ApiKeyAuth: []
       parameters:
@@ -186,6 +201,8 @@ paths:
                     type: boolean
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -420,6 +437,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     Unauthorized:
       description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServiceUnavailable:
+      description: Service is not configured for production writes
       content:
         application/json:
           schema:

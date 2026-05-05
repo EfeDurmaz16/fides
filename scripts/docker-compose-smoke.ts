@@ -1,6 +1,12 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { createDelegationToken } from '@fides/core'
+import {
+  createDelegationToken,
+  createIncidentRecord,
+  createRevocationRecord,
+  signIncidentRecord,
+  signRevocationRecord,
+} from '@fides/core'
 
 const execFileAsync = promisify(execFile)
 
@@ -11,6 +17,8 @@ const services = {
   relay: 'http://127.0.0.1:7347',
   agentd: 'http://127.0.0.1:7345',
 } as const
+
+const serviceApiKey = process.env.SERVICE_API_KEY
 
 async function main() {
   console.log('FIDES docker compose smoke')
@@ -90,20 +98,35 @@ async function runAuthorityFlow() {
   }), 403, 'denied revoked session invocation')
 
   const revocationResponse = await postJson(`${services.agentd}/v1/revocations`, {
-    did: agentDid,
-    reason: 'principal disabled docker smoke agent',
-    revokedBy: principalDid,
+    record: await signedRevocationRecord(agentDid, principalDid),
   })
   await expectStatus(revocationResponse, 201, 'recorded agent revocation')
 
   const incidentResponse = await postJson(`${services.agentd}/v1/incidents`, {
-    actor: agentDid,
-    reporter: principalDid,
+    record: await signedIncidentRecord(agentDid, principalDid),
+  })
+  await expectStatus(incidentResponse, 201, 'recorded incident')
+}
+
+async function signedRevocationRecord(did: string, revokedBy: string) {
+  const privateKey = Buffer.from('01'.repeat(32), 'hex')
+  return signRevocationRecord(createRevocationRecord({
+    did,
+    reason: 'principal disabled docker smoke agent',
+    revokedBy,
+  }), privateKey)
+}
+
+async function signedIncidentRecord(actor: string, reportedBy: string) {
+  const privateKey = Buffer.from('01'.repeat(32), 'hex')
+  return signIncidentRecord(createIncidentRecord({
+    actor,
+    reportedBy,
     type: 'policy_violation',
     severity: 'high',
     description: 'Docker smoke incident report',
-  })
-  await expectStatus(incidentResponse, 201, 'recorded incident')
+    capabilitiesRevoked: ['payments.execute'],
+  }), privateKey)
 }
 
 async function assertAgentdUsesPostgres() {
@@ -138,9 +161,14 @@ async function waitForHealth(name: string, url: string): Promise<void> {
 }
 
 async function postJson(url: string, body: unknown): Promise<Response> {
+  const headers = new Headers({ 'Content-Type': 'application/json' })
+  if (serviceApiKey) {
+    headers.set('X-API-Key', serviceApiKey)
+  }
+
   return fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   })
 }

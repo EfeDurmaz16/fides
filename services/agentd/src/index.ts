@@ -13,6 +13,20 @@ import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides
 import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, type EvidenceChain } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
+import { createTrustContext, evaluateGuard } from '@fides/guard'
+import {
+  aggregateIncidentImpact,
+  authorizeDelegation,
+  authorizeSessionInvocation,
+  createIncidentRecord,
+  createRevocationRecord,
+  FileSessionStore,
+  InMemorySessionStore,
+  type DelegationToken,
+  type IncidentRecord,
+  type RevocationRecord,
+  type SessionStore,
+} from '@fides/core'
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
@@ -28,6 +42,11 @@ const REGISTRY_URL = process.env.REGISTRY_URL || 'http://localhost:7346'
 const teeProvider = new MockTEEProvider()
 const killSwitch = new InMemoryKillSwitch()
 const evidenceChains = new Map<string, EvidenceChain>()
+const sessionStore: SessionStore = process.env.NODE_ENV === 'test'
+  ? new InMemorySessionStore()
+  : new FileSessionStore(process.env.AGENTD_SESSION_STORE_PATH)
+const revocations = new Map<string, RevocationRecord>()
+const incidentsByDid = new Map<string, IncidentRecord[]>()
 
 const startTime = Date.now()
 
@@ -172,6 +191,170 @@ app.post('/v1/policy/evaluate', async (c) => {
   return c.json(evaluatePolicy(policy, context))
 })
 
+// ─── Delegation Sessions (local) ─────────────────────────────────
+app.post('/v1/sessions', async (c) => {
+  const body = await c.req.json()
+  if (!body.token) {
+    return c.json({ error: 'token is required' }, 400)
+  }
+
+  const result = await authorizeDelegation({
+    token: body.token as DelegationToken,
+    store: sessionStore,
+    capabilityId: body.capabilityId,
+    audience: body.audience,
+    boundTo: body.boundTo,
+    ttlMs: body.ttlMs,
+  })
+
+  if (!result.ok) {
+    return c.json({ authorized: false, errors: result.errors }, 409)
+  }
+
+  return c.json({ authorized: true, session: redactSessionKey(result.session!) }, 201)
+})
+
+app.get('/v1/sessions/:id', async (c) => {
+  const session = await sessionStore.getSession(c.req.param('id'))
+  if (!session) {
+    return c.json({ error: 'session not found' }, 404)
+  }
+  return c.json({ session: redactSessionKey(session) })
+})
+
+app.post('/v1/sessions/:id/revoke', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const session = await sessionStore.revokeSession(c.req.param('id'), body.reason)
+  if (!session) {
+    return c.json({ error: 'session not found' }, 404)
+  }
+  return c.json({ revoked: true, session: redactSessionKey(session) })
+})
+
+// ─── Revocation and Incidents (local) ────────────────────────────
+app.post('/v1/revocations', async (c) => {
+  const body = await c.req.json()
+  if (!body.did || !body.reason || !body.revokedBy) {
+    return c.json({ error: 'did, reason, and revokedBy are required' }, 400)
+  }
+
+  const record = {
+    ...createRevocationRecord({
+      did: body.did,
+      reason: body.reason,
+      revokedBy: body.revokedBy,
+    }),
+    signature: body.signature ?? 'local-agentd',
+  }
+  revocations.set(record.did, record)
+
+  return c.json({ revoked: true, record }, 201)
+})
+
+app.get('/v1/revocations/:did', (c) => {
+  const did = c.req.param('did')
+  const record = revocations.get(did)
+  if (!record) {
+    return c.json({ did, revoked: false })
+  }
+  return c.json({ did, revoked: true, record })
+})
+
+app.post('/v1/incidents', async (c) => {
+  const body = await c.req.json()
+  if (!body.type || !body.severity || !body.actor || !body.description) {
+    return c.json({ error: 'type, severity, actor, and description are required' }, 400)
+  }
+
+  const record = {
+    ...createIncidentRecord(body),
+    signature: body.signature ?? 'local-agentd',
+  }
+  const incidents = incidentsByDid.get(record.actor) ?? []
+  incidents.push(record)
+  incidentsByDid.set(record.actor, incidents)
+
+  return c.json({ recorded: true, record, impact: aggregateIncidentImpact(incidents) }, 201)
+})
+
+app.get('/v1/incidents/:did', (c) => {
+  const did = c.req.param('did')
+  const incidents = incidentsByDid.get(did) ?? []
+  return c.json({ did, incidents, impact: aggregateIncidentImpact(incidents) })
+})
+
+// ─── Unified Authorization (local) ───────────────────────────────
+app.post('/v1/authorize', async (c) => {
+  const body = await c.req.json()
+  if (!body.agentDid || !body.capabilityId) {
+    return c.json({ error: 'agentDid and capabilityId are required' }, 400)
+  }
+
+  const sessionResult = body.sessionId
+    ? await authorizeSessionInvocation({
+      sessionId: body.sessionId,
+      store: sessionStore,
+      capabilityId: body.capabilityId,
+      audience: body.audience,
+    })
+    : null
+
+  if (sessionResult && !sessionResult.ok) {
+    appendLocalEvidence(body.agentDid, 'authorization.denied', {
+      capabilityId: body.capabilityId,
+      errors: sessionResult.errors,
+      source: 'session',
+    })
+    return c.json({ decision: 'deny', explanation: sessionResult.errors.join('; '), errors: sessionResult.errors }, 403)
+  }
+
+  const activeRevocation = revocations.get(body.agentDid)
+  const incidents = incidentsByDid.get(body.agentDid) ?? []
+  const impact = aggregateIncidentImpact(incidents)
+  const policy = (body.policy ?? { id: 'default-agentd-policy', version: '1.0.0', rules: [], defaultAction: 'allow' }) as PolicyBundle
+  const attestation = body.attestationValid
+    ? await teeProvider.attest(body.agentDid)
+    : null
+
+  const trust = createTrustContext({
+    reputationScore: clampScore((body.reputationScore ?? 0.9) - impact.totalReputationPenalty),
+    capabilityScore: body.capabilityScore,
+    attestation,
+    evidenceChain: evidenceChains.get(body.agentDid) ?? null,
+    killSwitchEngaged: killSwitch.isEngaged({ type: 'global' }) || killSwitch.isEngaged({ type: 'agent', did: body.agentDid }) || killSwitch.isEngaged({ type: 'capability', id: body.capabilityId }),
+    recentIncidents: impact.incidentCount,
+    agentRevoked: Boolean(activeRevocation),
+    sessionRevoked: sessionResult?.session?.revoked ?? false,
+    revocationReason: activeRevocation?.reason ?? sessionResult?.session?.revocationReason,
+    capabilityHighRisk: body.capabilityHighRisk ?? impact.allRevokedCapabilities.includes(body.capabilityId),
+    requiresRuntimeAttestation: body.requiresRuntimeAttestation ?? false,
+    requiresApproval: body.requiresApproval ?? false,
+    approvalGranted: body.approvalGranted ?? false,
+  })
+
+  const decision = await evaluateGuard({
+    agentDid: body.agentDid,
+    capabilityId: body.capabilityId,
+    policy,
+    context: body.context ?? {},
+    trust,
+  })
+
+  appendLocalEvidence(body.agentDid, `authorization.${decision.decision}`, {
+    capabilityId: body.capabilityId,
+    sessionId: body.sessionId,
+    explanation: decision.explanation,
+    factors: decision.factors,
+  })
+
+  return c.json({
+    ...decision,
+    session: sessionResult?.session ? redactSessionKey(sessionResult.session) : undefined,
+    incidentImpact: impact,
+    revoked: Boolean(activeRevocation),
+  }, decision.decision === 'deny' ? 403 : 200)
+})
+
 // ─── Evidence Ledger (local) ──────────────────────────────────────
 app.post('/v1/evidence', async (c) => {
   const body = await c.req.json()
@@ -205,6 +388,28 @@ app.get('/v1/evidence/:did', (c) => {
   const valid = verifyEvidenceChain(chain)
   return c.json({ did, events: chain.events, count: chain.events.length, valid, merkleRoot: chain.merkleRoot })
 })
+
+function appendLocalEvidence(actor: string, action: string, payload: Record<string, unknown>) {
+  let chain = evidenceChains.get(actor) || createEvidenceChain()
+  chain = appendEvidenceEvent(chain, {
+    id: crypto.randomUUID(),
+    type: 'authorization',
+    timestamp: new Date().toISOString(),
+    actor,
+    action,
+    payload,
+    privacy: { level: 'private' },
+  }, 'local-agentd')
+  evidenceChains.set(actor, chain)
+}
+
+function redactSessionKey<T extends { sessionKey: string }>(session: T): Omit<T, 'sessionKey'> & { sessionKey: string } {
+  return { ...session, sessionKey: 'redacted' }
+}
+
+function clampScore(score: number): number {
+  return Math.max(0, Math.min(1, score))
+}
 
 // ─── Runtime Attestation (local) ──────────────────────────────────
 app.post('/v1/attest', async (c) => {

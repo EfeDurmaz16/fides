@@ -90,6 +90,114 @@ describe('Guard Evaluation', () => {
     expect(result.explanation).toContain('Too many recent incidents')
   })
 
+  it('denies when the agent authority is revoked', async () => {
+    const trust = createTrustContext({
+      reputationScore: 0.9,
+      killSwitchEngaged: false,
+      recentIncidents: 0,
+      agentRevoked: true,
+      revocationReason: 'principal disabled agent',
+    })
+
+    const result = await evaluateGuard({
+      agentDid: 'did:test:agent',
+      capabilityId: 'payments.execute',
+      policy: defaultPolicy,
+      context: { requestCount: 10 },
+      trust,
+    })
+
+    expect(result.decision).toBe('deny')
+    expect(result.explanation).toContain('Agent authority revoked')
+    expect(result.factors[0]?.factor).toBe('agent-revoked')
+  })
+
+  it('denies when the session authority is revoked', async () => {
+    const trust = createTrustContext({
+      reputationScore: 0.9,
+      killSwitchEngaged: false,
+      recentIncidents: 0,
+      sessionRevoked: true,
+      revocationReason: 'session nonce replay',
+    })
+
+    const result = await evaluateGuard({
+      agentDid: 'did:test:agent',
+      capabilityId: 'payments.execute',
+      policy: defaultPolicy,
+      context: { requestCount: 10 },
+      trust,
+    })
+
+    expect(result.decision).toBe('deny')
+    expect(result.explanation).toContain('Session authority revoked')
+    expect(result.factors[0]?.factor).toBe('session-revoked')
+  })
+
+  it('denies high-risk capabilities when runtime attestation is required and missing', async () => {
+    const trust = createTrustContext({
+      reputationScore: 0.9,
+      killSwitchEngaged: false,
+      recentIncidents: 0,
+      capabilityHighRisk: true,
+      requiresRuntimeAttestation: true,
+    })
+
+    const result = await evaluateGuard({
+      agentDid: 'did:test:agent',
+      capabilityId: 'wallets.sign',
+      policy: defaultPolicy,
+      context: { requestCount: 10 },
+      trust,
+    })
+
+    expect(result.decision).toBe('deny')
+    expect(result.explanation).toContain('Runtime attestation is required')
+  })
+
+  it('requires approval for high-risk capabilities when approval is missing', async () => {
+    const trust = createTrustContext({
+      reputationScore: 0.9,
+      killSwitchEngaged: false,
+      recentIncidents: 0,
+      capabilityHighRisk: true,
+      requiresApproval: true,
+    })
+
+    const result = await evaluateGuard({
+      agentDid: 'did:test:agent',
+      capabilityId: 'payments.execute',
+      policy: defaultPolicy,
+      context: { requestCount: 10 },
+      trust,
+    })
+
+    expect(result.decision).toBe('approve-required')
+    expect(result.explanation).toContain('Approval is required')
+  })
+
+  it('allows high-risk capabilities when required approval is granted', async () => {
+    const trust = createTrustContext({
+      reputationScore: 0.9,
+      killSwitchEngaged: false,
+      recentIncidents: 0,
+      capabilityHighRisk: true,
+      requiresApproval: true,
+      approvalGranted: true,
+    })
+
+    const result = await evaluateGuard({
+      agentDid: 'did:test:agent',
+      capabilityId: 'payments.execute',
+      policy: defaultPolicy,
+      context: { requestCount: 10 },
+      trust,
+    })
+
+    expect(result.decision).toBe('allow')
+    expect(result.factors.some(f => f.factor === 'high-risk-capability')).toBe(true)
+  })
+
   it('allows with good trust and valid policy', async () => {
     const trust = createTrustContext({
       reputationScore: 0.9,

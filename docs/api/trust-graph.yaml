@@ -1,0 +1,471 @@
+openapi: "3.0.3"
+info:
+  title: FIDES Trust Graph Service
+  version: "2.0.0"
+  description: |
+    Trust edge management, reputation scoring, capability-level trust
+    computation, and incident tracking for the FIDES v2 trust fabric.
+  contact:
+    name: FIDES Protocol
+    url: https://github.com/anthropic-ai/fides
+
+servers:
+  - url: http://localhost:3200
+    description: Local development
+  - url: https://trust-graph.fides.example.com
+    description: Production
+
+tags:
+  - name: Health
+  - name: Trust
+  - name: Incidents
+  - name: Identities
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: Service health check
+      responses:
+        "200":
+          description: All checks pass
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Degraded (database unreachable)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /v1/trust:
+    post:
+      operationId: createTrustEdge
+      tags: [Trust]
+      summary: Create a trust edge
+      description: |
+        Establishes a directed trust relationship from an issuer to a subject.
+        Trust level is 0–100. Optional capability ID scopes the trust to a
+        specific capability.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTrustRequest"
+      responses:
+        "201":
+          description: Trust edge created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/trust/{did}/score:
+    get:
+      operationId: getReputationScore
+      tags: [Trust]
+      summary: Get reputation score for a DID
+      description: |
+        Computes a reputation score based on direct and transitive trust edges.
+        Algorithm: direct × 1.0 + depth-2 × 0.5 + depth-3+ × 0.25.
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Reputation score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReputationScore"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/trust/{from}/{to}:
+    get:
+      operationId: getTrustPath
+      tags: [Trust]
+      summary: Get trust path between two DIDs
+      parameters:
+        - name: from
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "did:fides:alice"
+        - name: to
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "did:fides:bob"
+      responses:
+        "200":
+          description: Trust path result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrustPath"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/trust/{did}/capability/{capabilityId}:
+    get:
+      operationId: getCapabilityScore
+      tags: [Trust]
+      summary: Get capability-specific trust score
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+        - name: capabilityId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "web:search"
+      responses:
+        "200":
+          description: Capability score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapabilityScore"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/trust/{did}/capability/{capabilityId}/invoke:
+    post:
+      operationId: recordCapabilityInvocation
+      tags: [Trust]
+      summary: Record a capability invocation
+      description: Increments the invocation counter for capability-scoring purposes.
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+        - name: capabilityId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Invocation recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/incidents:
+    post:
+      operationId: recordIncident
+      tags: [Incidents]
+      summary: Record a trust incident
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIncidentRequest"
+      responses:
+        "201":
+          description: Incident recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/incidents/{did}:
+    get:
+      operationId: getIncidents
+      tags: [Incidents]
+      summary: Get incidents for a DID
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: List of incidents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incidents:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Incident"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/identities/{did}:
+    get:
+      operationId: getIdentity
+      tags: [Identities]
+      summary: Get identity by DID
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Identity found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [Health]
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: Metrics in Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  parameters:
+    DidParam:
+      name: did
+      in: path
+      required: true
+      schema:
+        type: string
+      example: "did:fides:CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        service:
+          type: string
+          example: trust-graph
+        version:
+          type: string
+          example: "0.1.0"
+        uptime:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [connected, disconnected]
+
+    CreateTrustRequest:
+      type: object
+      required: [issuerDid, subjectDid, trustLevel, signature]
+      properties:
+        issuerDid:
+          type: string
+          description: DID of the trust-issuing agent
+        subjectDid:
+          type: string
+          description: DID of the agent being trusted
+        trustLevel:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Trust level (0=no trust, 100=absolute trust)
+        capabilityId:
+          type: string
+          description: Optional capability scope for trust
+        context:
+          type: string
+        signature:
+          type: string
+          description: Hex-encoded Ed25519 signature over canonical JSON payload
+        payload:
+          type: string
+          description: Canonical JSON payload that was signed
+
+    ReputationScore:
+      type: object
+      properties:
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+        directTrusters:
+          type: integer
+        transitiveTrusters:
+          type: integer
+        computedAt:
+          type: string
+          format: date-time
+
+    TrustPath:
+      type: object
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+        found:
+          type: boolean
+        path:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustEdge"
+
+    TrustEdge:
+      type: object
+      properties:
+        sourceDid:
+          type: string
+        targetDid:
+          type: string
+        trustLevel:
+          type: integer
+        capabilityId:
+          type: string
+          nullable: true
+        context:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CapabilityScore:
+      type: object
+      properties:
+        did:
+          type: string
+        capabilityId:
+          type: string
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+        invocationCount:
+          type: integer
+        incidentCount:
+          type: integer
+        lastComputed:
+          type: string
+          format: date-time
+
+    CreateIncidentRequest:
+      type: object
+      required: [did, capabilityId, description]
+      properties:
+        did:
+          type: string
+        capabilityId:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+
+    Incident:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        did:
+          type: string
+        capabilityId:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    IdentityResponse:
+      type: object
+      properties:
+        did:
+          type: string
+        publicKey:
+          type: string
+          description: Hex-encoded Ed25519 public key
+        metadata:
+          type: object
+        firstSeen:
+          type: string
+          format: date-time
+        lastSeen:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      headers:
+        Retry-After:
+          schema:
+            type: integer

@@ -1,0 +1,557 @@
+openapi: "3.0.3"
+info:
+  title: FIDES Agent Daemon (agentd)
+  version: "2.0.0"
+  description: |
+    Local daemon providing a unified HTTP API that proxies to the FIDES
+    trust fabric services (discovery, trust-graph, registry). Includes
+    local services for evidence logging, policy evaluation, runtime
+    attestation, and emergency kill switch.
+  contact:
+    name: FIDES Protocol
+    url: https://github.com/anthropic-ai/fides
+
+servers:
+  - url: http://localhost:7345
+    description: Local development
+  - url: https://agentd.fides.example.com
+    description: Production
+
+tags:
+  - name: Health
+  - name: Identity
+  - name: Card
+  - name: Trust
+  - name: Policy
+  - name: Evidence
+  - name: Attestation
+  - name: Kill Switch
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: Service health check
+      description: Probes all upstream services (discovery, trust-graph, registry).
+      responses:
+        "200":
+          description: All upstream services reachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: One or more upstream services unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /v1/identities/{did}:
+    get:
+      operationId: resolveIdentity
+      tags: [Identity]
+      summary: Resolve identity via discovery proxy
+      description: Proxy request to the discovery service for identity resolution.
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Identity resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityResolutionResponse"
+        "404":
+          description: Identity not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityResolutionResponse"
+        "502":
+          description: Discovery service unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityResolutionResponse"
+
+  /v1/cards/{did}:
+    get:
+      operationId: getAgentCard
+      tags: [Card]
+      summary: Get AgentCard via registry proxy
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Card found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardResponse"
+        "404":
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardResponse"
+        "502":
+          description: Registry unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardResponse"
+
+  /v1/trust/{did}/score:
+    get:
+      operationId: getTrustScore
+      tags: [Trust]
+      summary: Get trust score via trust-graph proxy
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Trust score (returns default 0.5 on failure)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrustScoreResponse"
+
+  /v1/policy/evaluate:
+    post:
+      operationId: evaluatePolicy
+      tags: [Policy]
+      summary: Evaluate a policy bundle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyEvaluationRequest"
+      responses:
+        "200":
+          description: Evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyEvaluationResponse"
+
+  /v1/evidence:
+    post:
+      operationId: submitEvidence
+      tags: [Evidence]
+      summary: Submit evidence event
+      description: |
+        Appends an evidence event to the chain for a given actor DID.
+        Events are hash-chained and Merkle-rooted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvidenceSubmitRequest"
+      responses:
+        "201":
+          description: Evidence accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceSubmitResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /v1/evidence/{did}:
+    get:
+      operationId: getEvidence
+      tags: [Evidence]
+      summary: Retrieve evidence chain for a DID
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Evidence chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceChainResponse"
+
+  /v1/attest:
+    post:
+      operationId: createAttestation
+      tags: [Attestation]
+      summary: Create runtime attestation
+      description: |
+        Generates a TEE runtime attestation using the configured attestation
+        provider (mock provider in development).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttestationRequest"
+      responses:
+        "201":
+          description: Attestation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeAttestation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /v1/killswitch/status:
+    get:
+      operationId: getKillSwitchStatus
+      tags: [Kill Switch]
+      summary: Get kill switch status
+      responses:
+        "200":
+          description: Kill switch state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  global:
+                    type: boolean
+
+  /v1/killswitch/engage:
+    post:
+      operationId: engageKillSwitch
+      tags: [Kill Switch]
+      summary: Engage kill switch
+      description: |
+        Engage a kill switch at global, agent, or capability level.
+        Global overrides all. Agent overrides capability for that agent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KillSwitchRequest"
+      responses:
+        "200":
+          description: Kill switch engaged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KillSwitchResponse"
+
+  /v1/killswitch/disengage:
+    post:
+      operationId: disengageKillSwitch
+      tags: [Kill Switch]
+      summary: Disengage kill switch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KillSwitchRequest"
+      responses:
+        "200":
+          description: Kill switch disengaged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KillSwitchResponse"
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [Health]
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: Metrics in Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  parameters:
+    DidParam:
+      name: did
+      in: path
+      required: true
+      schema:
+        type: string
+      example: "did:fides:agentd-test-01"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        service:
+          type: string
+          example: agentd
+        uptime:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: object
+          properties:
+            discovery:
+              type: string
+              enum: [connected, unreachable]
+            trustGraph:
+              type: string
+              enum: [connected, unreachable]
+            registry:
+              type: string
+              enum: [connected, unreachable]
+
+    IdentityResolutionResponse:
+      type: object
+      properties:
+        did:
+          type: string
+        status:
+          type: string
+          enum: [resolved, not-found, unreachable]
+        data:
+          type: object
+        error:
+          type: string
+        service:
+          type: string
+
+    CardResponse:
+      type: object
+      properties:
+        did:
+          type: string
+        card:
+          type: object
+        error:
+          type: string
+
+    TrustScoreResponse:
+      type: object
+      properties:
+        did:
+          type: string
+        score:
+          type: number
+        directTrusters:
+          type: integer
+        transitiveTrusters:
+          type: integer
+        source:
+          type: string
+          enum: [default, fallback]
+
+    PolicyEvaluationRequest:
+      type: object
+      properties:
+        agentDid:
+          type: string
+        capabilityId:
+          type: string
+        policy:
+          $ref: "#/components/schemas/PolicyBundle"
+        context:
+          type: object
+
+    PolicyBundle:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/PolicyRule"
+        defaultAction:
+          type: string
+          enum: [allow, deny, approve-required]
+
+    PolicyRule:
+      type: object
+      properties:
+        id:
+          type: string
+        condition:
+          type: object
+        action:
+          type: string
+          enum: [allow, deny, approve-required, dry-run]
+        explanation:
+          type: string
+
+    PolicyEvaluationResponse:
+      type: object
+      properties:
+        decision:
+          type: string
+        matchedRules:
+          type: array
+          items:
+            type: object
+        explanation:
+          type: object
+
+    EvidenceSubmitRequest:
+      type: object
+      required: [actor, action]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          default: custom
+        actor:
+          type: string
+          description: DID of the actor (alias: did)
+        action:
+          type: string
+        target:
+          type: string
+        payload:
+          type: object
+        privacy:
+          $ref: "#/components/schemas/EvidencePrivacy"
+        signature:
+          type: string
+
+    EvidencePrivacy:
+      type: object
+      properties:
+        level:
+          type: string
+          enum: [public, private, redacted, hash-only]
+        redactionKey:
+          type: string
+
+    EvidenceSubmitResponse:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+        id:
+          type: string
+          description: Hash of the appended event
+
+    EvidenceChainResponse:
+      type: object
+      properties:
+        did:
+          type: string
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceEvent"
+        count:
+          type: integer
+        valid:
+          type: boolean
+          description: Hash chain integrity verified
+        merkleRoot:
+          type: string
+
+    EvidenceEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        actor:
+          type: string
+        action:
+          type: string
+        target:
+          type: string
+        payload: {}
+        privacy:
+          $ref: "#/components/schemas/EvidencePrivacy"
+        prevHash:
+          type: string
+        hash:
+          type: string
+        signature:
+          type: string
+
+    AttestationRequest:
+      type: object
+      required: [did]
+      properties:
+        did:
+          type: string
+          description: DID of the agent (alias: agentDid)
+        agentDid:
+          type: string
+
+    RuntimeAttestation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        agentDid:
+          type: string
+        provider:
+          type: string
+          example: mock-tee
+        measurement:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        evidence: {}
+        signature:
+          type: string
+
+    KillSwitchRequest:
+      type: object
+      properties:
+        global:
+          type: boolean
+        did:
+          type: string
+        capabilityId:
+          type: string
+
+    KillSwitchResponse:
+      type: object
+      properties:
+        engaged:
+          type: boolean
+        scope:
+          type: string
+          enum: [global, agent, capability, all]
+        did:
+          type: string
+        id:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

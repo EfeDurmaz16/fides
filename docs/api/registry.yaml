@@ -1,0 +1,442 @@
+openapi: "3.0.3"
+info:
+  title: FIDES Registry Service
+  version: "2.0.0"
+  description: |
+    Central registry for AgentCard publication, search, and lifecycle
+    management. Supports public and private registration modes with
+    API-key-gated writes.
+  contact:
+    name: FIDES Protocol
+    url: https://github.com/anthropic-ai/fides
+
+servers:
+  - url: http://localhost:7346
+    description: Local development
+  - url: https://registry.fides.example.com
+    description: Production
+
+tags:
+  - name: Health
+  - name: Cards
+  - name: Search
+  - name: Stats
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: Service health check
+      responses:
+        "200":
+          description: All checks pass
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Degraded (persistence failure)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /v1/cards:
+    post:
+      operationId: registerCard
+      tags: [Cards]
+      summary: Register an AgentCard
+      description: |
+        Publishes an AgentCard to the registry. Requires API key authentication
+        when `SERVICE_API_KEY` is configured.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentCard"
+      responses:
+        "201":
+          description: Card registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/cards/{did}:
+    get:
+      operationId: getCard
+      tags: [Cards]
+      summary: Get AgentCard by DID
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Card found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentCard"
+        "403":
+          description: Card is in private mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteCard
+      tags: [Cards]
+      summary: Delete AgentCard
+      description: Requires API key authentication when `SERVICE_API_KEY` is configured.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Card deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/cards/{did}/mode:
+    post:
+      operationId: setCardMode
+      tags: [Cards]
+      summary: Toggle card visibility mode
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode:
+                  type: string
+                  enum: [public, private]
+      responses:
+        "200":
+          description: Mode updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  mode:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/cards/{did}/metadata:
+    patch:
+      operationId: updateMetadata
+      tags: [Cards]
+      summary: Update card metadata
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Metadata updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/search:
+    get:
+      operationId: searchCards
+      tags: [Search]
+      summary: Search AgentCards
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Search query (matches name or DID, case-insensitive)
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+
+  /v1/stats:
+    get:
+      operationId: getStats
+      tags: [Stats]
+      summary: Registry statistics
+      responses:
+        "200":
+          description: Registry stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [Health]
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: Metrics in Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  parameters:
+    DidParam:
+      name: did
+      in: path
+      required: true
+      schema:
+        type: string
+      example: "did:fides:test-agent-01"
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        service:
+          type: string
+          example: registry
+        count:
+          type: integer
+          description: Number of registered cards
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: object
+          properties:
+            persistence:
+              type: string
+              enum: [ok, fail]
+
+    AgentCard:
+      type: object
+      required: [id, name, version]
+      properties:
+        id:
+          type: string
+          description: DID of the agent
+        name:
+          type: string
+        description:
+          type: string
+        version:
+          type: string
+        publisher:
+          type: string
+        homepage:
+          type: string
+          format: uri
+        capabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/CapabilityDescriptor"
+        protocols:
+          type: array
+          items:
+            type: string
+          example: ["mcp", "a2a"]
+        endpoints:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentEndpoint"
+        security:
+          $ref: "#/components/schemas/SecurityProfile"
+        metadata:
+          type: object
+
+    CapabilityDescriptor:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "web:search"
+        name:
+          type: string
+        description:
+          type: string
+        riskLevel:
+          type: string
+          enum: [critical, high, medium, low]
+        parameters:
+          type: array
+          items:
+            type: object
+        output:
+          type: object
+        constraints:
+          type: array
+          items:
+            type: object
+
+    AgentEndpoint:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        protocol:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+
+    SecurityProfile:
+      type: object
+      properties:
+        authentication:
+          type: array
+          items:
+            type: string
+            enum: [api-key, oauth2, mtls, did-auth]
+        encryption:
+          type: array
+          items:
+            type: string
+        attestation:
+          type: string
+          enum: [tee-required, tee-optional, none]
+
+    RegisterResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        did:
+          type: string
+        registeredAt:
+          type: string
+          format: date-time
+
+    SearchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              did:
+                type: string
+              name:
+                type: string
+              capabilities:
+                type: array
+                items:
+                  type: string
+        count:
+          type: integer
+        query:
+          type: string
+
+    StatsResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        public:
+          type: integer
+        private:
+          type: integer
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      headers:
+        Retry-After:
+          schema:
+            type: integer

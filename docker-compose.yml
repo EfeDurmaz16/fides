@@ -26,6 +26,9 @@ services:
       DISCOVERY_PORT: "3100"
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,11 +45,69 @@ services:
       DISCOVERY_URL: http://discovery:3100
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
     depends_on:
       postgres:
         condition: service_healthy
       discovery:
         condition: service_started
 
+  registry:
+    build:
+      context: .
+      dockerfile: services/registry/Dockerfile
+    ports:
+      - "7346:7346"
+    environment:
+      REGISTRY_PORT: "7346"
+      NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    volumes:
+      - registry_data:/home/fides/.fides/registry
+
+  relay:
+    build:
+      context: .
+      dockerfile: services/relay/Dockerfile
+    ports:
+      - "7347:7347"
+    environment:
+      RELAY_PORT: "7347"
+      NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+
+  agentd:
+    build:
+      context: .
+      dockerfile: services/agentd/Dockerfile
+    ports:
+      - "7345:7345"
+    environment:
+      AGENTD_PORT: "7345"
+      DISCOVERY_URL: http://discovery:3100
+      TRUST_GRAPH_URL: http://trust-graph:3200
+      REGISTRY_URL: http://registry:7346
+      NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    depends_on:
+      discovery:
+        condition: service_started
+      trust-graph:
+        condition: service_started
+      registry:
+        condition: service_started
+
 volumes:
   postgres_data:
+  registry_data:

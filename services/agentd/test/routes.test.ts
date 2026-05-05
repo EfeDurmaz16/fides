@@ -29,9 +29,12 @@ import {
   createDelegationToken,
   createIncidentRecord,
   createRevocationRecord,
+  signDelegationToken,
   signIncidentRecord,
   signRevocationRecord,
 } from '@fides/core'
+import * as ed from '@noble/ed25519'
+import { bytesToHex } from '@noble/hashes/utils'
 
 const mockFetch = fetch as ReturnType<typeof vi.fn>
 
@@ -71,6 +74,22 @@ describe('Agentd Service Routes', () => {
       reason: 'principal revoked delegation',
       revokedBy: 'did:fides:principal',
     }), privateKey)
+  }
+
+  async function signedDelegationToken(delegatee: string) {
+    const privateKey = Buffer.from('01'.repeat(32), 'hex')
+    const token = createDelegationToken({
+      delegator: 'did:fides:principal',
+      delegatee,
+      capabilities: ['payments.execute'],
+      constraints: {},
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      audience: ['agentd'],
+    })
+    return {
+      publicKey: bytesToHex(await ed.getPublicKeyAsync(privateKey)),
+      token: await signDelegationToken(token, privateKey),
+    }
   }
 
   async function signedIncidentRecord(actor: string) {
@@ -420,6 +439,26 @@ describe('Agentd Service Routes', () => {
       expect(data.errors).toContain('DelegationToken nonce has already been used')
     })
 
+    it('rejects tampered delegation tokens when a delegator public key is supplied', async () => {
+      const { token, publicKey } = await signedDelegationToken(`${TEST_DID}:tampered-session`)
+      const tampered = { ...token, capabilities: ['payments.refund'] }
+
+      const res = await app.request('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: tampered,
+          delegatorPublicKey: publicKey,
+          capabilityId: 'payments.refund',
+          audience: 'agentd',
+        }),
+      })
+
+      expect(res.status).toBe(409)
+      const data = await res.json()
+      expect(data.errors).toContain('DelegationToken signature verification failed')
+    })
+
     it('rejects sessions for missing capabilities and audience mismatches', async () => {
       const missingCapability = await app.request('/v1/sessions', {
         method: 'POST',
@@ -542,6 +581,26 @@ describe('Agentd Service Routes', () => {
       expect(auth.explanation).toContain('Agent authority revoked')
     })
 
+    it('rejects tampered revocation records when a revoker public key is supplied', async () => {
+      const did = `did:fides:tampered-revocation-${Date.now()}`
+      const privateKey = Buffer.from('01'.repeat(32), 'hex')
+      const publicKey = bytesToHex(await ed.getPublicKeyAsync(privateKey))
+      const record = await signedRevocationRecord(did)
+
+      const res = await app.request('/v1/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          record: { ...record, reason: 'tampered reason' },
+          revokerPublicKey: publicKey,
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('revocation signature verification failed')
+    })
+
     it('audits failed revocation propagation to local evidence', async () => {
       const did = `did:fides:revocation-audit-${Date.now()}`
       mockFetch.mockRejectedValueOnce(new Error('trust graph unavailable'))
@@ -620,6 +679,29 @@ describe('Agentd Service Routes', () => {
       expect(authRes.status).toBe(200)
       const auth = await authRes.json()
       expect(auth.decision).toBe('approve-required')
+    })
+
+    it('rejects tampered incident records when a reporter public key is supplied', async () => {
+      const did = `did:fides:tampered-incident-${Date.now()}`
+      const privateKey = Buffer.from('01'.repeat(32), 'hex')
+      const publicKey = bytesToHex(await ed.getPublicKeyAsync(privateKey))
+      const record = await signedIncidentRecord(did)
+
+      const res = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          record: {
+            ...record,
+            impact: { ...record.impact, trustPenalty: 0 },
+          },
+          reporterPublicKey: publicKey,
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('incident signature verification failed')
     })
 
     it('rejects unsigned revocation payloads', async () => {

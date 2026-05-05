@@ -21,6 +21,50 @@ export interface TEEAdapter {
   verify(attestation: RuntimeAttestation): Promise<boolean>
 }
 
+export interface BuildAttestationInput {
+  agentDid: string
+  imageDigest: string
+  sourceCommit: string
+  builderId: string
+  expiresInMs?: number
+}
+
+export interface PackageAttestationInput {
+  agentDid: string
+  registry: 'npm' | 'pypi' | 'crates' | string
+  packageName: string
+  version: string
+  integrity: string
+  expiresInMs?: number
+}
+
+export interface GitHubAttestationInput {
+  agentDid: string
+  repository: string
+  workflowRef: string
+  sha: string
+  runId: string
+  expiresInMs?: number
+}
+
+export interface BuildAttestationAdapter {
+  readonly provider: string
+  attest(input: BuildAttestationInput): Promise<RuntimeAttestation>
+  verify(attestation: RuntimeAttestation): Promise<boolean>
+}
+
+export interface PackageAttestationAdapter {
+  readonly provider: string
+  attest(input: PackageAttestationInput): Promise<RuntimeAttestation>
+  verify(attestation: RuntimeAttestation): Promise<boolean>
+}
+
+export interface GitHubAttestationAdapter {
+  readonly provider: string
+  attest(input: GitHubAttestationInput): Promise<RuntimeAttestation>
+  verify(attestation: RuntimeAttestation): Promise<boolean>
+}
+
 /** Mock TEE provider for development and testing */
 export class MockTEEProvider implements TEEAdapter {
   readonly provider = 'mock-tee'
@@ -45,6 +89,139 @@ export class MockTEEProvider implements TEEAdapter {
     if (attestation.provider !== this.provider) return false
     if (new Date(attestation.expiresAt) < new Date()) return false
     return attestation.signature === 'mock-signature'
+  }
+}
+
+export class HttpTEEAdapter implements TEEAdapter {
+  constructor(
+    readonly provider: 'aws-nitro' | 'intel-sgx' | 'amd-sev' | string,
+    private readonly endpoint: string
+  ) {}
+
+  async attest(agentDid: string): Promise<RuntimeAttestation> {
+    const response = await fetch(`${this.endpoint.replace(/\/$/, '')}/attest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentDid, provider: this.provider }),
+    })
+    if (!response.ok) {
+      throw new Error(`${this.provider} attestation failed with HTTP ${response.status}`)
+    }
+    return response.json() as Promise<RuntimeAttestation>
+  }
+
+  async verify(attestation: RuntimeAttestation): Promise<boolean> {
+    if (attestation.provider !== this.provider) return false
+    if (new Date(attestation.expiresAt) < new Date()) return false
+    const response = await fetch(`${this.endpoint.replace(/\/$/, '')}/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attestation }),
+    })
+    if (!response.ok) return false
+    const body = await response.json() as { valid?: boolean }
+    return body.valid === true
+  }
+}
+
+export class AwsNitroTEEAdapter extends HttpTEEAdapter {
+  constructor(endpoint: string) {
+    super('aws-nitro', endpoint)
+  }
+}
+
+export class IntelSGXTEEAdapter extends HttpTEEAdapter {
+  constructor(endpoint: string) {
+    super('intel-sgx', endpoint)
+  }
+}
+
+export class AmdSEVTEEAdapter extends HttpTEEAdapter {
+  constructor(endpoint: string) {
+    super('amd-sev', endpoint)
+  }
+}
+
+export class BuildProvenanceAttestationProvider implements BuildAttestationAdapter {
+  readonly provider = 'build-provenance'
+
+  async attest(input: BuildAttestationInput): Promise<RuntimeAttestation> {
+    const expiresAt = new Date(Date.now() + (input.expiresInMs ?? 24 * 3600_000)).toISOString()
+    return createStructuredAttestation({
+      provider: this.provider,
+      agentDid: input.agentDid,
+      measurement: input.imageDigest,
+      expiresAt,
+      evidence: {
+        type: 'build-provenance',
+        imageDigest: input.imageDigest,
+        sourceCommit: input.sourceCommit,
+        builderId: input.builderId,
+      },
+    })
+  }
+
+  async verify(attestation: RuntimeAttestation): Promise<boolean> {
+    if (!isFreshProvider(attestation, this.provider)) return false
+    const evidence = attestation.evidence as Partial<BuildAttestationInput> & { type?: string }
+    return evidence.type === 'build-provenance' &&
+      typeof evidence.imageDigest === 'string' &&
+      evidence.imageDigest === attestation.measurement &&
+      typeof evidence.sourceCommit === 'string' &&
+      typeof evidence.builderId === 'string'
+  }
+}
+
+export class GitHubActionsAttestationProvider implements GitHubAttestationAdapter {
+  readonly provider = 'github-actions'
+
+  constructor(private readonly allowedRepositories?: string[]) {}
+
+  async attest(input: GitHubAttestationInput): Promise<RuntimeAttestation> {
+    const expiresAt = new Date(Date.now() + (input.expiresInMs ?? 6 * 3600_000)).toISOString()
+    return createStructuredAttestation({
+      provider: this.provider,
+      agentDid: input.agentDid,
+      measurement: input.sha,
+      expiresAt,
+      evidence: { type: 'github-actions', ...input },
+    })
+  }
+
+  async verify(attestation: RuntimeAttestation): Promise<boolean> {
+    if (!isFreshProvider(attestation, this.provider)) return false
+    const evidence = attestation.evidence as Partial<GitHubAttestationInput> & { type?: string }
+    if (evidence.type !== 'github-actions') return false
+    if (!evidence.repository || !evidence.workflowRef || !evidence.sha || !evidence.runId) return false
+    if (evidence.sha !== attestation.measurement) return false
+    if (this.allowedRepositories && !this.allowedRepositories.includes(evidence.repository)) return false
+    return true
+  }
+}
+
+export class PackageRegistryAttestationProvider implements PackageAttestationAdapter {
+  readonly provider = 'package-registry'
+
+  async attest(input: PackageAttestationInput): Promise<RuntimeAttestation> {
+    const expiresAt = new Date(Date.now() + (input.expiresInMs ?? 24 * 3600_000)).toISOString()
+    return createStructuredAttestation({
+      provider: this.provider,
+      agentDid: input.agentDid,
+      measurement: input.integrity,
+      expiresAt,
+      evidence: { type: 'package-registry', ...input },
+    })
+  }
+
+  async verify(attestation: RuntimeAttestation): Promise<boolean> {
+    if (!isFreshProvider(attestation, this.provider)) return false
+    const evidence = attestation.evidence as Partial<PackageAttestationInput> & { type?: string }
+    return evidence.type === 'package-registry' &&
+      typeof evidence.registry === 'string' &&
+      typeof evidence.packageName === 'string' &&
+      typeof evidence.version === 'string' &&
+      typeof evidence.integrity === 'string' &&
+      evidence.integrity === attestation.measurement
   }
 }
 
@@ -83,4 +260,27 @@ export class InMemoryKillSwitch implements KillSwitch {
     if (this.state.get('global')) return true
     return this.state.get(this.key(target)) ?? false
   }
+}
+
+function createStructuredAttestation(input: {
+  provider: string
+  agentDid: string
+  measurement: string
+  expiresAt: string
+  evidence: unknown
+}): RuntimeAttestation {
+  return {
+    id: crypto.randomUUID(),
+    agentDid: input.agentDid,
+    provider: input.provider,
+    measurement: input.measurement,
+    timestamp: new Date().toISOString(),
+    expiresAt: input.expiresAt,
+    evidence: input.evidence,
+    signature: 'structured-local-attestation',
+  }
+}
+
+function isFreshProvider(attestation: RuntimeAttestation, provider: string): boolean {
+  return attestation.provider === provider && new Date(attestation.expiresAt) >= new Date()
 }

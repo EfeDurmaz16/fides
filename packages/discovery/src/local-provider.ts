@@ -59,8 +59,23 @@ export class LocalDiscoveryProvider implements DiscoveryProvider {
     if (!existsSync(this.storePath)) {
       return new Map()
     }
-    const data = JSON.parse(readFileSync(this.storePath, 'utf-8'))
-    return new Map(Object.entries(data)) as Map<string, AgentCard>
+    try {
+      const raw = readFileSync(this.storePath, 'utf-8')
+      const data = JSON.parse(raw, (key, value) => {
+        // Reconstruct Uint8Array from base64
+        if (value && value.type === 'Buffer' && Array.isArray(value.data)) {
+          return new Uint8Array(value.data)
+        }
+        return value
+      })
+      const map = new Map<string, AgentCard>()
+      for (const [did, card] of Object.entries(data)) {
+        map.set(did, card as AgentCard)
+      }
+      return map
+    } catch {
+      return new Map()
+    }
   }
 
   private saveStore(store: Map<string, AgentCard>): void {
@@ -68,9 +83,16 @@ export class LocalDiscoveryProvider implements DiscoveryProvider {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
     }
-    const obj: Record<string, AgentCard> = {}
+    const obj: Record<string, unknown> = {}
     for (const [did, card] of store) {
-      obj[did] = card
+      // Convert Uint8Array to JSON-safe format
+      const serialized = JSON.parse(JSON.stringify(card, (key, value) => {
+        if (value instanceof Uint8Array) {
+          return { type: 'Buffer', data: Array.from(value) }
+        }
+        return value
+      }))
+      obj[did] = serialized
     }
     writeFileSync(this.storePath, JSON.stringify(obj, null, 2))
   }

@@ -18,11 +18,27 @@ afterEach(() => {
 vi.stubGlobal('fetch', vi.fn())
 
 import { app } from '../src/index.js'
+import { createDelegationToken } from '@fides/core'
 
 const mockFetch = fetch as ReturnType<typeof vi.fn>
 
 describe('Agentd Service Routes', () => {
   const TEST_DID = 'did:fides:agentd-test-01'
+
+  function makeDelegationToken(overrides: Record<string, unknown> = {}) {
+    return {
+      ...createDelegationToken({
+        delegator: 'did:fides:principal',
+        delegatee: TEST_DID,
+        capabilities: ['payments.execute', 'files.read'],
+        constraints: {},
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        audience: ['agentd'],
+      }),
+      signature: '00'.repeat(64),
+      ...overrides,
+    }
+  }
 
   function createMockResponse(body: unknown, status = 200) {
     const bodyStr = JSON.stringify(body)
@@ -306,6 +322,202 @@ describe('Agentd Service Routes', () => {
       const data = await res.json()
       expect(data.events).toHaveLength(0)
       expect(data.valid).toBe(true)
+    })
+  })
+
+  describe('Delegation Sessions and Authorization', () => {
+    it('creates a session from a delegated capability', async () => {
+      const res = await app.request('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: makeDelegationToken({ delegatee: `${TEST_DID}:session-create` }),
+          capabilityId: 'payments.execute',
+          audience: 'agentd',
+        }),
+      })
+
+      expect(res.status).toBe(201)
+      const data = await res.json()
+      expect(data.authorized).toBe(true)
+      expect(data.session.id).toBeDefined()
+      expect(data.session.sessionKey).toBe('redacted')
+    })
+
+    it('rejects replayed delegation nonces', async () => {
+      const token = makeDelegationToken({ delegatee: `${TEST_DID}:session-replay` })
+
+      await app.request('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, capabilityId: 'payments.execute', audience: 'agentd' }),
+      })
+      const res = await app.request('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, capabilityId: 'payments.execute', audience: 'agentd' }),
+      })
+
+      expect(res.status).toBe(409)
+      const data = await res.json()
+      expect(data.errors).toContain('DelegationToken nonce has already been used')
+    })
+
+    it('rejects sessions for missing capabilities and audience mismatches', async () => {
+      const missingCapability = await app.request('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: makeDelegationToken({ delegatee: `${TEST_DID}:missing-capability` }),
+          capabilityId: 'wallets.sign',
+          audience: 'agentd',
+        }),
+      })
+      expect(missingCapability.status).toBe(409)
+
+      const audienceMismatch = await app.request('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: makeDelegationToken({ delegatee: `${TEST_DID}:audience-mismatch` }),
+          capabilityId: 'payments.execute',
+          audience: 'registry',
+        }),
+      })
+      expect(audienceMismatch.status).toBe(409)
+    })
+
+    it('authorizes an allowed session invocation and appends evidence', async () => {
+      const did = `did:fides:authorize-${Date.now()}`
+      const sessionRes = await app.request('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: makeDelegationToken({ delegatee: did }),
+          capabilityId: 'payments.execute',
+          audience: 'agentd',
+        }),
+      })
+      const { session } = await sessionRes.json()
+
+      const res = await app.request('/v1/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentDid: did,
+          capabilityId: 'payments.execute',
+          sessionId: session.id,
+          audience: 'agentd',
+        }),
+      })
+      expect(res.status).toBe(200)
+      const data = await res.json()
+      expect(data.decision).toBe('allow')
+
+      const evidenceRes = await app.request(`/v1/evidence/${encodeURIComponent(did)}`)
+      const evidence = await evidenceRes.json()
+      expect(evidence.count).toBe(1)
+      expect(evidence.events[0].action).toBe('authorization.allow')
+    })
+
+    it('denies authorization after session revocation', async () => {
+      const did = `did:fides:session-revoked-${Date.now()}`
+      const sessionRes = await app.request('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: makeDelegationToken({ delegatee: did }),
+          capabilityId: 'payments.execute',
+          audience: 'agentd',
+        }),
+      })
+      const { session } = await sessionRes.json()
+
+      await app.request(`/v1/sessions/${session.id}/revoke`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'manual revoke' }),
+      })
+
+      const res = await app.request('/v1/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentDid: did,
+          capabilityId: 'payments.execute',
+          sessionId: session.id,
+          audience: 'agentd',
+        }),
+      })
+
+      expect(res.status).toBe(403)
+      const data = await res.json()
+      expect(data.explanation).toContain('SessionGrant is revoked')
+    })
+
+    it('records revocations and denies future authorization', async () => {
+      const did = `did:fides:revoked-${Date.now()}`
+      const revokeRes = await app.request('/v1/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          did,
+          reason: 'principal revoked delegation',
+          revokedBy: 'did:fides:principal',
+        }),
+      })
+      expect(revokeRes.status).toBe(201)
+
+      const statusRes = await app.request(`/v1/revocations/${encodeURIComponent(did)}`)
+      const status = await statusRes.json()
+      expect(status.revoked).toBe(true)
+
+      const authRes = await app.request('/v1/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentDid: did,
+          capabilityId: 'payments.execute',
+        }),
+      })
+      expect(authRes.status).toBe(403)
+      const auth = await authRes.json()
+      expect(auth.decision).toBe('deny')
+      expect(auth.explanation).toContain('Agent authority revoked')
+    })
+
+    it('records incidents and uses their impact in authorization', async () => {
+      const did = `did:fides:incident-${Date.now()}`
+      const incidentRes = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actor: did,
+          type: 'policy_violation',
+          severity: 'critical',
+          description: 'Repeated unauthorized payment attempts',
+          capabilitiesRevoked: ['payments.execute'],
+        }),
+      })
+      expect(incidentRes.status).toBe(201)
+
+      const listRes = await app.request(`/v1/incidents/${encodeURIComponent(did)}`)
+      const list = await listRes.json()
+      expect(list.impact.incidentCount).toBe(1)
+      expect(list.impact.allRevokedCapabilities).toContain('payments.execute')
+
+      const authRes = await app.request('/v1/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentDid: did,
+          capabilityId: 'payments.execute',
+          requiresApproval: true,
+        }),
+      })
+      expect(authRes.status).toBe(200)
+      const auth = await authRes.json()
+      expect(auth.decision).toBe('approve-required')
     })
   })
 

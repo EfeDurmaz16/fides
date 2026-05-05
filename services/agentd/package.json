@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@fides/core": "workspace:*",
+    "@fides/guard": "workspace:*",
     "@fides/sdk": "workspace:*",
     "@fides/shared": "workspace:*",
     "@fides/evidence": "workspace:*",

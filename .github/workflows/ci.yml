@@ -92,6 +92,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build smoke script dependencies
+        run: |
+          pnpm --filter @fides/shared build
+          pnpm --filter @fides/core build
+
       - name: Build compose images
         run: POSTGRES_PASSWORD=fides docker compose build
 

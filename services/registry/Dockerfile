@@ -41,6 +41,8 @@ COPY --from=build /app/packages/sdk/package.json ./packages/sdk/
 COPY --from=build /app/services/registry/dist ./services/registry/dist
 COPY --from=build /app/services/registry/package.json ./services/registry/
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/core/node_modules ./packages/core/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=deps /app/packages/sdk/node_modules ./packages/sdk/node_modules
 COPY --from=deps /app/services/registry/node_modules ./services/registry/node_modules
 

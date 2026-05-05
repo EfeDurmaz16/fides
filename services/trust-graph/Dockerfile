@@ -35,6 +35,7 @@ COPY --from=build /app/packages/sdk/package.json ./packages/sdk/
 COPY --from=build /app/services/trust-graph/dist ./services/trust-graph/dist
 COPY --from=build /app/services/trust-graph/package.json ./services/trust-graph/
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=deps /app/packages/sdk/node_modules ./packages/sdk/node_modules
 COPY --from=deps /app/services/trust-graph/node_modules ./services/trust-graph/node_modules
 

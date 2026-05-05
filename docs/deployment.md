@@ -5,7 +5,7 @@
 - **Node.js** 22 or later
 - **pnpm** 10 (enabled via `corepack enable`)
 - **Docker** 24+ (for containerized deployment)
-- **PostgreSQL** 16 (for discovery and trust-graph services)
+- **PostgreSQL** 16 (for discovery, trust-graph, and production `agentd` authority storage)
 
 ## Services Overview
 
@@ -15,7 +15,7 @@
 | `trust-graph`| 3200  | PostgreSQL     | Web-of-trust scoring                     |
 | `registry`   | 7346  | File-based     | AgentCard registry (filesystem)          |
 | `relay`      | 7347  | In-memory      | Message relay for NAT/firewall traversal |
-| `agentd`     | 7345  | None (proxy)   | Local daemon unifying all services       |
+| `agentd`     | 7345  | PostgreSQL or file | Local daemon unifying all services and durable authority state |
 
 ---
 
@@ -36,6 +36,16 @@ cp .env.example .env
 | `POSTGRES_PASSWORD` | `CHANGEME`                             | yes      | PostgreSQL password        |
 | `POSTGRES_DB`     | `fides`                                  | yes      | PostgreSQL database name   |
 | `DB_POOL_MAX`     | `10`                                     | no       | Connection pool size       |
+
+### Agentd Authority Store
+
+| Variable                  | Default | Required | Description |
+| ------------------------- | ------- | -------- | ----------- |
+| `AGENTD_AUTHORITY_STORE`  | `file`  | production | `file` for local JSON state, `postgres` for durable authority state |
+| `AGENTD_DATABASE_URL`     | _(empty)_ | production when `AGENTD_AUTHORITY_STORE=postgres` | Dedicated agentd authority database URL. Falls back to `DATABASE_URL` when unset. |
+| `AGENTD_DB_AUTO_MIGRATE`  | `true`  | no | Runs idempotent authority table creation on startup. Set `false` when migrations are managed externally. |
+| `AGENTD_DB_POOL_MAX`      | `10`    | no | Agentd authority store connection pool size. Falls back to `DB_POOL_MAX`. |
+| `AGENTD_STATE_STORE_PATH` | _(empty)_ | no | File authority store path. Defaults to `~/.fides/agentd/authority-store.json`. |
 
 ### Service Ports
 
@@ -86,7 +96,8 @@ The fastest way to run all services:
 ```bash
 # Copy and configure environment
 cp .env.example .env
-# Edit .env — set POSTGRES_PASSWORD
+# Edit .env — set POSTGRES_PASSWORD.
+# Docker Compose defaults agentd to AGENTD_AUTHORITY_STORE=postgres.
 
 # Start all services
 docker compose up -d
@@ -103,7 +114,7 @@ curl http://localhost:7345/health
 docker compose logs -f
 ```
 
-This starts PostgreSQL, discovery, trust-graph, registry, relay, and agentd — all pre-configured for inter-service communication.
+This starts PostgreSQL, discovery, trust-graph, registry, relay, and agentd — all pre-configured for inter-service communication. In Docker Compose, `agentd` uses the same PostgreSQL container for durable authority state unless `AGENTD_DATABASE_URL` points at a dedicated database.
 
 ### Development Mode
 
@@ -125,6 +136,15 @@ Source is mounted into containers; changes trigger automatic restarts via `tsx w
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build
+```
+
+Run authority migrations before starting `agentd` when auto-migration is disabled:
+
+```bash
+export AGENTD_AUTHORITY_STORE=postgres
+export AGENTD_DATABASE_URL="postgresql://fides:CHANGEME@localhost:5432/fides"
+pnpm --filter @fides/agentd db:migrate
+export AGENTD_DB_AUTO_MIGRATE=false
 ```
 
 ### 2. Run Each Service
@@ -157,6 +177,9 @@ node services/relay/dist/index.js
 
 # Terminal 5 — Agent Daemon
 export AGENTD_PORT=7345
+export AGENTD_AUTHORITY_STORE=postgres
+export AGENTD_DATABASE_URL="postgresql://fides:CHANGEME@localhost:5432/fides"
+export AGENTD_DB_AUTO_MIGRATE=false
 export DISCOVERY_URL="http://localhost:3100"
 export TRUST_GRAPH_URL="http://localhost:3200"
 export REGISTRY_URL="http://localhost:7346"
@@ -207,9 +230,9 @@ Expected responses:
 - `trust-graph`: `{"status":"healthy",...}` — depends on PostgreSQL connectivity
 - `registry`: `{"status":"healthy",...}` — depends on filesystem write access
 - `relay`: `{"status":"healthy",...}` — always healthy (in-memory)
-- `agentd`: `{"status":"healthy",...}` — depends on upstream services being reachable
+- `agentd`: `{"status":"healthy",...}` — depends on upstream services and authority store readiness
 
-If a dependency is unavailable, the service returns HTTP 503 with `"status":"degraded"` and `checks` detailing which component failed.
+If a dependency is unavailable, the service returns HTTP 503 with `"status":"degraded"` and `checks` detailing which component failed. For `agentd`, inspect `checks.authorityStore` and `authorityStore.kind` to confirm whether the file or Postgres authority store is active.
 
 Docker containers include built-in `HEALTHCHECK` instructions; use `docker compose ps` to monitor container health.
 

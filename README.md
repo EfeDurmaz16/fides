@@ -8,31 +8,39 @@
 [![Build](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/EfeDurmaz16/fides)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/EfeDurmaz16/fides/pulls)
 
-**Decentralized trust and authentication protocol for autonomous AI agents**
+**Decentralized trust fabric for autonomous AI agents — v2**
+
+FIDES v2 is an Agent Trust Fabric that provides cryptographically verifiable identity, capability-aware policy enforcement, tamper-evident evidence logging, runtime attestation, and emergency kill switch capabilities for AI agent ecosystems.
 
 ---
 
 ## Why FIDES?
 
-As AI agents become increasingly autonomous, they face critical challenges in secure communication:
+As AI agents become increasingly autonomous, they face critical challenges in secure collaboration:
 
-- **No verifiable identity** — Agents cannot prove who they are without centralized authorities
-- **No trust mechanism** — No standard way to establish trust relationships between agents
-- **Request tampering** — HTTP requests lack cryptographic integrity protection
-- **Reputation opacity** — No way to discover an agent's trustworthiness through network effects
+- **No verifiable identity** — Agents cannot prove who they are or what they're authorized to do
+- **No capability semantics** — No standard way to describe what an agent can do and at what risk level
+- **No pre-execution guards** — Actions execute without policy evaluation or trust verification
+- **No audit trail** — No tamper-evident record of agent actions and decisions
+- **No emergency control** — No way to revoke capabilities or halt rogue agents
 
-FIDES solves these problems with a decentralized, cryptographically secure trust protocol built specifically for AI agents.
+FIDES solves these problems with a layered trust protocol built specifically for AI agent ecosystems.
 
 ---
 
 ## Key Features
 
-- **⚡ Ed25519 Identity** — DID-based identities with secure elliptic curve cryptography
-- **📝 RFC 9421 HTTP Message Signatures** — Standardized request signing and verification
-- **🕸️ Decentralized Trust Graph** — Distributed trust attestations with BFS traversal
-- **🔗 Transitive Trust with Decay** — Reputation propagates through the network (0.85 decay/hop)
-- **🔒 Zero-dependency Crypto** — Pure JavaScript cryptography via @noble/ed25519
-- **📘 TypeScript-first** — End-to-end type safety for robust agent development
+- **AgentCards** — Self-describing agent manifests with capabilities, endpoints, and security profiles
+- **CapabilityDescriptors** — Typed capability definitions with risk classification (critical/high/medium/low)
+- **Policy Engine** — Deterministic rule evaluation with pre-execution guards (allow/deny/approve-required/dry-run)
+- **Evidence Ledger** — Hash-chained, Merkle-rooted event log with privacy levels (public/private/redacted/hash-only)
+- **Runtime Attestation** — TEE-based execution environment verification (AWS Nitro, Intel SGX, AMD SEV)
+- **Guard Decision Engine** — Multi-factor decision pipeline combining trust, evidence, attestation, and policy
+- **Kill Switch** — Emergency shutdown at global, agent, capability, or principal level
+- **Delegation** — Capability delegation with constraints (spend limits, action counts, context restrictions)
+- **Discovery Providers** — Multi-provider agent discovery (well-known, registry, relay, DHT, mDNS)
+- **Ed25519 Identity** — DID-based identities with canonical JSON signing
+- **Trust Graph** — Weighted, capability-specific reputation with transitive trust scoring
 
 ---
 
@@ -41,44 +49,64 @@ FIDES solves these problems with a decentralized, cryptographically secure trust
 ### Installation
 
 ```bash
-npm install @fides/sdk
+pnpm install
+pnpm build
 ```
 
 ### Basic Usage
 
 ```typescript
-import { Fides, TrustLevel } from '@fides/sdk'
+import { createIdentity, classifyCapabilityRisk, createDelegationToken } from '@fides/core'
+import { evaluatePolicy } from '@fides/policy'
+import { evaluateGuard, createTrustContext } from '@fides/guard'
+import { createEvidenceChain, appendEvidenceEvent } from '@fides/evidence'
+import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 
-// Initialize FIDES client
-const fides = new Fides({
-  discoveryUrl: 'http://localhost:3100',
-  trustUrl: 'http://localhost:3200'
+// Create agent identities
+const alice = createIdentity('did:fides:alice', 'agent', { name: 'Alice Assistant' })
+const charlie = createIdentity('did:fides:charlie', 'principal', { name: 'Charlie User' })
+
+// Classify capability risk
+const risk = classifyCapabilityRisk('email:send')  // 'high'
+
+// Delegate capabilities with constraints
+const token = createDelegationToken({
+  delegator: charlie.did,
+  delegatee: alice.did,
+  capabilities: ['email:send', 'calendar:create'],
+  constraints: { maxActions: 10, maxSpend: '10.00', allowedContexts: ['work'] },
+  expiresAt: new Date(Date.now() + 3600000).toISOString(),
 })
 
-// Create agent identity
-const { did } = await fides.createIdentity({
-  name: 'My AI Agent'
-})
-
-// Sign a request
-const signed = await fides.signRequest({
-  method: 'POST',
-  url: 'https://agent-b.example.com/api/task',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ task: 'collaborate' })
-})
-
-// Verify incoming request
-const result = await fides.verifyRequest(incomingRequest)
-if (result.valid) {
-  // Request is authentic and unmodified
+// Evaluate policy
+const policy = {
+  id: 'default', version: '1.0.0',
+  rules: [
+    { id: 'trust', condition: { operator: 'gte', field: 'reputationScore', value: 0.8 }, action: 'allow', explanation: 'High trust' },
+  ],
+  defaultAction: 'deny',
 }
+const result = evaluatePolicy(policy, { reputationScore: 0.9 })
 
-// Trust another agent
-await fides.trust('did:fides:7nK9fV3h...', TrustLevel.HIGH)
+// Build evidence chain
+let chain = createEvidenceChain()
+chain = appendEvidenceEvent(chain, {
+  id: 'e1', type: 'invoke', timestamp: new Date().toISOString(),
+  actor: alice.did, action: 'email:send', payload: {},
+  privacy: { level: 'redacted' },
+}, 'signature-hex')
 
-// Check reputation
-const score = await fides.getReputation('did:fides:7nK9fV3h...')
+// Run guard decision
+const trust = createTrustContext({
+  reputationScore: 0.9, capabilityScore: 0.95,
+  attestation: await new MockTEEProvider().attest(alice.did),
+  evidenceChain: chain, killSwitchEngaged: false, recentIncidents: 0,
+})
+const decision = await evaluateGuard({
+  agentDid: alice.did, capabilityId: 'email:send',
+  policy, context: { requestCount: 10 }, trust,
+})
+// decision.decision → 'allow' | 'deny' | 'approve-required' | 'dry-run'
 ```
 
 ---
@@ -86,95 +114,81 @@ const score = await fides.getReputation('did:fides:7nK9fV3h...')
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        AI Agent                             │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              @fides/sdk                             │   │
-│  │                                                     │   │
-│  │  • Identity (Ed25519 keypairs, DIDs)               │   │
-│  │  • Signing (RFC 9421 HTTP signatures)              │   │
-│  │  • Trust (Attestations, verification)              │   │
-│  │  • Discovery (Identity resolution)                 │   │
-│  └──────────────┬──────────────────┬───────────────────┘   │
-└─────────────────┼──────────────────┼──────────────────────┘
-                  │                  │
-                  ▼                  ▼
-        ┌─────────────────┐  ┌─────────────────┐
-        │   Discovery      │  │  Trust Graph    │
-        │    Service       │  │    Service      │
-        │                  │  │                 │
-        │  • Register DIDs │  │  • Attestations │
-        │  • Resolve keys  │  │  • Reputation   │
-        │  • .well-known   │  │  • BFS graph    │
-        └────────┬─────────┘  └────────┬────────┘
-                 │                     │
-                 └──────────┬──────────┘
-                            ▼
-                    ┌──────────────┐
-                    │  PostgreSQL  │
-                    └──────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              AI Agent                                   │
+│                                                                         │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────────────────┐ │
+│  │ @fides/    │ │ @fides/    │ │ @fides/    │ │ @fides/              │ │
+│  │ core       │ │ policy     │ │ guard      │ │ evidence             │ │
+│  │            │ │            │ │            │ │                      │ │
+│  │ Identity   │ │ Policy     │ │ Decision   │ │ Hash-chain           │ │
+│  │ Signing    │ │ Rules      │ │ Pipeline   │ │ Merkle root          │ │
+│  │ AgentCard  │ │ Expressions│ │ KillSwitch │ │ Privacy levels       │ │
+│  │ DelegationToken evaluation │ │ Attestation│ │ Event log            │ │
+│  └─────┬──────┘ └─────┬──────┘ └─────┬──────┘ └──────────┬───────────┘ │
+│        │              │              │                   │             │
+│  ┌─────┴──────────────┴──────────────┴───────────────────┴──────────┐ │
+│  │                    @fides/discovery                               │ │
+│  │         well-known · registry · relay · DHT · local               │ │
+│  └──────────────────────────────┬────────────────────────────────────┘ │
+│  ┌──────────────────────────────┴────────────────────────────────────┐ │
+│  │                    @fides/runtime                                 │ │
+│  │         TEE Attestation · Kill Switch · Runtime verification      │ │
+│  └───────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────┘
+                                 │
+         ┌───────────────────────┼───────────────────────┐
+         ▼                       ▼                       ▼
+┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+│ @fides/         │   │ @fides/         │   │ @fides/         │
+│ discovery-svc   │   │ trust-graph     │   │ registry-svc    │
+│                 │   │                 │   │                 │
+│ AgentCard       │   │ Trust edges     │   │ Agent           │
+│ resolution      │   │ Reputation      │   │ registration    │
+│ .well-known     │   │ BFS scoring     │   │ Capability pub  │
+└─────────────────┘   └────────┬────────┘   └────────┬────────┘
+                               │                     │
+                    ┌──────────┴─────────────────────┴──────────┐
+                    ▼                     ▼                     ▼
+           ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+           │ @fides/         │  │ @fides/         │  │ @fides/         │
+           │ relay-svc       │  │ agentd          │  │ platform-api    │
+           │                 │  │                 │  │                 │
+           │ NAT traversal   │  │ Agent daemon    │  │ REST/gRPC       │
+           │ Message relay   │  │ Lifecycle mgmt  │  │ Admin API       │
+           └─────────────────┘  └─────────────────┘  └─────────────────┘
 ```
 
 ---
 
-## API Reference
+## Packages
 
-### Core Functions
-
-| Function | Description |
-|----------|-------------|
-| `generateKeyPair()` | Generate Ed25519 keypair for agent identity |
-| `generateDID(publicKey)` | Create DID from public key (did:fides:base58) |
-| `signRequest(request, privateKey, options)` | Sign HTTP request per RFC 9421 |
-| `verifyRequest(request, publicKey)` | Verify HTTP request signature |
-| `createAttestation(issuerDid, subjectDid, level, privateKey)` | Create signed trust attestation |
-| `verifyAttestation(attestation, publicKey)` | Verify attestation signature |
-
-### Fides Class (High-level API)
-
-| Method | Description |
-|--------|-------------|
-| `createIdentity(metadata?)` | Create new identity and register with discovery |
-| `signRequest(request)` | Sign request with current identity |
-| `verifyRequest(request)` | Verify request and resolve signer identity |
-| `trust(subjectDid, level)` | Create and submit trust attestation |
-| `getReputation(did)` | Get aggregated reputation score |
-| `resolve(didOrDomain)` | Resolve DID to identity information |
-
-### Key Stores
-
-| Class | Description |
-|-------|-------------|
-| `MemoryKeyStore` | In-memory key storage (development only) |
-| `FileKeyStore` | AES-256-GCM encrypted file storage |
+| Package | Description |
+|---------|-------------|
+| `@fides/core` | Core primitives: identity, signing, AgentCard, delegation, capability risk classification |
+| `@fides/policy` | Policy engine with expression evaluation, pre-execution guards, and rule bundles |
+| `@fides/guard` | Guard decision engine combining trust, evidence, attestation, and policy into allow/deny decisions |
+| `@fides/evidence` | Evidence ledger with hash-chained events, Merkle root computation, and privacy levels |
+| `@fides/runtime` | Runtime attestation (TEE providers) and kill switch (global/agent/capability/principal) |
+| `@fides/discovery` | Discovery provider architecture with priority-based orchestration |
+| `@fides/sdk` | Legacy v1 SDK (Ed25519 identity, RFC 9421 signing, trust graph) |
+| `@fides/shared` | Shared types, constants, and utilities |
+| `@fides/cli` | Command-line interface for agent management and diagnostics |
+| `@fides/rust-sdk` | Rust SDK (planned) |
 
 ---
 
-## Trust Levels
+## Services
 
-| Level | Value | Description |
-|-------|-------|-------------|
-| `NONE` | 0 | No trust established |
-| `LOW` | 25 | Minimal trust, limited interaction |
-| `MEDIUM` | 50 | Moderate trust, standard collaboration |
-| `HIGH` | 75 | Strong trust, sensitive operations |
-| `ABSOLUTE` | 100 | Complete trust, full delegation |
-
-> **Note:** Trust propagates through the network with 0.85 exponential decay per hop (max 6 hops)
-
----
-
-## Protocol Specification
-
-FIDES implements a complete decentralized trust protocol with:
-
-- **Identity Layer**: Ed25519 keypairs + `did:fides:<base58-pubkey>` identifiers
-- **Authentication Layer**: RFC 9421 HTTP Message Signatures with ed25519 algorithm
-- **Trust Layer**: Signed attestations stored in distributed trust graph
-- **Reputation Layer**: BFS graph traversal with exponential decay scoring
-
-**Full specification:** [docs/protocol-spec.md](docs/protocol-spec.md)
+| Service | Description |
+|---------|-------------|
+| `@fides/discovery-service` | AgentCard resolution via `.well-known` endpoint hosting |
+| `@fides/trust-graph` | Trust edge storage, reputation scoring, and capability-specific trust computation |
+| `@fides/registry-service` | Central agent registration and capability publishing |
+| `@fides/relay-service` | Message relay for agents behind NAT/firewalls |
+| `@fides/agentd` | Agent daemon for lifecycle management and local policy enforcement |
+| `@fides/platform-api` | Platform REST/gRPC API (stub) |
+| `@fides/policy-engine` | Standalone policy evaluation service (stub) |
 
 ---
 
@@ -183,22 +197,32 @@ FIDES implements a complete decentralized trust protocol with:
 ```
 fides/
 ├── packages/
-│   ├── sdk/              # Core protocol implementation
-│   │   ├── identity/     # Keypairs, DIDs, key storage
-│   │   ├── signing/      # RFC 9421 HTTP signatures
-│   │   ├── trust/        # Attestations, verification
-│   │   └── discovery/    # Identity resolution
-│   ├── cli/              # Command-line interface
-│   └── shared/           # Shared types and constants
+│   ├── core/              # v2 core primitives (identity, signing, delegation, AgentCard)
+│   ├── policy/            # Policy engine and rule evaluation
+│   ├── guard/             # Guard decision engine
+│   ├── evidence/          # Evidence ledger (hash chain, Merkle root)
+│   ├── runtime/           # Runtime attestation and kill switch
+│   ├── discovery/         # Discovery provider architecture
+│   ├── sdk/               # Legacy v1 SDK
+│   ├── shared/            # Shared types and constants
+│   ├── cli/               # Command-line interface
+│   └── rust-sdk/          # Rust SDK (planned)
 ├── services/
-│   ├── discovery/        # Identity registration service
-│   └── trust/            # Trust graph service
-├── docs/
-│   ├── architecture.md   # System design
-│   ├── protocol-spec.md  # Protocol details
-│   └── getting-started.md # Tutorial
-└── scripts/
-    └── two-agents-demo.ts # Demo script
+│   ├── discovery/         # AgentCard resolution service
+│   ├── trust-graph/       # Trust and reputation service
+│   ├── registry/          # Agent registration service
+│   ├── relay/             # Message relay service
+│   ├── agentd/            # Agent daemon
+│   ├── platform-api/      # Platform API (stub)
+│   └── policy-engine/     # Policy service (stub)
+├── apps/
+│   └── web/               # Web dashboard
+├── tests/
+│   ├── e2e/               # End-to-end tests
+│   └── adversarial/       # Adversarial security tests
+└── docs/
+    └── protocol/
+        └── fides-v2-spec.md  # Full protocol specification
 ```
 
 ---
@@ -214,21 +238,11 @@ fides/
 ### Setup
 
 ```bash
-# Clone repository
 git clone https://github.com/EfeDurmaz16/fides.git
 cd fides
 
-# Install dependencies
 pnpm install
-
-# Start PostgreSQL
-docker compose up -d
-
-# Build all packages
 pnpm build
-
-# Start development servers
-pnpm dev
 ```
 
 ### Commands
@@ -241,30 +255,49 @@ pnpm dev
 | `pnpm typecheck` | Type-check TypeScript |
 | `pnpm dev` | Start services in watch mode |
 | `pnpm clean` | Clean build artifacts |
+| `pnpm demo` | Run the full v2 end-to-end demo |
 
 ### Running the Demo
 
 ```bash
-# Build packages first
 pnpm build
-
-# Run two-agent demo
-npx tsx scripts/two-agents-demo.ts
+pnpm demo
 ```
+
+The demo exercises all 9 subsystems: identity creation, AgentCard validation, risk classification, delegation tokens, policy evaluation, evidence ledger, runtime attestation, kill switch, and guard decisions.
 
 ---
 
 ## Security
 
-FIDES uses industry-standard cryptography and security practices:
+FIDES v2 implements defense-in-depth across multiple layers:
 
-- **Ed25519 signatures** — Fast, secure elliptic curve cryptography via @noble/ed25519
-- **Timing-safe comparisons** — Constant-time signature verification prevents timing attacks
-- **AES-256-GCM encryption** — Password-protected private key storage
-- **PBKDF2 key derivation** — 600k iterations with SHA-256
-- **Replay protection** — Timestamp-based signature expiration (300s window)
+- **Canonical Signing** — All signed objects use canonical JSON encoding (recursive key sorting, no whitespace) to prevent signature malleability
+- **Ed25519 Cryptography** — Fast, secure elliptic curve signatures via @noble/ed25519
+- **Evidence Chain Integrity** — Hash-chained events with Merkle root verification; tampering breaks the chain
+- **Kill Switch** — Emergency capability/agent shutdown with precedence rules (global > agent > capability)
+- **TEE Attestation** — Trusted Execution Environment verification (AWS Nitro, Intel SGX, AMD SEV)
+- **Privacy Levels** — Evidence events support public/private/redacted/hash-only visibility
+- **Delegation Constraints** — Spend limits, action counts, and context restrictions on delegated capabilities
+- **Pre-Execution Guards** — Multi-factor decision pipeline before any capability execution
 
-> **Security disclosure:** Report vulnerabilities to [SECURITY.md](SECURITY.md)
+> **Security disclosure:** Report vulnerabilities via [SECURITY.md](SECURITY.md)
+
+---
+
+## Protocol Specification
+
+FIDES v2 implements a complete trust fabric with:
+
+- **Identity Layer** — Ed25519 keypairs with `did:fides:` identifiers and canonical JSON signing
+- **AgentCard Layer** — Self-describing manifests with capabilities, endpoints, and security profiles
+- **Trust Graph Layer** — Weighted, capability-specific reputation with transitive trust (depth-based weighting)
+- **Policy Layer** — Deterministic rule evaluation with pre-execution guard pipeline
+- **Evidence Layer** — Hash-chained, Merkle-rooted event log with privacy controls
+- **Runtime Layer** — TEE attestation and emergency kill switch
+- **Discovery Layer** — Multi-provider orchestration with priority-based resolution
+
+**Full specification:** [docs/protocol/fides-v2-spec.md](docs/protocol/fides-v2-spec.md)
 
 ---
 
@@ -291,14 +324,14 @@ We welcome contributions! Here's how to get started:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details
+MIT License — see [LICENSE](LICENSE) for details
 
 ---
 
 <div align="center">
 
-**Built with cryptographic trust** 🔐
+**Built with cryptographic trust**
 
-[Documentation](docs/) • [Architecture](docs/architecture.md) • [Getting Started](docs/getting-started.md)
+[Documentation](docs/) • [Protocol Spec](docs/protocol/fides-v2-spec.md) • [Contributing](#contributing)
 
 </div>

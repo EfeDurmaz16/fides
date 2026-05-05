@@ -42,14 +42,14 @@ This document classifies the current status of every required FIDES v2 / Agent T
 | 22 | Reputation engine | Implemented | `services/trust-graph/src/services/scoring.ts`, tests in `services/trust-graph/test/*`. |
 | 23 | Capability-specific reputation | Prototype | `services/trust-graph/src/services/capability-scoring.ts`, `services/trust-graph/test/capability-scoring.test.ts`. |
 | 24 | Trust scoring | Implemented | Direct/transitive scoring in `services/trust-graph/src/services/scoring.ts`. |
-| 25 | Policy engine | Implemented | `packages/policy/src/index.ts`, `packages/policy/test/policy.test.ts`; `agentd` uses it in `/v1/policy/evaluate`. |
+| 25 | Policy engine | Implemented | `packages/policy/src/index.ts`, `packages/policy/test/policy.test.ts`; `services/policy-engine/src/index.ts` exposes standalone evaluation routes; `agentd` uses it in `/v1/policy/evaluate`. |
 | 26 | Delegation tokens | Implemented | `packages/core/src/delegation.ts`, `packages/core/test/delegation.test.ts`. |
-| 27 | Session grants | Prototype | `SessionGrant` helpers in `packages/core/src/delegation.ts`; no durable nonce/session store. |
-| 28 | Capability invocation | Prototype | Guard/policy decision path exists in `packages/guard/src/index.ts`; actual remote invocation transport is adapter-ready. |
+| 27 | Session grants | Implemented | `SessionGrant` helpers plus `SessionStore`, `InMemorySessionStore`, `FileSessionStore`, nonce replay rejection, and session invocation authorization in `packages/core/src/session-store.ts`; route coverage in `services/agentd/test/routes.test.ts`. |
+| 28 | Capability invocation | Prototype | Guard/policy decision path exists in `packages/guard/src/index.ts`; `services/agentd/src/index.ts` exposes `/v1/authorize`; actual remote invocation transport is adapter-ready. |
 | 29 | Evidence ledger | Implemented | `packages/evidence/src/index.ts`, `services/agentd/src/index.ts`, tests in `packages/evidence/test/evidence.test.ts`. |
 | 30 | Hash-chained evidence events | Implemented | `appendEvidenceEvent` and `verifyEvidenceChain` in `packages/evidence/src/index.ts`. |
-| 31 | Revocation records | Implemented | `packages/core/src/revocation.ts`, core tests. |
-| 32 | Incident records | Implemented | `IncidentRecord` and impact aggregation in `packages/core/src/revocation.ts`. |
+| 31 | Revocation records | Implemented | `packages/core/src/revocation.ts`, core tests, and `agentd` revocation API routes. |
+| 32 | Incident records | Implemented | `IncidentRecord` and impact aggregation in `packages/core/src/revocation.ts`; `agentd` incident API routes feed authorization context. |
 | 33 | Runtime attestation | Prototype | `packages/runtime/src/index.ts`, `services/agentd/src/index.ts`, runtime tests. |
 | 34 | TEE-ready attestation | Adapter-ready | `TEEAdapter` interface in `packages/runtime/src/index.ts`; production vendor adapters are not implemented. |
 | 35 | Mock TEE provider | Mock | `MockTEEProvider` in `packages/runtime/src/index.ts`, `packages/runtime/test/runtime.test.ts`. |
@@ -65,7 +65,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 | 45 | Local HTTP API | Prototype | `services/agentd/src/index.ts`; local API tests in `services/agentd/test/routes.test.ts`. |
 | 46 | TypeScript SDK | Implemented | `packages/sdk/src/*`, SDK tests. |
 | 47 | Example agents | Prototype | `examples/calendar-agent.ts`, `examples/invoice-agent.ts`, `examples/payment-agent.ts`, `examples/requester-agent.ts`. |
-| 48 | End-to-end demo | Prototype | `examples/demo.ts`, `scripts/two-agents-demo.ts`, `tests/e2e/full-flow.test.ts`. |
+| 48 | End-to-end demo | Prototype | `examples/demo.ts`, `scripts/two-agents-demo.ts`, `scripts/authority-path-demo.ts`, `tests/e2e/full-flow.test.ts`. |
 | 49 | Threat model | Spec-complete | `docs/threat-model.md`. |
 | 50 | Protocol documentation | Spec-complete | `docs/protocol/fides-v2-spec.md`, `docs/protocol-spec.md`, architecture docs. |
 | 51 | Test suite | Implemented | `pnpm test` covers 15 packages and the service routes. |
@@ -88,7 +88,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 - Relay service with in-memory queues and TTL.
 - Discovery provider orchestration.
 - Guard decision engine integrating trust, evidence, runtime attestation, incidents, kill switch, and policy.
-- Example agents and local demo scripts.
+- Example agents and local demo scripts, including an authority path demo through service routes.
 
 ### Local mock
 
@@ -107,25 +107,23 @@ This document classifies the current status of every required FIDES v2 / Agent T
 
 ### Still missing
 
-- Durable session/nonce replay store for delegation/session grants.
 - Production attestation providers: Nitro, SGX, SEV, container image, reproducible build, GitHub, email, package registry, passkey.
 - Federation registry peering implementation.
 - Real mDNS/libp2p transport.
-- Policy-engine standalone service implementation under `services/policy-engine/`; current implementation is the `@fides/policy` package and `agentd` endpoint.
 - Platform API implementation under `services/platform-api/`.
 
 ## Remaining Blockers for a Production FIDES v2
 
-1. Durable trust-fabric state: registry, evidence, revocation, incidents, sessions, and nonce replay protection need real storage contracts.
+1. Durable trust-fabric state: registry, evidence, revocation, and incidents need real storage contracts; sessions now have a file-backed local store but not a production database adapter.
 2. Production attestation providers: the TEE/build/package/domain/passkey providers are interfaces or missing, not production-backed.
 3. Federation semantics: registry peering, revocation propagation, conflict handling, and trust-anchor governance need implementation.
-4. Authority separation hardening: identity, trust score, and policy are separated conceptually, but invocation authorization needs a stronger end-to-end protocol test.
-5. Service packaging: `services/platform-api` and `services/policy-engine` remain placeholders while the working logic lives in packages and `agentd`.
+4. Authority separation hardening: identity, trust score, and policy are separated conceptually, but remote invocation execution remains adapter-ready rather than implemented.
+5. Service packaging: `services/platform-api` remains a placeholder while policy-engine now has a standalone service route.
 
 ## Next Implementation Slice
 
-1. Add durable nonce/session storage and replay rejection for `DelegationToken` and `SessionGrant`.
-2. Promote revocation/incidents from core records into `agentd` and trust-graph APIs.
-3. Add a real `PolicyEngine` service or remove the placeholder service from the public package map.
+1. Add production storage adapters for registry, evidence, revocation, incidents, and session state.
+2. Promote revocation/incidents into trust-graph APIs and propagation semantics.
+3. Add production attestation providers for Nitro, SGX, SEV, container image, reproducible build, GitHub, email, package registry, and passkeys.
 4. Implement a domain verification provider using DNS TXT records.
-5. Add one full demo that starts discovery, trust-graph, registry, relay, and agentd, then performs identity -> card -> delegation -> policy -> evidence -> revocation.
+5. Extend the authority path demo into a multi-process demo that starts discovery, trust-graph, registry, relay, policy-engine, and agentd.

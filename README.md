@@ -188,7 +188,7 @@ const decision = await evaluateGuard({
 | `@fides/relay-service` | Message relay for agents behind NAT/firewalls |
 | `@fides/agentd` | Agent daemon for lifecycle management and local policy enforcement |
 | `@fides/platform-api` | Platform REST/gRPC API (stub) |
-| `@fides/policy-engine` | Standalone policy evaluation service (stub) |
+| `@fides/policy-engine` | Standalone policy evaluation service |
 
 ---
 
@@ -214,7 +214,7 @@ fides/
 │   ├── relay/             # Message relay service
 │   ├── agentd/            # Agent daemon
 │   ├── platform-api/      # Platform API (stub)
-│   └── policy-engine/     # Policy service (stub)
+│   └── policy-engine/     # Policy evaluation service
 ├── apps/
 │   └── web/               # Web dashboard
 ├── tests/
@@ -255,16 +255,20 @@ pnpm build
 | `pnpm typecheck` | Type-check TypeScript |
 | `pnpm dev` | Start services in watch mode |
 | `pnpm clean` | Clean build artifacts |
-| `pnpm demo` | Run the full v2 end-to-end demo |
+| `pnpm demo` | Run the primitive-level v2 demo |
+| `pnpm demo:authority` | Run the authority path demo through service routes |
 
 ### Running the Demo
 
 ```bash
 pnpm build
 pnpm demo
+pnpm demo:authority
 ```
 
 The demo exercises all 9 subsystems: identity creation, AgentCard validation, risk classification, delegation tokens, policy evaluation, evidence ledger, runtime attestation, kill switch, and guard decisions.
+
+The authority path demo additionally exercises the service route path: AgentCard registration, standalone policy evaluation, delegated session creation, nonce replay rejection, authorization evidence append, session revocation, and agent revocation denial.
 
 ---
 

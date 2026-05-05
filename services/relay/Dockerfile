@@ -35,6 +35,7 @@ COPY --from=build /app/packages/sdk/package.json ./packages/sdk/
 COPY --from=build /app/services/relay/dist ./services/relay/dist
 COPY --from=build /app/services/relay/package.json ./services/relay/
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/sdk/node_modules ./packages/sdk/node_modules
 COPY --from=deps /app/services/relay/node_modules ./services/relay/node_modules
 
 USER fides

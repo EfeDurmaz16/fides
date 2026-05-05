@@ -24,6 +24,7 @@ tags:
   - name: Trust
   - name: Policy
   - name: Evidence
+  - name: Authority
   - name: Attestation
   - name: Kill Switch
 
@@ -193,6 +194,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/EvidenceVerificationResponse"
 
+  /v1/authority/propagations/pending:
+    get:
+      operationId: listPendingAuthorityPropagations
+      tags: [Authority]
+      summary: List due authority propagation retries
+      description: |
+        Returns failed revocation and incident propagation attempts that are due
+        for retry against the trust-graph service.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 25
+      responses:
+        "200":
+          description: Pending propagation records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorityPropagationListResponse"
+
+  /v1/authority/propagations/retry:
+    post:
+      operationId: retryAuthorityPropagations
+      tags: [Authority]
+      summary: Retry due authority propagations
+      description: |
+        Replays due revocation and incident propagation records to trust-graph,
+        updates outbox status, and appends local evidence for each attempt.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthorityPropagationRetryRequest"
+      responses:
+        "200":
+          description: Retry summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorityPropagationRetryResponse"
+
   /v1/attest:
     post:
       operationId: createAttestation
@@ -331,6 +378,17 @@ components:
             registry:
               type: string
               enum: [connected, unreachable]
+            authorityStore:
+              type: string
+              enum: [ready, unavailable]
+        authorityStore:
+          type: object
+          properties:
+            kind:
+              type: string
+              enum: [memory, file, postgres]
+            detail:
+              type: string
 
     IdentityResolutionResponse:
       type: object
@@ -528,6 +586,100 @@ components:
           type: string
         signature:
           type: string
+
+    AuthorityPropagationRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        actor:
+          type: string
+        recordType:
+          type: string
+          enum: [revocation, incident]
+        recordId:
+          type: string
+        target:
+          type: string
+          example: trust-graph
+        path:
+          type: string
+          example: /v1/revocations
+        body:
+          type: object
+        status:
+          type: string
+          enum: [pending, confirmed, failed]
+        attempts:
+          type: integer
+        maxAttempts:
+          type: integer
+        nextAttemptAt:
+          type: string
+          format: date-time
+        lastAttemptAt:
+          type: string
+          format: date-time
+        lastStatus:
+          type: integer
+        lastError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AuthorityPropagationListResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        propagations:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthorityPropagationRecord"
+
+    AuthorityPropagationRetryRequest:
+      type: object
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          default: 25
+
+    AuthorityPropagationRetryResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ok:
+          type: boolean
+        status:
+          type: integer
+        attempts:
+          type: integer
+        outboxStatus:
+          type: string
+          enum: [pending, confirmed, failed]
+        nextAttemptAt:
+          type: string
+          format: date-time
+        error:
+          type: string
+
+    AuthorityPropagationRetryResponse:
+      type: object
+      properties:
+        attempted:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthorityPropagationRetryResult"
 
     AttestationRequest:
       type: object

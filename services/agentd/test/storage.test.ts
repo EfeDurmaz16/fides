@@ -73,6 +73,24 @@ describe('agentd authority stores', () => {
       impact: { trustPenalty: 0.35, reputationPenalty: 0.7, capabilitiesRevoked: ['payments.execute'] },
       signature: 'test',
     })
+    await store.enqueuePropagation({
+      id: 'prop-1',
+      actor: grant.token.delegatee,
+      recordType: 'revocation',
+      recordId: 'rev-1',
+      target: 'trust-graph',
+      path: '/v1/revocations',
+      body: { did: grant.token.delegatee },
+      status: 'pending',
+      attempts: 1,
+      maxAttempts: 3,
+      nextAttemptAt: new Date().toISOString(),
+      lastAttemptAt: new Date().toISOString(),
+      lastStatus: 0,
+      lastError: 'unavailable',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
 
     const reopened = new FileAuthorityStore(join(tempDirs[0]!, 'authority.json'))
     expect(await reopened.hasNonce(grant.token.nonce)).toBe(true)
@@ -80,6 +98,14 @@ describe('agentd authority stores', () => {
     expect((await reopened.getEvidenceChain(grant.token.delegatee))?.events).toHaveLength(1)
     expect((await reopened.getRevocation(grant.token.delegatee))?.reason).toBe('test')
     expect(await reopened.listIncidents(grant.token.delegatee)).toHaveLength(1)
+    expect(await reopened.listPendingPropagations()).toHaveLength(1)
+    const updated = await reopened.updatePropagationAttempt('prop-1', {
+      ok: true,
+      status: 201,
+      attemptedAt: new Date().toISOString(),
+    })
+    expect(updated?.status).toBe('confirmed')
+    expect(await reopened.listPendingPropagations()).toHaveLength(0)
   })
 
   it('revokes sessions consistently in memory', async () => {

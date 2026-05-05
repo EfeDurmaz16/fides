@@ -510,11 +510,33 @@ describe('Agentd Service Routes', () => {
       expect(revoke.propagation.ok).toBe(false)
       expect(revoke.propagation.target).toBe('trust-graph')
       expect(revoke.propagation.error).toContain('trust graph unavailable')
+      expect(revoke.propagation.queued).toBe(true)
+      expect(revoke.propagation.outboxId).toBeDefined()
+
+      const pendingRes = await app.request('/v1/authority/propagations/pending?limit=10')
+      const pending = await pendingRes.json()
+      expect(pending.propagations.some((record: any) => record.id === revoke.propagation.outboxId)).toBe(true)
+
+      mockFetch.mockResolvedValueOnce(createMockResponse({ id: 'trust-graph-revocation' }, 201))
+      const retryRes = await app.request('/v1/authority/propagations/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 10 }),
+      })
+      const retry = await retryRes.json()
+      const retried = retry.results.find((record: any) => record.id === revoke.propagation.outboxId)
+      expect(retried.ok).toBe(true)
+      expect(retried.outboxStatus).toBe('confirmed')
+
+      const clearedRes = await app.request('/v1/authority/propagations/pending?limit=10')
+      const cleared = await clearedRes.json()
+      expect(cleared.propagations.some((record: any) => record.id === revoke.propagation.outboxId)).toBe(false)
 
       const evidenceRes = await app.request(`/v1/evidence/${encodeURIComponent(did)}`)
       const evidence = await evidenceRes.json()
       expect(evidence.valid).toBe(true)
-      expect(evidence.events.at(-1).action).toBe('authority.revocation.propagation.failed')
+      expect(evidence.events.map((event: any) => event.action)).toContain('authority.revocation.propagation.failed')
+      expect(evidence.events.at(-1).action).toBe('authority.revocation.propagation.confirmed')
     })
 
     it('records incidents and uses their impact in authorization', async () => {

@@ -9,8 +9,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fides/core": "workspace:*",
     "@fides/sdk": "workspace:*",
-    "@fides/shared": "workspace:*"
+    "@fides/shared": "workspace:*",
+    "@noble/ed25519": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

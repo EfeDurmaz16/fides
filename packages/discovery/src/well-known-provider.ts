@@ -4,19 +4,25 @@ import { DiscoveryProvider } from './provider.js'
 /**
  * WellKnownDiscoveryProvider resolves AgentCards via HTTP .well-known endpoints.
  *
- * Attempts to fetch:
- *   https://<host>/.well-known/fides.json
- *   https://<host>/.well-known/agent.json
+ * Supports two DID formats:
+ * - did:web:example.com:agent:alice → https://example.com/.well-known/fides.json
+ * - did:fides:alice → requires a domain mapping (provided via constructor)
  */
 export class WellKnownDiscoveryProvider implements DiscoveryProvider {
   readonly name = 'well-known'
+  private domainMap: Map<string, string>
 
-  constructor(private options?: { timeoutMs?: number }) {}
+  constructor(
+    private options?: {
+      timeoutMs?: number
+      /** Map of DIDs to domains for did:fides: style DIDs */
+      domainMap?: Map<string, string>
+    }
+  ) {
+    this.domainMap = options?.domainMap ?? new Map()
+  }
 
   async resolve(did: string): Promise<AgentCard | null> {
-    // Extract host from DID metadata or use a resolver mapping
-    // For now, this is a simplified implementation that expects
-    // the DID to be resolvable to a domain.
     const domain = this.extractDomainFromDid(did)
     if (!domain) return null
 
@@ -38,7 +44,6 @@ export class WellKnownDiscoveryProvider implements DiscoveryProvider {
         if (response.ok) {
           const data = await response.json()
           if (data && typeof data === 'object') {
-            // Validate that the returned card matches the requested DID
             if ('identity' in data && data.identity?.did === did) {
               return data as AgentCard
             }
@@ -55,11 +60,34 @@ export class WellKnownDiscoveryProvider implements DiscoveryProvider {
     return null
   }
 
+  /**
+   * Register a domain mapping for a DID.
+   * Useful for did:fides: style DIDs that don't embed domain info.
+   */
+  registerDomain(did: string, domain: string): void {
+    this.domainMap.set(did, domain)
+  }
+
   private extractDomainFromDid(did: string): string | null {
-    // Simple heuristic: if the DID has an associated domain record,
-    // we would look it up. For this reference implementation,
-    // we expect a DNS TXT record or a local mapping.
-    // Stub: return null to indicate no domain is known.
+    // Check explicit domain mapping first
+    if (this.domainMap.has(did)) {
+      return this.domainMap.get(did) ?? null
+    }
+
+    // Support did:web:domain:path format
+    if (did.startsWith('did:web:')) {
+      const parts = did.split(':')
+      if (parts.length >= 3) {
+        return parts[2]
+      }
+    }
+
+    // Support did:fides:did:domain:example.com format
+    const domainMatch = did.match(/did:fides:.*:domain:([^:]+)/)
+    if (domainMatch) {
+      return domainMatch[1]
+    }
+
     return null
   }
 }

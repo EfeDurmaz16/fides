@@ -31,6 +31,7 @@ RUN cd services/registry && pnpm build
 # Stage 3: Runtime
 FROM node:22-alpine AS runtime
 RUN addgroup -g 1001 -S fides && adduser -S fides -u 1001
+RUN mkdir -p /home/fides/.fides/registry && chown -R fides:fides /home/fides/.fides
 WORKDIR /app
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/core/package.json ./packages/core/

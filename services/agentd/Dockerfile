@@ -65,6 +65,13 @@ COPY --from=build /app/packages/sdk/package.json ./packages/sdk/
 COPY --from=build /app/services/agentd/dist ./services/agentd/dist
 COPY --from=build /app/services/agentd/package.json ./services/agentd/
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/core/node_modules ./packages/core/node_modules
+COPY --from=deps /app/packages/evidence/node_modules ./packages/evidence/node_modules
+COPY --from=deps /app/packages/guard/node_modules ./packages/guard/node_modules
+COPY --from=deps /app/packages/policy/node_modules ./packages/policy/node_modules
+COPY --from=deps /app/packages/runtime/node_modules ./packages/runtime/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=deps /app/packages/sdk/node_modules ./packages/sdk/node_modules
 COPY --from=deps /app/services/agentd/node_modules ./services/agentd/node_modules
 
 USER fides

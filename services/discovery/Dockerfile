@@ -35,6 +35,8 @@ COPY --from=build /app/packages/sdk/package.json ./packages/sdk/
 COPY --from=build /app/services/discovery/dist ./services/discovery/dist
 COPY --from=build /app/services/discovery/package.json ./services/discovery/
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=deps /app/packages/sdk/node_modules ./packages/sdk/node_modules
 COPY --from=deps /app/services/discovery/node_modules ./services/discovery/node_modules
 
 USER fides

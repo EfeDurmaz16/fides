@@ -55,7 +55,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [discovery, trust-graph]
+        service:
+          - discovery
+          - trust-graph
+          - registry
+          - relay
+          - agentd
 
     steps:
       - uses: actions/checkout@v4

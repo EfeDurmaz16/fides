@@ -20,3 +20,36 @@ services:
       - /app/node_modules
     environment:
       NODE_ENV: development
+
+  registry:
+    build: !reset null
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm --filter registry-service dev"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+
+  relay:
+    build: !reset null
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm --filter relay-service dev"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+
+  agentd:
+    build: !reset null
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm --filter agentd dev"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development

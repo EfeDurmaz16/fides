@@ -92,6 +92,10 @@ services:
       - "7345:7345"
     environment:
       AGENTD_PORT: "7345"
+      AGENTD_AUTHORITY_STORE: ${AGENTD_AUTHORITY_STORE:-postgres}
+      AGENTD_DATABASE_URL: ${AGENTD_DATABASE_URL:-postgresql://${POSTGRES_USER:-fides}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-fides}}
+      AGENTD_DB_AUTO_MIGRATE: ${AGENTD_DB_AUTO_MIGRATE:-true}
+      AGENTD_DB_POOL_MAX: ${AGENTD_DB_POOL_MAX:-10}
       DISCOVERY_URL: http://discovery:3100
       TRUST_GRAPH_URL: http://trust-graph:3200
       REGISTRY_URL: http://registry:7346
@@ -101,6 +105,8 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
     depends_on:
+      postgres:
+        condition: service_healthy
       discovery:
         condition: service_started
       trust-graph:

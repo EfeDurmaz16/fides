@@ -209,7 +209,8 @@ app.post('/v1/sessions', async (c) => {
   const signatureErrors = await verifyOptionalSignature(
     body.delegatorPublicKey,
     async (publicKey) => verifyDelegationTokenSignature(body.token as DelegationToken, publicKey),
-    'DelegationToken'
+    'DelegationToken',
+    authoritySignatureVerificationRequired()
   )
   if (signatureErrors.length > 0) {
     return c.json({ authorized: false, errors: signatureErrors }, 409)
@@ -258,7 +259,8 @@ app.post('/v1/revocations', async (c) => {
   const signatureError = await verifyOptionalSignature(
     body.revokerPublicKey,
     async (publicKey) => verifyRevocationRecord(record, publicKey),
-    'revocation'
+    'revocation',
+    authoritySignatureVerificationRequired()
   )
   if (signatureError.length > 0) {
     return c.json({ error: signatureError.join('; ') }, 400)
@@ -289,7 +291,8 @@ app.post('/v1/incidents', async (c) => {
   const signatureError = await verifyOptionalSignature(
     body.reporterPublicKey,
     async (publicKey) => verifyIncidentRecord(record, publicKey),
-    'incident'
+    'incident',
+    authoritySignatureVerificationRequired()
   )
   if (signatureError.length > 0) {
     return c.json({ error: signatureError.join('; ') }, 400)
@@ -677,9 +680,12 @@ function parsePositiveInt(value: unknown, fallback: number): number {
 async function verifyOptionalSignature(
   publicKeyInput: unknown,
   verify: (publicKey: Uint8Array) => Promise<boolean>,
-  label: string
+  label: string,
+  required = false
 ): Promise<string[]> {
-  if (publicKeyInput === undefined || publicKeyInput === null || publicKeyInput === '') return []
+  if (publicKeyInput === undefined || publicKeyInput === null || publicKeyInput === '') {
+    return required ? [`${label} public key is required`] : []
+  }
 
   const publicKey = parsePublicKey(publicKeyInput)
   if (!publicKey) return [`${label} public key must be a 32-byte hex string or byte array`]
@@ -703,6 +709,14 @@ function parsePublicKey(input: unknown): Uint8Array | null {
 
 function isByte(value: unknown): value is number {
   return Number.isInteger(value) && typeof value === 'number' && value >= 0 && value <= 255
+}
+
+function authoritySignatureVerificationRequired(): boolean {
+  return parseBooleanEnv(process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION)
+}
+
+function parseBooleanEnv(value: string | undefined): boolean {
+  return value === '1' || value?.toLowerCase() === 'true'
 }
 
 // ─── Runtime Attestation (local) ──────────────────────────────────

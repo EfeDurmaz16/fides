@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const ORIGINAL_SERVICE_API_KEY = process.env.SERVICE_API_KEY
 const ORIGINAL_NODE_ENV = process.env.NODE_ENV
+const ORIGINAL_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION = process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION
 
 beforeEach(() => {
   delete process.env.SERVICE_API_KEY
+  delete process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION
   process.env.NODE_ENV = 'test'
   vi.restoreAllMocks()
 })
@@ -19,6 +21,11 @@ afterEach(() => {
     process.env.NODE_ENV = ORIGINAL_NODE_ENV
   } else {
     delete process.env.NODE_ENV
+  }
+  if (ORIGINAL_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION) {
+    process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION = ORIGINAL_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION
+  } else {
+    delete process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION
   }
 })
 
@@ -459,6 +466,25 @@ describe('Agentd Service Routes', () => {
       expect(data.errors).toContain('DelegationToken signature verification failed')
     })
 
+    it('requires a delegator public key when signature verification is mandatory', async () => {
+      process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION = 'true'
+      const { token } = await signedDelegationToken(`${TEST_DID}:required-signature-session`)
+
+      const res = await app.request('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          capabilityId: 'payments.execute',
+          audience: 'agentd',
+        }),
+      })
+
+      expect(res.status).toBe(409)
+      const data = await res.json()
+      expect(data.errors).toContain('DelegationToken public key is required')
+    })
+
     it('rejects sessions for missing capabilities and audience mismatches', async () => {
       const missingCapability = await app.request('/v1/sessions', {
         method: 'POST',
@@ -601,6 +627,22 @@ describe('Agentd Service Routes', () => {
       expect(data.error).toContain('revocation signature verification failed')
     })
 
+    it('requires a revoker public key when signature verification is mandatory', async () => {
+      process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION = 'true'
+      const did = `did:fides:required-revocation-${Date.now()}`
+      const record = await signedRevocationRecord(did)
+
+      const res = await app.request('/v1/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record }),
+      })
+
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('revocation public key is required')
+    })
+
     it('audits failed revocation propagation to local evidence', async () => {
       const did = `did:fides:revocation-audit-${Date.now()}`
       mockFetch.mockRejectedValueOnce(new Error('trust graph unavailable'))
@@ -702,6 +744,22 @@ describe('Agentd Service Routes', () => {
       expect(res.status).toBe(400)
       const data = await res.json()
       expect(data.error).toContain('incident signature verification failed')
+    })
+
+    it('requires a reporter public key when signature verification is mandatory', async () => {
+      process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION = 'true'
+      const did = `did:fides:required-incident-${Date.now()}`
+      const record = await signedIncidentRecord(did)
+
+      const res = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record }),
+      })
+
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('incident public key is required')
     })
 
     it('rejects unsigned revocation payloads', async () => {

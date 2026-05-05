@@ -220,6 +220,7 @@ pnpm --filter @fides/cli fides session create --agentd-url https://agentd.exampl
 ```
 
 When `--delegator-public-key` is provided, `agentd` verifies the DelegationToken signature before creating the session.
+Set `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true` to make this verification fail-closed for session, revocation, and incident writes.
 
 ---
 

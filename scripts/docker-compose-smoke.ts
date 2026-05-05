@@ -12,6 +12,8 @@ const services = {
   agentd: 'http://127.0.0.1:7345',
 } as const
 
+const serviceApiKey = process.env.SERVICE_API_KEY
+
 async function main() {
   console.log('FIDES docker compose smoke')
 
@@ -138,9 +140,14 @@ async function waitForHealth(name: string, url: string): Promise<void> {
 }
 
 async function postJson(url: string, body: unknown): Promise<Response> {
+  const headers = new Headers({ 'Content-Type': 'application/json' })
+  if (serviceApiKey) {
+    headers.set('X-API-Key', serviceApiKey)
+  }
+
   return fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   })
 }

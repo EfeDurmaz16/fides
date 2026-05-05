@@ -81,6 +81,9 @@ jobs:
   docker-smoke:
     runs-on: ubuntu-latest
     needs: [test, docker-build]
+    env:
+      POSTGRES_PASSWORD: fides
+      SERVICE_API_KEY: fides-smoke-key
 
     steps:
       - uses: actions/checkout@v4
@@ -101,20 +104,20 @@ jobs:
           pnpm --filter @fides/core build
 
       - name: Build compose images
-        run: POSTGRES_PASSWORD=fides docker compose build
+        run: docker compose build
 
       - name: Start compose services
-        run: POSTGRES_PASSWORD=fides docker compose up -d postgres discovery trust-graph registry relay agentd
+        run: docker compose up -d postgres discovery trust-graph registry relay agentd
 
       - name: Run docker smoke
-        run: POSTGRES_PASSWORD=fides pnpm smoke:docker
+        run: pnpm smoke:docker
 
       - name: Compose diagnostics
         if: always()
         run: |
-          POSTGRES_PASSWORD=fides docker compose ps
-          POSTGRES_PASSWORD=fides docker compose logs --no-color --tail=200
+          docker compose ps
+          docker compose logs --no-color --tail=200
 
       - name: Stop compose services
         if: always()
-        run: POSTGRES_PASSWORD=fides docker compose down -v --remove-orphans
+        run: docker compose down -v --remove-orphans

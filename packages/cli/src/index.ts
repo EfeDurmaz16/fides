@@ -12,6 +12,10 @@ import { createPolicyCommand } from './commands/policy.js';
 import { createRuntimeCommand } from './commands/runtime.js';
 import { createKillswitchCommand } from './commands/killswitch.js';
 import { createDaemonCommand } from './commands/daemon.js';
+import { createDelegateCommand } from './commands/delegate.js';
+import { createSessionCommand } from './commands/session.js';
+import { createRevokeCommand } from './commands/revoke.js';
+import { createIncidentCommand } from './commands/incident.js';
 
 const program = new Command();
 
@@ -32,5 +36,9 @@ program.addCommand(createPolicyCommand());
 program.addCommand(createRuntimeCommand());
 program.addCommand(createKillswitchCommand());
 program.addCommand(createDaemonCommand());
+program.addCommand(createDelegateCommand());
+program.addCommand(createSessionCommand());
+program.addCommand(createRevokeCommand());
+program.addCommand(createIncidentCommand());
 
 program.parse();

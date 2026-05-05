@@ -10,7 +10,7 @@ import { serve } from '@hono/node-server'
 import { cors } from 'hono/cors'
 import { bodyLimit } from 'hono/body-limit'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
-import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, type EvidenceChain } from '@fides/evidence'
+import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
 import { createTrustContext, evaluateGuard } from '@fides/guard'
@@ -20,13 +20,9 @@ import {
   authorizeSessionInvocation,
   createIncidentRecord,
   createRevocationRecord,
-  FileSessionStore,
-  InMemorySessionStore,
   type DelegationToken,
-  type IncidentRecord,
-  type RevocationRecord,
-  type SessionStore,
 } from '@fides/core'
+import { createAuthorityStore } from './storage.js'
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
@@ -41,12 +37,7 @@ const REGISTRY_URL = process.env.REGISTRY_URL || 'http://localhost:7346'
 
 const teeProvider = new MockTEEProvider()
 const killSwitch = new InMemoryKillSwitch()
-const evidenceChains = new Map<string, EvidenceChain>()
-const sessionStore: SessionStore = process.env.NODE_ENV === 'test'
-  ? new InMemorySessionStore()
-  : new FileSessionStore(process.env.AGENTD_SESSION_STORE_PATH)
-const revocations = new Map<string, RevocationRecord>()
-const incidentsByDid = new Map<string, IncidentRecord[]>()
+const authorityStore = createAuthorityStore()
 
 const startTime = Date.now()
 
@@ -200,7 +191,7 @@ app.post('/v1/sessions', async (c) => {
 
   const result = await authorizeDelegation({
     token: body.token as DelegationToken,
-    store: sessionStore,
+    store: authorityStore,
     capabilityId: body.capabilityId,
     audience: body.audience,
     boundTo: body.boundTo,
@@ -215,7 +206,7 @@ app.post('/v1/sessions', async (c) => {
 })
 
 app.get('/v1/sessions/:id', async (c) => {
-  const session = await sessionStore.getSession(c.req.param('id'))
+  const session = await authorityStore.getSession(c.req.param('id'))
   if (!session) {
     return c.json({ error: 'session not found' }, 404)
   }
@@ -224,7 +215,7 @@ app.get('/v1/sessions/:id', async (c) => {
 
 app.post('/v1/sessions/:id/revoke', async (c) => {
   const body = await c.req.json().catch(() => ({}))
-  const session = await sessionStore.revokeSession(c.req.param('id'), body.reason)
+  const session = await authorityStore.revokeSession(c.req.param('id'), body.reason)
   if (!session) {
     return c.json({ error: 'session not found' }, 404)
   }
@@ -246,14 +237,14 @@ app.post('/v1/revocations', async (c) => {
     }),
     signature: body.signature ?? 'local-agentd',
   }
-  revocations.set(record.did, record)
+  await authorityStore.putRevocation(record)
 
   return c.json({ revoked: true, record }, 201)
 })
 
-app.get('/v1/revocations/:did', (c) => {
+app.get('/v1/revocations/:did', async (c) => {
   const did = c.req.param('did')
-  const record = revocations.get(did)
+  const record = await authorityStore.getRevocation(did)
   if (!record) {
     return c.json({ did, revoked: false })
   }
@@ -270,16 +261,15 @@ app.post('/v1/incidents', async (c) => {
     ...createIncidentRecord(body),
     signature: body.signature ?? 'local-agentd',
   }
-  const incidents = incidentsByDid.get(record.actor) ?? []
-  incidents.push(record)
-  incidentsByDid.set(record.actor, incidents)
+  await authorityStore.putIncident(record)
+  const incidents = await authorityStore.listIncidents(record.actor)
 
   return c.json({ recorded: true, record, impact: aggregateIncidentImpact(incidents) }, 201)
 })
 
-app.get('/v1/incidents/:did', (c) => {
+app.get('/v1/incidents/:did', async (c) => {
   const did = c.req.param('did')
-  const incidents = incidentsByDid.get(did) ?? []
+  const incidents = await authorityStore.listIncidents(did)
   return c.json({ did, incidents, impact: aggregateIncidentImpact(incidents) })
 })
 
@@ -293,14 +283,14 @@ app.post('/v1/authorize', async (c) => {
   const sessionResult = body.sessionId
     ? await authorizeSessionInvocation({
       sessionId: body.sessionId,
-      store: sessionStore,
+      store: authorityStore,
       capabilityId: body.capabilityId,
       audience: body.audience,
     })
     : null
 
   if (sessionResult && !sessionResult.ok) {
-    appendLocalEvidence(body.agentDid, 'authorization.denied', {
+    await appendLocalEvidence(body.agentDid, 'authorization.denied', {
       capabilityId: body.capabilityId,
       errors: sessionResult.errors,
       source: 'session',
@@ -308,8 +298,8 @@ app.post('/v1/authorize', async (c) => {
     return c.json({ decision: 'deny', explanation: sessionResult.errors.join('; '), errors: sessionResult.errors }, 403)
   }
 
-  const activeRevocation = revocations.get(body.agentDid)
-  const incidents = incidentsByDid.get(body.agentDid) ?? []
+  const activeRevocation = await authorityStore.getRevocation(body.agentDid)
+  const incidents = await authorityStore.listIncidents(body.agentDid)
   const impact = aggregateIncidentImpact(incidents)
   const policy = (body.policy ?? { id: 'default-agentd-policy', version: '1.0.0', rules: [], defaultAction: 'allow' }) as PolicyBundle
   const attestation = body.attestationValid
@@ -320,7 +310,7 @@ app.post('/v1/authorize', async (c) => {
     reputationScore: clampScore((body.reputationScore ?? 0.9) - impact.totalReputationPenalty),
     capabilityScore: body.capabilityScore,
     attestation,
-    evidenceChain: evidenceChains.get(body.agentDid) ?? null,
+    evidenceChain: await authorityStore.getEvidenceChain(body.agentDid),
     killSwitchEngaged: killSwitch.isEngaged({ type: 'global' }) || killSwitch.isEngaged({ type: 'agent', did: body.agentDid }) || killSwitch.isEngaged({ type: 'capability', id: body.capabilityId }),
     recentIncidents: impact.incidentCount,
     agentRevoked: Boolean(activeRevocation),
@@ -340,7 +330,7 @@ app.post('/v1/authorize', async (c) => {
     trust,
   })
 
-  appendLocalEvidence(body.agentDid, `authorization.${decision.decision}`, {
+  await appendLocalEvidence(body.agentDid, `authorization.${decision.decision}`, {
     capabilityId: body.capabilityId,
     sessionId: body.sessionId,
     explanation: decision.explanation,
@@ -363,7 +353,7 @@ app.post('/v1/evidence', async (c) => {
     return c.json({ error: 'actor or did is required' }, 400)
   }
 
-  let chain = evidenceChains.get(did) || createEvidenceChain()
+  let chain = await authorityStore.getEvidenceChain(did) || createEvidenceChain()
   chain = appendEvidenceEvent(chain, {
     id: body.id || crypto.randomUUID(),
     type: body.type || 'custom',
@@ -375,13 +365,13 @@ app.post('/v1/evidence', async (c) => {
     privacy: body.privacy || { level: 'public' },
   }, body.signature || 'local')
 
-  evidenceChains.set(did, chain)
+  await authorityStore.setEvidenceChain(did, chain)
   return c.json({ accepted: true, id: chain.events[chain.events.length - 1].hash }, 201)
 })
 
-app.get('/v1/evidence/:did', (c) => {
+app.get('/v1/evidence/:did', async (c) => {
   const did = c.req.param('did')
-  const chain = evidenceChains.get(did)
+  const chain = await authorityStore.getEvidenceChain(did)
   if (!chain) {
     return c.json({ did, events: [], valid: true })
   }
@@ -389,8 +379,8 @@ app.get('/v1/evidence/:did', (c) => {
   return c.json({ did, events: chain.events, count: chain.events.length, valid, merkleRoot: chain.merkleRoot })
 })
 
-function appendLocalEvidence(actor: string, action: string, payload: Record<string, unknown>) {
-  let chain = evidenceChains.get(actor) || createEvidenceChain()
+async function appendLocalEvidence(actor: string, action: string, payload: Record<string, unknown>) {
+  let chain = await authorityStore.getEvidenceChain(actor) || createEvidenceChain()
   chain = appendEvidenceEvent(chain, {
     id: crypto.randomUUID(),
     type: 'authorization',
@@ -400,7 +390,7 @@ function appendLocalEvidence(actor: string, action: string, payload: Record<stri
     payload,
     privacy: { level: 'private' },
   }, 'local-agentd')
-  evidenceChains.set(actor, chain)
+  await authorityStore.setEvidenceChain(actor, chain)
 }
 
 function redactSessionKey<T extends { sessionKey: string }>(session: T): Omit<T, 'sessionKey'> & { sessionKey: string } {

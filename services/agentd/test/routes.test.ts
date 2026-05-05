@@ -457,6 +457,7 @@ describe('Agentd Service Routes', () => {
 
     it('records revocations and denies future authorization', async () => {
       const did = `did:fides:revoked-${Date.now()}`
+      mockFetch.mockResolvedValueOnce(createMockResponse({ id: 'trust-graph-revocation' }, 201))
       const revokeRes = await app.request('/v1/revocations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -467,6 +468,7 @@ describe('Agentd Service Routes', () => {
         }),
       })
       expect(revokeRes.status).toBe(201)
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:3200/v1/revocations', expect.objectContaining({ method: 'POST' }))
 
       const statusRes = await app.request(`/v1/revocations/${encodeURIComponent(did)}`)
       const status = await statusRes.json()
@@ -488,6 +490,7 @@ describe('Agentd Service Routes', () => {
 
     it('records incidents and uses their impact in authorization', async () => {
       const did = `did:fides:incident-${Date.now()}`
+      mockFetch.mockResolvedValueOnce(createMockResponse({ id: 'trust-graph-incident' }, 201))
       const incidentRes = await app.request('/v1/incidents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -500,6 +503,7 @@ describe('Agentd Service Routes', () => {
         }),
       })
       expect(incidentRes.status).toBe(201)
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:3200/v1/incidents', expect.objectContaining({ method: 'POST' }))
 
       const listRes = await app.request(`/v1/incidents/${encodeURIComponent(did)}`)
       const list = await listRes.json()

@@ -1,11 +1,11 @@
 import { eq, and, isNull, or, gt } from 'drizzle-orm'
 import { TrustError, MIN_TRUST_LEVEL, MAX_TRUST_LEVEL } from '@fides/shared'
 import type { DbClient } from '../db/client.js'
-import { identities, trustEdges, reputationScores } from '../db/schema.js'
+import { identities, trustEdges, reputationScores, revocationRecords } from '../db/schema.js'
 import { findTrustPath } from './graph.js'
 import { computeReputationScore } from './scoring.js'
 import { computeCapabilityScore, recordCapabilityInvocation, recordIncident, getIncidents } from './capability-scoring.js'
-import type { CreateTrustRequest, TrustPathResult } from '../types.js'
+import type { CreateTrustRequest, RevocationRecordInput, TrustPathResult } from '../types.js'
 import type { IncidentRecordInput, CapabilityScoreResult } from './capability-scoring.js'
 
 const IDENTITY_CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
@@ -344,6 +344,46 @@ export class TrustService {
    */
   async recordIncident(db: DbClient, input: IncidentRecordInput): Promise<string> {
     return recordIncident(db, input)
+  }
+
+  /**
+   * Record an authority revocation and revoke active trust edges touching the DID.
+   */
+  async recordRevocation(db: DbClient, input: RevocationRecordInput): Promise<{ id: string; revokedEdges: number }> {
+    if (!input.did || !input.reason || !input.revokedBy) {
+      throw new TrustError('did, reason, and revokedBy are required')
+    }
+
+    const now = new Date()
+    const record = input.record ?? {
+      did: input.did,
+      reason: input.reason,
+      revokedBy: input.revokedBy,
+      revokedAt: input.revokedAt ?? now.toISOString(),
+      signature: input.signature ?? '',
+    }
+
+    const result = await db
+      .insert(revocationRecords)
+      .values({
+        did: input.did,
+        reason: input.reason,
+        revokedBy: input.revokedBy,
+        record,
+      })
+      .returning({ id: revocationRecords.id })
+
+    const updateResult = await db
+      .update(trustEdges)
+      .set({ revokedAt: now })
+      .where(or(eq(trustEdges.sourceDid, input.did), eq(trustEdges.targetDid, input.did)))
+
+    await db
+      .update(reputationScores)
+      .set({ lastComputed: new Date(0) })
+      .where(eq(reputationScores.did, input.did))
+
+    return { id: result[0].id, revokedEdges: Array.isArray(updateResult) ? updateResult.length : 0 }
   }
 
   /**

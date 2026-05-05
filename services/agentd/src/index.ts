@@ -238,8 +238,9 @@ app.post('/v1/revocations', async (c) => {
     signature: body.signature ?? 'local-agentd',
   }
   await authorityStore.putRevocation(record)
+  const propagation = await propagateRevocation(record)
 
-  return c.json({ revoked: true, record }, 201)
+  return c.json({ revoked: true, record, propagation }, 201)
 })
 
 app.get('/v1/revocations/:did', async (c) => {
@@ -263,8 +264,9 @@ app.post('/v1/incidents', async (c) => {
   }
   await authorityStore.putIncident(record)
   const incidents = await authorityStore.listIncidents(record.actor)
+  const propagation = await propagateIncident(record)
 
-  return c.json({ recorded: true, record, impact: aggregateIncidentImpact(incidents) }, 201)
+  return c.json({ recorded: true, record, impact: aggregateIncidentImpact(incidents), propagation }, 201)
 })
 
 app.get('/v1/incidents/:did', async (c) => {
@@ -399,6 +401,43 @@ function redactSessionKey<T extends { sessionKey: string }>(session: T): Omit<T,
 
 function clampScore(score: number): number {
   return Math.max(0, Math.min(1, score))
+}
+
+async function propagateRevocation(record: ReturnType<typeof createRevocationRecord> & { signature: string }) {
+  return postToTrustGraph('/v1/revocations', {
+    did: record.did,
+    reason: record.reason,
+    revokedBy: record.revokedBy,
+    revokedAt: record.revokedAt,
+    signature: record.signature,
+    record,
+  })
+}
+
+async function propagateIncident(record: ReturnType<typeof createIncidentRecord> & { signature: string }) {
+  return postToTrustGraph('/v1/incidents', {
+    actorDid: record.actor,
+    type: record.type,
+    severity: record.severity,
+    description: record.description,
+    evidenceRefs: record.evidenceRefs,
+    trustPenalty: record.impact.trustPenalty,
+    reputationPenalty: record.impact.reputationPenalty,
+    capabilitiesRevoked: record.impact.capabilitiesRevoked,
+  })
+}
+
+async function postToTrustGraph(path: string, body: Record<string, unknown>) {
+  try {
+    const resp = await fetch(`${TRUST_GRAPH_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    return { attempted: true, ok: resp.ok, status: resp.status }
+  } catch {
+    return { attempted: true, ok: false, status: 0 }
+  }
 }
 
 // ─── Runtime Attestation (local) ──────────────────────────────────

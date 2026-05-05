@@ -110,3 +110,57 @@ export function validateDelegationToken(token: DelegationToken): { valid: boolea
   if (isDelegationExpired(token)) errors.push('DelegationToken is expired')
   return { valid: errors.length === 0, errors }
 }
+
+export interface RevokedSession extends SessionGrant {
+  revoked: boolean
+  revokedAt: string
+}
+
+export function createSessionGrant(options: {
+  token: DelegationToken
+  boundTo?: string
+  ttlMs?: number
+}): SessionGrant {
+  const privateKey = ed.utils.randomPrivateKey()
+  const ttl = options.ttlMs ?? 3600_000
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + ttl)
+
+  return {
+    id: crypto.randomUUID(),
+    token: options.token,
+    sessionKey: bytesToHex(privateKey),
+    expiresAt: expiresAt.toISOString(),
+    boundTo: options.boundTo,
+  }
+}
+
+export function validateSessionGrant(session: SessionGrant): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+  if (!session.id) errors.push('SessionGrant.id is required')
+  if (!session.token) errors.push('SessionGrant.token is required')
+  if (!session.sessionKey) errors.push('SessionGrant.sessionKey is required')
+  if (!session.expiresAt) errors.push('SessionGrant.expiresAt is required')
+  if (isSessionExpired(session)) errors.push('SessionGrant is expired')
+  if (session.token) {
+    const tokenValidation = validateDelegationToken(session.token)
+    if (!tokenValidation.valid) {
+      errors.push(...tokenValidation.errors.map(e => `SessionGrant.token: ${e}`))
+    }
+  }
+  return { valid: errors.length === 0, errors }
+}
+
+export async function deriveSessionPublicKey(sessionKeyHex: string): Promise<string> {
+  const privateKeyBytes = Uint8Array.from(Buffer.from(sessionKeyHex, 'hex'))
+  const publicKey = await ed.getPublicKeyAsync(privateKeyBytes)
+  return bytesToHex(publicKey)
+}
+
+export function revokeSession(session: SessionGrant): RevokedSession {
+  return {
+    ...session,
+    revoked: true,
+    revokedAt: new Date().toISOString(),
+  }
+}

@@ -5,6 +5,8 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/core/package.json ./packages/core/
 COPY packages/evidence/package.json ./packages/evidence/
+COPY packages/guard/package.json ./packages/guard/
+COPY packages/policy/package.json ./packages/policy/
 COPY packages/runtime/package.json ./packages/runtime/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/sdk/package.json ./packages/sdk/
@@ -18,12 +20,16 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=deps /app/packages/evidence/node_modules ./packages/evidence/node_modules
+COPY --from=deps /app/packages/guard/node_modules ./packages/guard/node_modules
+COPY --from=deps /app/packages/policy/node_modules ./packages/policy/node_modules
 COPY --from=deps /app/packages/runtime/node_modules ./packages/runtime/node_modules
 COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=deps /app/packages/sdk/node_modules ./packages/sdk/node_modules
 COPY --from=deps /app/services/agentd/node_modules ./services/agentd/node_modules
 COPY packages/core/ ./packages/core/
 COPY packages/evidence/ ./packages/evidence/
+COPY packages/guard/ ./packages/guard/
+COPY packages/policy/ ./packages/policy/
 COPY packages/runtime/ ./packages/runtime/
 COPY packages/shared/ ./packages/shared/
 COPY packages/sdk/ ./packages/sdk/
@@ -34,6 +40,8 @@ RUN cd packages/sdk && pnpm build
 RUN cd packages/core && pnpm build
 RUN cd packages/evidence && pnpm build
 RUN cd packages/runtime && pnpm build
+RUN cd packages/policy && pnpm build
+RUN cd packages/guard && pnpm build
 RUN cd services/agentd && pnpm build
 
 # Stage 3: Runtime
@@ -44,6 +52,10 @@ COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/core/package.json ./packages/core/
 COPY --from=build /app/packages/evidence/dist ./packages/evidence/dist
 COPY --from=build /app/packages/evidence/package.json ./packages/evidence/
+COPY --from=build /app/packages/guard/dist ./packages/guard/dist
+COPY --from=build /app/packages/guard/package.json ./packages/guard/
+COPY --from=build /app/packages/policy/dist ./packages/policy/dist
+COPY --from=build /app/packages/policy/package.json ./packages/policy/
 COPY --from=build /app/packages/runtime/dist ./packages/runtime/dist
 COPY --from=build /app/packages/runtime/package.json ./packages/runtime/
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist

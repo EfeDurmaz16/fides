@@ -11,6 +11,7 @@ export function createSessionCommand(): Command {
     .option('--agentd-url <url>', 'agentd base URL', 'http://localhost:7345')
     .option('--token-file <path>', 'DelegationToken JSON file')
     .option('--token-json <json>', 'DelegationToken JSON string')
+    .option('--delegator-public-key <hex>', 'Delegator Ed25519 public key as 32-byte hex')
     .option('--audience <value>', 'Session audience', 'agentd')
     .option('--ttl-ms <ms>', 'Session TTL in milliseconds')
     .option('--json', 'Print JSON only')
@@ -21,6 +22,7 @@ export function createSessionCommand(): Command {
           token,
           capabilityId: options.capability,
           audience: options.audience,
+          ...(options.delegatorPublicKey && { delegatorPublicKey: options.delegatorPublicKey }),
           ...(options.ttlMs && { ttlMs: Number(options.ttlMs) }),
         })
         printResult('Session created:', result, options)
@@ -50,4 +52,3 @@ export function createSessionCommand(): Command {
 
   return cmd
 }
-

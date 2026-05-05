@@ -399,6 +399,51 @@ describe('CLI Commands', () => {
       );
     });
 
+    it('session create should send a delegator public key when provided', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        session: { id: 'sess-1', sessionKey: 'redacted' },
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const token = {
+        id: 'tok-1',
+        delegator: 'did:fides:principal',
+        delegatee: 'did:fides:agent',
+        capabilities: ['payments.execute'],
+        constraints: {},
+        issuedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        nonce: 'nonce-1',
+        audience: ['agentd'],
+        signature: 'sig',
+      };
+      const delegatorPublicKey = '11'.repeat(32);
+
+      const { createSessionCommand } = await import('../src/commands/session.js');
+      const cmd = createSessionCommand();
+
+      await cmd.parseAsync([
+        'create',
+        '--agentd-url',
+        'http://agentd.test',
+        '--capability',
+        'payments.execute',
+        '--token-json',
+        JSON.stringify(token),
+        '--delegator-public-key',
+        delegatorPublicKey,
+        '--json',
+      ], { from: 'user' });
+
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body as string)).toMatchObject({
+        token,
+        capabilityId: 'payments.execute',
+        audience: 'agentd',
+        delegatorPublicKey,
+      });
+    });
+
     it('revoke agent should call agentd revocations', async () => {
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({ recorded: true }), {
         status: 201,

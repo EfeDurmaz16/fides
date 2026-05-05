@@ -7,6 +7,22 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:packages/core
+      '@fides/evidence':
+        specifier: workspace:*
+        version: link:packages/evidence
+      '@fides/guard':
+        specifier: workspace:*
+        version: link:packages/guard
+      '@fides/policy':
+        specifier: workspace:*
+        version: link:packages/policy
+      '@fides/runtime':
+        specifier: workspace:*
+        version: link:packages/runtime
     devDependencies:
       tsx:
         specifier: ^4.21.0
@@ -229,6 +245,9 @@ importers:
       '@fides/evidence':
         specifier: workspace:*
         version: link:../../packages/evidence
+      '@fides/policy':
+        specifier: workspace:*
+        version: link:../../packages/policy
       '@fides/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime

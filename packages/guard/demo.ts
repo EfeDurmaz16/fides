@@ -63,7 +63,7 @@ async function demo() {
     constraints: { maxActions: 10, maxSpend: '10.00', allowedContexts: ['work'] },
     expiresAt: new Date(Date.now() + 3600000).toISOString(),
   })
-  const valid = validateDelegationToken(delegation)
+  const valid = validateDelegationToken({ ...delegation, signature: 'demo-signature' })
   console.log(`  Token: ${delegation.id}`)
   console.log(`  Delegator: ${delegation.delegator} → ${delegation.delegatee}`)
   console.log(`  Valid: ${valid.valid}`)

@@ -190,6 +190,35 @@ describe('Agentd Service Routes', () => {
       expect(data.decision).toBe('allow')
     })
 
+    it('denies when a policy deny rule matches', async () => {
+      const res = await app.request('/v1/policy/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentDid: TEST_DID,
+          capabilityId: 'payments:transfer',
+          policy: {
+            id: 'policy-2',
+            version: '1.0',
+            rules: [
+              {
+                id: 'deny-critical-capability',
+                condition: { operator: 'eq', field: 'capabilityId', value: 'payments:transfer' },
+                action: 'deny',
+                explanation: 'Critical payment transfer requires a separate approval flow',
+              },
+            ],
+            defaultAction: 'allow',
+          },
+          context: {},
+        }),
+      })
+      expect(res.status).toBe(200)
+      const data = await res.json()
+      expect(data.decision).toBe('deny')
+      expect(data.matchedRules).toEqual(['deny-critical-capability'])
+    })
+
     it('returns default allow when no policy provided', async () => {
       const res = await app.request('/v1/policy/evaluate', {
         method: 'POST',

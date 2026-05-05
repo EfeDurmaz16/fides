@@ -20,6 +20,13 @@
     "dev": "turbo run dev --parallel",
     "clean": "turbo run clean"
   },
+  "dependencies": {
+    "@fides/core": "workspace:*",
+    "@fides/evidence": "workspace:*",
+    "@fides/guard": "workspace:*",
+    "@fides/policy": "workspace:*",
+    "@fides/runtime": "workspace:*"
+  },
   "devDependencies": {
     "tsx": "^4.21.0",
     "turbo": "^2.0.0",

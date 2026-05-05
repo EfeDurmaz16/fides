@@ -9,7 +9,7 @@
   "engines": { "node": ">=20.0.0" },
   "files": ["dist", "README.md", "LICENSE"],
   "sideEffects": false,
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "default": "./dist/index.js" } },
   "scripts": { "build": "tsc", "test": "vitest run", "clean": "rm -rf dist" },
   "dependencies": { "@fides/core": "workspace:*", "@fides/shared": "workspace:*" },
   "devDependencies": { "@types/node": "^22.10.5", "typescript": "^5.7.2", "vitest": "^2.1.8" }

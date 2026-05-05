@@ -18,6 +18,9 @@ import {
   aggregateIncidentImpact,
   authorizeDelegation,
   authorizeSessionInvocation,
+  verifyDelegationTokenSignature,
+  verifyIncidentRecord,
+  verifyRevocationRecord,
   type IncidentRecord,
   type DelegationToken,
   type RevocationRecord,
@@ -203,6 +206,15 @@ app.post('/v1/sessions', async (c) => {
     return c.json({ error: 'token is required' }, 400)
   }
 
+  const signatureErrors = await verifyOptionalSignature(
+    body.delegatorPublicKey,
+    async (publicKey) => verifyDelegationTokenSignature(body.token as DelegationToken, publicKey),
+    'DelegationToken'
+  )
+  if (signatureErrors.length > 0) {
+    return c.json({ authorized: false, errors: signatureErrors }, 409)
+  }
+
   const result = await authorizeDelegation({
     token: body.token as DelegationToken,
     store: authorityStore,
@@ -243,6 +255,14 @@ app.post('/v1/revocations', async (c) => {
   if (!isSignedRevocationRecord(record)) {
     return c.json({ error: 'signed revocation record is required' }, 400)
   }
+  const signatureError = await verifyOptionalSignature(
+    body.revokerPublicKey,
+    async (publicKey) => verifyRevocationRecord(record, publicKey),
+    'revocation'
+  )
+  if (signatureError.length > 0) {
+    return c.json({ error: signatureError.join('; ') }, 400)
+  }
 
   await authorityStore.putRevocation(record)
   const propagation = await propagateRevocation(record)
@@ -265,6 +285,14 @@ app.post('/v1/incidents', async (c) => {
   const record = body.record as IncidentRecord | undefined
   if (!isSignedIncidentRecord(record)) {
     return c.json({ error: 'signed incident record is required' }, 400)
+  }
+  const signatureError = await verifyOptionalSignature(
+    body.reporterPublicKey,
+    async (publicKey) => verifyIncidentRecord(record, publicKey),
+    'incident'
+  )
+  if (signatureError.length > 0) {
+    return c.json({ error: signatureError.join('; ') }, 400)
   }
 
   await authorityStore.putIncident(record)
@@ -644,6 +672,37 @@ function nextPropagationAttemptAt(attempts: number, from = new Date().toISOStrin
 function parsePositiveInt(value: unknown, fallback: number): number {
   const parsed = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+async function verifyOptionalSignature(
+  publicKeyInput: unknown,
+  verify: (publicKey: Uint8Array) => Promise<boolean>,
+  label: string
+): Promise<string[]> {
+  if (publicKeyInput === undefined || publicKeyInput === null || publicKeyInput === '') return []
+
+  const publicKey = parsePublicKey(publicKeyInput)
+  if (!publicKey) return [`${label} public key must be a 32-byte hex string or byte array`]
+
+  const ok = await verify(publicKey)
+  return ok ? [] : [`${label} signature verification failed`]
+}
+
+function parsePublicKey(input: unknown): Uint8Array | null {
+  if (typeof input === 'string') {
+    if (!/^[a-fA-F0-9]{64}$/.test(input)) return null
+    return Uint8Array.from(Buffer.from(input, 'hex'))
+  }
+
+  if (Array.isArray(input) && input.length === 32 && input.every(isByte)) {
+    return Uint8Array.from(input)
+  }
+
+  return null
+}
+
+function isByte(value: unknown): value is number {
+  return Number.isInteger(value) && typeof value === 'number' && value >= 0 && value <= 255
 }
 
 // ─── Runtime Attestation (local) ──────────────────────────────────

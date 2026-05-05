@@ -1,5 +1,5 @@
+import { timingSafeStringEqual } from '@fides/shared'
 import type { MiddlewareHandler } from 'hono'
-import { timingSafeEqual } from 'node:crypto'
 
 export const apiKeyAuth = (): MiddlewareHandler => {
   return async (c, next) => {
@@ -18,10 +18,4 @@ export const apiKeyAuth = (): MiddlewareHandler => {
 
     return next()
   }
-}
-
-function timingSafeStringEqual(a: string, b: string): boolean {
-  const aBytes = Buffer.from(a)
-  const bBytes = Buffer.from(b)
-  return aBytes.length === bBytes.length && timingSafeEqual(aBytes, bBytes)
 }

@@ -7,11 +7,19 @@
 
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
+import { cors } from 'hono/cors'
+import { bodyLimit } from 'hono/body-limit'
+import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { logger } from './middleware/logger.js'
+import { securityHeaders } from './middleware/security.js'
+import { errorHandler } from './middleware/error-handler.js'
+import { apiKeyAuth } from './middleware/auth.js'
 
 const app = new Hono()
+const collector = new MetricsCollector()
 
 const REGISTRY_DIR = join(homedir(), '.fides', 'registry')
 const REGISTRY_FILE = join(REGISTRY_DIR, 'registry.json')
@@ -39,10 +47,10 @@ function loadRegistry(): Map<string, RegistryEntry> {
   return new Map(Object.entries(data))
 }
 
-function saveRegistry(registry: Map<string, RegistryEntry>): void {
+function saveRegistry(reg: Map<string, RegistryEntry>): void {
   ensureDir()
   const obj: Record<string, RegistryEntry> = {}
-  for (const [did, entry] of registry) {
+  for (const [did, entry] of reg) {
     obj[did] = entry
   }
   writeFileSync(REGISTRY_FILE, JSON.stringify(obj, null, 2))
@@ -50,12 +58,65 @@ function saveRegistry(registry: Map<string, RegistryEntry>): void {
 
 const registry = loadRegistry()
 
-app.get('/health', (c) => c.json({
-  status: 'ok',
-  service: 'registry',
-  count: registry.size,
-  persistent: true,
+function getCorsOrigin(): string {
+  const corsOrigin = process.env.CORS_ORIGIN
+  if (process.env.NODE_ENV === 'production') {
+    if (!corsOrigin) {
+      console.warn('CORS_ORIGIN not set in production — using restrictive default')
+    }
+    return corsOrigin || 'https://localhost'
+  }
+  return corsOrigin || '*'
+}
+
+// Global middleware stack
+app.use('*', metricsMiddleware(collector))
+app.use('*', logger())
+app.use('*', securityHeaders())
+app.use('*', cors({
+  origin: getCorsOrigin(),
+  exposeHeaders: ['X-Request-Id'],
 }))
+// Auth on mutating endpoints (skip GET /health)
+app.use('/v1/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth()
+  return auth(c, next)
+})
+app.post('*', rateLimitMiddleware({ maxRequests: 100, windowMs: 60_000 }))
+app.get('*', rateLimitMiddleware({ maxRequests: 300, windowMs: 60_000 }))
+app.use('*', bodyLimit({ maxSize: 1024 * 1024 }))
+
+app.onError(errorHandler)
+
+// Metrics endpoint
+app.get('/metrics', (c) => {
+  return c.text(collector.toPrometheus(), 200, { 'Content-Type': 'text/plain; version=0.0.4' })
+})
+
+// ─── Health ───────────────────────────────────────────────────────
+app.get('/health', (c) => {
+  let persistenceOk = false
+  try {
+    const testPath = join(REGISTRY_DIR, '.healthcheck')
+    writeFileSync(testPath, JSON.stringify({ ts: Date.now() }))
+    const data = JSON.parse(readFileSync(testPath, 'utf-8'))
+    persistenceOk = !!data.ts
+  } catch {
+    // persistence broken
+  }
+
+  const status = persistenceOk ? 'healthy' : 'degraded'
+  return c.json({
+    status,
+    service: 'registry',
+    count: registry.size,
+    timestamp: new Date().toISOString(),
+    checks: {
+      persistence: persistenceOk ? 'ok' : 'fail',
+    },
+  }, persistenceOk ? 200 : 503)
+})
 
 /**
  * Register an AgentCard.
@@ -183,6 +244,56 @@ app.get('/v1/stats', (c) => {
   return c.json({ total: registry.size, public: publicCount, private: privateCount })
 })
 
-const port = Number(process.env.REGISTRY_PORT) || 7346
-serve({ fetch: app.fetch, port })
-console.log(`FIDES Registry running on port ${port}`)
+export { app }
+
+// Start server only when not imported as module
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const port = parseInt(process.env.REGISTRY_PORT || '7346', 10)
+
+  let inFlightRequests = 0
+  let isShuttingDown = false
+
+  const originalFetch = app.fetch
+  const wrappedFetch: typeof originalFetch = async (req, ...args) => {
+    if (isShuttingDown) {
+      return new Response(JSON.stringify({ error: 'Service shutting down' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    inFlightRequests++
+    try {
+      return await originalFetch.call(app, req, ...args)
+    } finally {
+      inFlightRequests--
+    }
+  }
+
+  console.log(`FIDES Registry starting on port ${port}`)
+
+  const server = serve({
+    fetch: wrappedFetch,
+    port,
+  })
+
+  const shutdown = async () => {
+    if (isShuttingDown) return
+    isShuttingDown = true
+    console.log('Shutting down registry service...')
+
+    const deadline = Date.now() + 10_000
+    while (inFlightRequests > 0 && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+
+    if (inFlightRequests > 0) {
+      console.warn(`Force closing with ${inFlightRequests} in-flight requests`)
+    }
+
+    server.close()
+    process.exit(0)
+  }
+
+  process.on('SIGTERM', shutdown)
+  process.on('SIGINT', shutdown)
+}

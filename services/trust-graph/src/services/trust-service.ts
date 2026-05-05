@@ -342,8 +342,29 @@ export class TrustService {
   /**
    * Record an incident against an agent.
    */
-  async recordIncident(db: DbClient, input: IncidentRecordInput): Promise<string> {
-    return recordIncident(db, input)
+  async recordIncident(db: DbClient, input: Partial<IncidentRecordInput> & {
+    actor?: string
+    impact?: {
+      trustPenalty?: number
+      reputationPenalty?: number
+      capabilitiesRevoked?: string[]
+    }
+  }): Promise<string> {
+    const actorDid = input.actorDid ?? input.actor
+    if (!actorDid || !input.type || !input.severity || !input.description) {
+      throw new TrustError('actorDid, type, severity, and description are required')
+    }
+
+    return recordIncident(db, {
+      actorDid,
+      type: input.type,
+      severity: input.severity,
+      description: input.description,
+      evidenceRefs: input.evidenceRefs,
+      trustPenalty: input.trustPenalty ?? input.impact?.trustPenalty,
+      reputationPenalty: input.reputationPenalty ?? input.impact?.reputationPenalty,
+      capabilitiesRevoked: input.capabilitiesRevoked ?? input.impact?.capabilitiesRevoked,
+    })
   }
 
   /**

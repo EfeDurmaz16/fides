@@ -174,6 +174,47 @@ describe('HTTP Routes', () => {
       const json = await res.json()
       expect(json.error).toContain('did, reason, and revokedBy')
     })
+
+    it('POST /v1/incidents should accept agentd incident payloads', async () => {
+      const app = createTrustRoutes(mockDb)
+      const res = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actor: 'did:fides:agent',
+          type: 'policy_violation',
+          severity: 'high',
+          description: 'agentd propagated incident',
+          evidenceRefs: ['event-1'],
+          impact: {
+            trustPenalty: 0.35,
+            reputationPenalty: 0.7,
+            capabilitiesRevoked: ['payments.execute'],
+          },
+        }),
+      })
+
+      expect(res.status).toBe(201)
+      const json = await res.json()
+      expect(json.id).toBe('test-uuid-123')
+      const values = mockDb.insert.mock.results[0].value.values.mock.calls[0][0]
+      expect(values.actorDid).toBe('did:fides:agent')
+      expect(values.trustPenalty).toBe(0.35)
+      expect(values.capabilitiesRevoked).toEqual(['payments.execute'])
+    })
+
+    it('POST /v1/incidents should reject invalid payloads', async () => {
+      const app = createTrustRoutes(mockDb)
+      const res = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'policy_violation' }),
+      })
+
+      expect(res.status).toBe(400)
+      const json = await res.json()
+      expect(json.error).toContain('actorDid, type, severity, and description')
+    })
   })
 
   describe('Identity Routes', () => {

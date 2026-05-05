@@ -461,12 +461,18 @@ importers:
 
   tests/e2e:
     dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@fides/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       '@fides/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@noble/ed25519':
+        specifier: ^2.1.0
+        version: 2.3.0
     devDependencies:
       '@types/node':
         specifier: ^22.10.5

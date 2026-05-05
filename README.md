@@ -216,8 +216,10 @@ For production agentd mutations through the CLI, export the same API key used by
 
 ```bash
 export FIDES_API_KEY="$SERVICE_API_KEY"
-pnpm --filter @fides/cli fides session create --agentd-url https://agentd.example.com --capability payments.execute --token-file token.json
+pnpm --filter @fides/cli fides session create --agentd-url https://agentd.example.com --capability payments.execute --token-file token.json --delegator-public-key "$DELEGATOR_PUBLIC_KEY_HEX"
 ```
+
+When `--delegator-public-key` is provided, `agentd` verifies the DelegationToken signature before creating the session.
 
 ---
 

@@ -1,16 +1,16 @@
-# FIDES
+# FIDES — verifiable identity, authority, and pre-execution trust controls for AI agents
 
 > **Latin:** *fides* = trust, faith, confidence
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-brightgreen.svg)](https://nodejs.org/)
-[![Build](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/EfeDurmaz16/fides)
+[![CI](https://github.com/EfeDurmaz16/fides/actions/workflows/ci.yml/badge.svg)](https://github.com/EfeDurmaz16/fides/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/EfeDurmaz16/fides/pulls)
 
-**Decentralized trust fabric for autonomous AI agents — v2**
+**Signed agent identity, capability-aware delegation, deterministic policy guards, tamper-evident evidence, runtime attestation, and kill switches for autonomous agent systems.**
 
-FIDES v2 is an Agent Trust Fabric that provides cryptographically verifiable identity, capability-aware policy enforcement, tamper-evident evidence logging, runtime attestation, and emergency kill switch capabilities for AI agent ecosystems.
+FIDES is an agent trust fabric for deciding whether an autonomous agent is known, authorized, delegated, attested, and safe to execute before an action crosses a boundary.
 
 ---
 
@@ -34,11 +34,11 @@ FIDES solves these problems with a layered trust protocol built specifically for
 - **CapabilityDescriptors** — Typed capability definitions with risk classification (critical/high/medium/low)
 - **Policy Engine** — Deterministic rule evaluation with pre-execution guards (allow/deny/approve-required/dry-run)
 - **Evidence Ledger** — Hash-chained, Merkle-rooted event log with privacy levels (public/private/redacted/hash-only)
-- **Runtime Attestation** — TEE-based execution environment verification (AWS Nitro, Intel SGX, AMD SEV)
+- **Runtime Attestation** — TEE-ready adapter boundary with a mock provider for local verification
 - **Guard Decision Engine** — Multi-factor decision pipeline combining trust, evidence, attestation, and policy
 - **Kill Switch** — Emergency shutdown at global, agent, capability, or principal level
 - **Delegation** — Capability delegation with constraints (spend limits, action counts, context restrictions)
-- **Discovery Providers** — Multi-provider agent discovery (well-known, registry, relay, DHT, mDNS)
+- **Discovery Providers** — Multi-provider agent discovery (well-known, registry, relay, local, DHT-ready)
 - **Ed25519 Identity** — DID-based identities with canonical JSON signing
 - **Trust Graph** — Weighted, capability-specific reputation with transitive trust scoring
 
@@ -169,7 +169,7 @@ const decision = await evaluateGuard({
 | `@fides/policy` | Policy engine with expression evaluation, pre-execution guards, and rule bundles |
 | `@fides/guard` | Guard decision engine combining trust, evidence, attestation, and policy into allow/deny decisions |
 | `@fides/evidence` | Evidence ledger with hash-chained events, Merkle root computation, and privacy levels |
-| `@fides/runtime` | Runtime attestation (TEE providers) and kill switch (global/agent/capability/principal) |
+| `@fides/runtime` | Runtime attestation adapter interfaces, mock attestation, and kill switch (global/agent/capability/principal) |
 | `@fides/discovery` | Discovery provider architecture with priority-based orchestration |
 | `@fides/sdk` | Legacy v1 SDK (Ed25519 identity, RFC 9421 signing, trust graph) |
 | `@fides/shared` | Shared types, constants, and utilities |
@@ -301,7 +301,7 @@ FIDES v2 implements defense-in-depth across multiple layers:
 - **Ed25519 Cryptography** — Fast, secure elliptic curve signatures via @noble/ed25519
 - **Evidence Chain Integrity** — Hash-chained events with Merkle root verification; tampering breaks the chain
 - **Kill Switch** — Emergency capability/agent shutdown with precedence rules (global > agent > capability)
-- **TEE Attestation** — Trusted Execution Environment verification (AWS Nitro, Intel SGX, AMD SEV)
+- **TEE Attestation** — Trusted Execution Environment adapter boundary with mock local attestation
 - **Privacy Levels** — Evidence events support public/private/redacted/hash-only visibility
 - **Delegation Constraints** — Spend limits, action counts, and context restrictions on delegated capabilities
 - **Pre-Execution Guards** — Multi-factor decision pipeline before any capability execution

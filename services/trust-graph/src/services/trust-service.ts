@@ -1,4 +1,10 @@
 import { eq, and, isNull, or, gt } from 'drizzle-orm'
+import {
+  verifyIncidentRecord,
+  verifyRevocationRecord,
+  type IncidentRecord,
+  type RevocationRecord,
+} from '@fides/core'
 import { TrustError, MIN_TRUST_LEVEL, MAX_TRUST_LEVEL } from '@fides/shared'
 import type { DbClient } from '../db/client.js'
 import { identities, trustEdges, reputationScores, revocationRecords } from '../db/schema.js'
@@ -344,26 +350,29 @@ export class TrustService {
    */
   async recordIncident(db: DbClient, input: Partial<IncidentRecordInput> & {
     actor?: string
+    reportedBy?: string
+    reporter?: string
+    record?: unknown
     impact?: {
       trustPenalty?: number
       reputationPenalty?: number
       capabilitiesRevoked?: string[]
     }
   }): Promise<string> {
-    const actorDid = input.actorDid ?? input.actor
-    if (!actorDid || !input.type || !input.severity || !input.description) {
-      throw new TrustError('actorDid, type, severity, and description are required')
-    }
+    const record = await this.verifyIncidentRecordInput(db, input)
+    const actorDid = input.actorDid ?? input.actor ?? record.actor
+
+    await this.ensureIdentity(db, actorDid)
 
     return recordIncident(db, {
       actorDid,
-      type: input.type,
-      severity: input.severity,
-      description: input.description,
-      evidenceRefs: input.evidenceRefs,
-      trustPenalty: input.trustPenalty ?? input.impact?.trustPenalty,
-      reputationPenalty: input.reputationPenalty ?? input.impact?.reputationPenalty,
-      capabilitiesRevoked: input.capabilitiesRevoked ?? input.impact?.capabilitiesRevoked,
+      type: record.type,
+      severity: record.severity,
+      description: record.description,
+      evidenceRefs: record.evidenceRefs,
+      trustPenalty: input.trustPenalty ?? input.impact?.trustPenalty ?? record.impact.trustPenalty,
+      reputationPenalty: input.reputationPenalty ?? input.impact?.reputationPenalty ?? record.impact.reputationPenalty,
+      capabilitiesRevoked: input.capabilitiesRevoked ?? input.impact?.capabilitiesRevoked ?? record.impact.capabilitiesRevoked,
     })
   }
 
@@ -371,25 +380,15 @@ export class TrustService {
    * Record an authority revocation and revoke active trust edges touching the DID.
    */
   async recordRevocation(db: DbClient, input: RevocationRecordInput): Promise<{ id: string; revokedEdges: number }> {
-    if (!input.did || !input.reason || !input.revokedBy) {
-      throw new TrustError('did, reason, and revokedBy are required')
-    }
-
+    const record = await this.verifyRevocationRecordInput(db, input)
     const now = new Date()
-    const record = input.record ?? {
-      did: input.did,
-      reason: input.reason,
-      revokedBy: input.revokedBy,
-      revokedAt: input.revokedAt ?? now.toISOString(),
-      signature: input.signature ?? '',
-    }
 
     const result = await db
       .insert(revocationRecords)
       .values({
-        did: input.did,
-        reason: input.reason,
-        revokedBy: input.revokedBy,
+        did: record.did,
+        reason: record.reason,
+        revokedBy: record.revokedBy,
         record,
       })
       .returning({ id: revocationRecords.id })
@@ -397,12 +396,12 @@ export class TrustService {
     const updateResult = await db
       .update(trustEdges)
       .set({ revokedAt: now })
-      .where(or(eq(trustEdges.sourceDid, input.did), eq(trustEdges.targetDid, input.did)))
+      .where(or(eq(trustEdges.sourceDid, record.did), eq(trustEdges.targetDid, record.did)))
 
     await db
       .update(reputationScores)
       .set({ lastComputed: new Date(0) })
-      .where(eq(reputationScores.did, input.did))
+      .where(eq(reputationScores.did, record.did))
 
     return { id: result[0].id, revokedEdges: Array.isArray(updateResult) ? updateResult.length : 0 }
   }
@@ -413,4 +412,113 @@ export class TrustService {
   async getIncidents(db: DbClient, did: string) {
     return getIncidents(db, did)
   }
+
+  private async verifyRevocationRecordInput(db: DbClient, input: RevocationRecordInput): Promise<RevocationRecord> {
+    if (!isRevocationRecord(input.record)) {
+      throw new TrustError('signed revocation record is required')
+    }
+
+    const record = input.record
+    if (input.did && input.did !== record.did) {
+      throw new TrustError('revocation record did mismatch')
+    }
+    if (input.reason && input.reason !== record.reason) {
+      throw new TrustError('revocation record reason mismatch')
+    }
+    if (input.revokedBy && input.revokedBy !== record.revokedBy) {
+      throw new TrustError('revocation record revokedBy mismatch')
+    }
+
+    const publicKey = await this.getIdentityPublicKey(db, record.revokedBy)
+    if (!await verifyRevocationRecord(record, publicKey)) {
+      throw new TrustError('invalid revocation record signature')
+    }
+
+    return record
+  }
+
+  private async verifyIncidentRecordInput(
+    db: DbClient,
+    input: Partial<IncidentRecordInput> & {
+      actor?: string
+      reportedBy?: string
+      reporter?: string
+      record?: unknown
+    }
+  ): Promise<IncidentRecord> {
+    if (!isIncidentRecord(input.record)) {
+      throw new TrustError('signed incident record is required')
+    }
+
+    const record = input.record
+    const actor = input.actorDid ?? input.actor
+    const reporter = input.reportedBy ?? input.reporter
+
+    if (actor && actor !== record.actor) {
+      throw new TrustError('incident record actor mismatch')
+    }
+    if (reporter && reporter !== record.reportedBy) {
+      throw new TrustError('incident record reporter mismatch')
+    }
+
+    const publicKey = await this.getIdentityPublicKey(db, record.reportedBy)
+    if (!await verifyIncidentRecord(record, publicKey)) {
+      throw new TrustError('invalid incident record signature')
+    }
+
+    return record
+  }
+
+  private async getIdentityPublicKey(db: DbClient, did: string): Promise<Uint8Array> {
+    await this.ensureIdentity(db, did)
+
+    const rows = await db
+      .select()
+      .from(identities)
+      .where(eq(identities.did, did))
+      .limit(1)
+
+    const publicKey = rows[0]?.publicKey
+    if (!publicKey || publicKey.length !== 32) {
+      throw new TrustError(`Cannot verify signature: identity public key not found for ${did}`)
+    }
+
+    return new Uint8Array(publicKey)
+  }
+}
+
+function isRevocationRecord(record: unknown): record is RevocationRecord {
+  const candidate = record as RevocationRecord
+  return Boolean(
+    candidate &&
+    typeof candidate.id === 'string' &&
+    typeof candidate.did === 'string' &&
+    typeof candidate.reason === 'string' &&
+    typeof candidate.revokedAt === 'string' &&
+    typeof candidate.revokedBy === 'string' &&
+    typeof candidate.signature === 'string' &&
+    candidate.signature.length > 0 &&
+    Array.isArray(candidate.propagatedTo)
+  )
+}
+
+function isIncidentRecord(record: unknown): record is IncidentRecord {
+  const candidate = record as IncidentRecord
+  return Boolean(
+    candidate &&
+    typeof candidate.id === 'string' &&
+    typeof candidate.type === 'string' &&
+    typeof candidate.severity === 'string' &&
+    typeof candidate.actor === 'string' &&
+    typeof candidate.reportedBy === 'string' &&
+    typeof candidate.description === 'string' &&
+    Array.isArray(candidate.evidenceRefs) &&
+    typeof candidate.reportedAt === 'string' &&
+    candidate.impact &&
+    typeof candidate.impact.trustPenalty === 'number' &&
+    typeof candidate.impact.reputationPenalty === 'number' &&
+    Array.isArray(candidate.impact.capabilitiesRevoked) &&
+    typeof candidate.signature === 'string' &&
+    candidate.signature.length > 0
+  )
 }

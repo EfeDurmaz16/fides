@@ -45,9 +45,9 @@ export interface CreateTrustRequest {
 }
 
 export interface RevocationRecordInput {
-  did: string
-  reason: string
-  revokedBy: string
+  did?: string
+  reason?: string
+  revokedBy?: string
   revokedAt?: string
   signature?: string
   record?: Record<string, unknown>

@@ -1,5 +1,6 @@
 import { Command } from 'commander'
 import { postJson, printResult } from './authority-utils.js'
+import { createRevocationRecord, signRevocationRecord } from '@fides/core'
 
 export function createRevokeCommand(): Command {
   const cmd = new Command('revoke')
@@ -10,16 +11,18 @@ export function createRevokeCommand(): Command {
     .argument('<did>', 'Agent DID')
     .requiredOption('--revoked-by <did>', 'Revoking principal DID')
     .requiredOption('--reason <text>', 'Revocation reason')
+    .requiredOption('--private-key-hex <hex>', 'Revoking principal Ed25519 private key')
     .option('--agentd-url <url>', 'agentd base URL', 'http://localhost:7345')
-    .option('--signature <hex>', 'External revocation signature')
     .option('--json', 'Print JSON only')
     .action(async (did, options) => {
       try {
-        const result = await postJson(`${options.agentdUrl.replace(/\/$/, '')}/v1/revocations`, {
+        const record = await signRevocationRecord(createRevocationRecord({
           did,
           reason: options.reason,
           revokedBy: options.revokedBy,
-          ...(options.signature && { signature: options.signature }),
+        }), Buffer.from(options.privateKeyHex, 'hex'))
+        const result = await postJson(`${options.agentdUrl.replace(/\/$/, '')}/v1/revocations`, {
+          record,
         })
         printResult('Revocation recorded:', result, options)
       } catch (error) {
@@ -30,4 +33,3 @@ export function createRevokeCommand(): Command {
 
   return cmd
 }
-

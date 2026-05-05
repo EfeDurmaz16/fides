@@ -30,6 +30,7 @@ export interface IncidentRecord {
   type: 'compromise' | 'misbehavior' | 'policy_violation' | 'runtime_failure' | 'sybil'
   severity: 'low' | 'medium' | 'high' | 'critical'
   actor: string
+  reportedBy: string
   description: string
   evidenceRefs: string[]
   reportedAt: string
@@ -46,6 +47,7 @@ export interface IncidentInput {
   type: IncidentRecord['type']
   severity: IncidentRecord['severity']
   actor: string
+  reportedBy: string
   description: string
   evidenceRefs?: string[]
   trustPenalty?: number
@@ -120,6 +122,7 @@ export function createIncidentRecord(input: IncidentInput): IncidentRecord {
     type: input.type,
     severity: input.severity,
     actor: input.actor,
+    reportedBy: input.reportedBy,
     description: input.description,
     evidenceRefs: input.evidenceRefs ?? [],
     reportedAt: new Date().toISOString(),

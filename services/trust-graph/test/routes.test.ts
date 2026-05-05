@@ -3,6 +3,13 @@ import { Hono } from 'hono'
 import { createTrustRoutes } from '../src/routes/trust.js'
 import { createIdentitiesRoutes } from '../src/routes/identities.js'
 import { createHealthRoutes } from '../src/routes/health.js'
+import {
+  createIncidentRecord,
+  createRevocationRecord,
+  signIncidentRecord,
+  signRevocationRecord,
+} from '@fides/core'
+import * as ed from '@noble/ed25519'
 
 describe('HTTP Routes', () => {
   let mockDb: any
@@ -30,6 +37,57 @@ describe('HTTP Routes', () => {
       })),
     }
   })
+
+  function mockIdentity(publicKey: Uint8Array) {
+    mockDb.select = vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(() => Promise.resolve([{ publicKey: Buffer.from(publicKey) }])),
+        })),
+      })),
+    }))
+  }
+
+  async function signedRevocationRecord() {
+    const privateKey = ed.utils.randomPrivateKey()
+    const publicKey = await ed.getPublicKeyAsync(privateKey)
+    mockIdentity(publicKey)
+    return signRevocationRecord(createRevocationRecord({
+      did: 'did:fides:agent',
+      reason: 'principal revoked authority',
+      revokedBy: 'did:fides:principal',
+    }), privateKey)
+  }
+
+  async function signedIncidentRecord() {
+    const privateKey = ed.utils.randomPrivateKey()
+    const publicKey = await ed.getPublicKeyAsync(privateKey)
+    mockIdentity(publicKey)
+    return signIncidentRecord(createIncidentRecord({
+      actor: 'did:fides:agent',
+      reportedBy: 'did:fides:principal',
+      type: 'policy_violation',
+      severity: 'high',
+      description: 'Unauthorized payment attempt',
+    }), privateKey)
+  }
+
+  async function signedAgentdIncidentRecord() {
+    const privateKey = ed.utils.randomPrivateKey()
+    const publicKey = await ed.getPublicKeyAsync(privateKey)
+    mockIdentity(publicKey)
+    return signIncidentRecord(createIncidentRecord({
+      actor: 'did:fides:agent',
+      reportedBy: 'did:fides:principal',
+      type: 'policy_violation',
+      severity: 'high',
+      description: 'agentd propagated incident',
+      evidenceRefs: ['event-1'],
+      trustPenalty: 0.35,
+      reputationPenalty: 0.7,
+      capabilitiesRevoked: ['payments.execute'],
+    }), privateKey)
+  }
 
   describe('Health Routes', () => {
     it('GET /health should return health status', async () => {
@@ -145,14 +203,11 @@ describe('HTTP Routes', () => {
 
     it('POST /v1/revocations should record revocation and revoke matching edges', async () => {
       const app = createTrustRoutes(mockDb)
+      const record = await signedRevocationRecord()
       const res = await app.request('/v1/revocations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          did: 'did:fides:agent',
-          reason: 'principal revoked authority',
-          revokedBy: 'did:fides:principal',
-        }),
+        body: JSON.stringify({ record }),
       })
 
       expect(res.status).toBe(201)
@@ -172,25 +227,46 @@ describe('HTTP Routes', () => {
 
       expect(res.status).toBe(400)
       const json = await res.json()
-      expect(json.error).toContain('did, reason, and revokedBy')
+      expect(json.error).toContain('signed revocation record')
     })
 
-    it('POST /v1/incidents should accept agentd incident payloads', async () => {
+    it('POST /v1/incidents should record signed incidents', async () => {
+      const app = createTrustRoutes(mockDb)
+      const record = await signedIncidentRecord()
+      const res = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actorDid: record.actor, record }),
+      })
+
+      expect(res.status).toBe(201)
+      const json = await res.json()
+      expect(json.id).toBe('test-uuid-123')
+    })
+
+    it('POST /v1/incidents should reject invalid payloads', async () => {
       const app = createTrustRoutes(mockDb)
       const res = await app.request('/v1/incidents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actorDid: 'did:fides:agent' }),
+      })
+
+      expect(res.status).toBe(400)
+      const json = await res.json()
+      expect(json.error).toContain('signed incident record')
+    })
+
+    it('POST /v1/incidents should accept agentd incident payloads', async () => {
+      const app = createTrustRoutes(mockDb)
+      const record = await signedAgentdIncidentRecord()
+      const res = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          actor: 'did:fides:agent',
-          type: 'policy_violation',
-          severity: 'high',
-          description: 'agentd propagated incident',
-          evidenceRefs: ['event-1'],
-          impact: {
-            trustPenalty: 0.35,
-            reputationPenalty: 0.7,
-            capabilitiesRevoked: ['payments.execute'],
-          },
+          actor: record.actor,
+          reportedBy: record.reportedBy,
+          record,
         }),
       })
 
@@ -213,7 +289,7 @@ describe('HTTP Routes', () => {
 
       expect(res.status).toBe(400)
       const json = await res.json()
-      expect(json.error).toContain('actorDid, type, severity, and description')
+      expect(json.error).toContain('signed incident record')
     })
   })
 

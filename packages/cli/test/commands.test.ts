@@ -403,6 +403,8 @@ describe('CLI Commands', () => {
         'did:fides:principal',
         '--reason',
         'disabled',
+        '--private-key-hex',
+        '01'.repeat(32),
         '--json',
       ], { from: 'user' });
 
@@ -434,6 +436,10 @@ describe('CLI Commands', () => {
         'high',
         '--description',
         'merchant policy bypass',
+        '--reporter',
+        'did:fides:principal',
+        '--private-key-hex',
+        '01'.repeat(32),
         '--json',
       ], { from: 'user' });
 

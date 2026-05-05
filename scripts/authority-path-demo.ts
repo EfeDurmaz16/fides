@@ -1,9 +1,12 @@
 import {
   createDelegationToken,
   createIdentity,
+  createRevocationRecord,
+  signRevocationRecord,
   type AgentCard,
   type CapabilityDescriptor,
 } from '@fides/core'
+import { generateDID, generateKeyPair } from '@fides/sdk'
 
 process.env.NODE_ENV = 'test'
 
@@ -14,9 +17,10 @@ async function main() {
     import('../services/registry/src/index.js'),
   ])
 
-  const runId = crypto.randomUUID().slice(0, 8)
-  const agentDid = `did:fides:demo-agent-${runId}`
-  const principalDid = `did:fides:demo-principal-${runId}`
+  const agentKey = await generateKeyPair()
+  const principalKey = await generateKeyPair()
+  const agentDid = generateDID(agentKey.publicKey)
+  const principalDid = generateDID(principalKey.publicKey)
 
   const capability: CapabilityDescriptor = {
     id: 'payments.execute',
@@ -166,11 +170,11 @@ async function main() {
   const revokeAgent = await agentd.request('/v1/revocations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    body: JSON.stringify({ record: await signRevocationRecord(createRevocationRecord({
       did: agentDid,
       reason: 'principal disabled demo agent',
       revokedBy: principalDid,
-    }),
+    }), principalKey.privateKey) }),
   })
   await expectStatus(revokeAgent, 201, 'recorded agent revocation')
 

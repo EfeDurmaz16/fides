@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { TrustService } from '../src/services/trust-service.js'
 import type { CreateTrustRequest } from '../src/types.js'
+import {
+  createIncidentRecord,
+  createRevocationRecord,
+  signIncidentRecord,
+  signRevocationRecord,
+} from '@fides/core'
+import * as ed from '@noble/ed25519'
 
 describe('TrustService', () => {
   let service: TrustService
@@ -31,6 +38,43 @@ describe('TrustService', () => {
       })),
     }
   })
+
+  function mockIdentity(publicKey: Uint8Array) {
+    mockDb.select = vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(() => Promise.resolve([{ publicKey: Buffer.from(publicKey) }])),
+        })),
+      })),
+    }))
+  }
+
+  async function signedRevocationRecord() {
+    const privateKey = ed.utils.randomPrivateKey()
+    const publicKey = await ed.getPublicKeyAsync(privateKey)
+    mockIdentity(publicKey)
+    const record = createRevocationRecord({
+      did: 'did:fides:agent',
+      reason: 'principal revoked authority',
+      revokedBy: 'did:fides:principal',
+    })
+    return signRevocationRecord(record, privateKey)
+  }
+
+  async function signedIncidentRecord() {
+    const privateKey = ed.utils.randomPrivateKey()
+    const publicKey = await ed.getPublicKeyAsync(privateKey)
+    mockIdentity(publicKey)
+    const record = createIncidentRecord({
+      actor: 'did:fides:agent',
+      reportedBy: 'did:fides:principal',
+      type: 'policy_violation',
+      severity: 'high',
+      description: 'Unauthorized payment attempt',
+      capabilitiesRevoked: ['payments.execute'],
+    })
+    return signIncidentRecord(record, privateKey)
+  }
 
   describe('createTrust', () => {
     it('should reject invalid trust levels', async () => {
@@ -167,10 +211,9 @@ describe('TrustService', () => {
 
   describe('recordRevocation', () => {
     it('records a revocation and invalidates reputation cache', async () => {
+      const record = await signedRevocationRecord()
       const result = await service.recordRevocation(mockDb, {
-        did: 'did:fides:agent',
-        reason: 'principal revoked authority',
-        revokedBy: 'did:fides:principal',
+        record,
       })
 
       expect(result.id).toBe('test-uuid-123')
@@ -183,7 +226,32 @@ describe('TrustService', () => {
         did: 'did:fides:agent',
         reason: '',
         revokedBy: '',
-      })).rejects.toThrow('did, reason, and revokedBy')
+      })).rejects.toThrow('signed revocation record')
+    })
+
+    it('rejects tampered revocation records', async () => {
+      const record = await signedRevocationRecord()
+      await expect(service.recordRevocation(mockDb, {
+        record: { ...record, reason: 'tampered reason' },
+      })).rejects.toThrow('invalid revocation record signature')
+    })
+  })
+
+  describe('recordIncident', () => {
+    it('records signed incidents', async () => {
+      const record = await signedIncidentRecord()
+      const id = await service.recordIncident(mockDb, { actorDid: record.actor, record })
+
+      expect(id).toBe('test-uuid-123')
+      expect(mockDb.insert).toHaveBeenCalled()
+    })
+
+    it('rejects tampered incident records', async () => {
+      const record = await signedIncidentRecord()
+      await expect(service.recordIncident(mockDb, {
+        actorDid: record.actor,
+        record: { ...record, description: 'tampered description' },
+      })).rejects.toThrow('invalid incident record signature')
     })
   })
 })

@@ -18,9 +18,9 @@ import {
   aggregateIncidentImpact,
   authorizeDelegation,
   authorizeSessionInvocation,
-  createIncidentRecord,
-  createRevocationRecord,
+  type IncidentRecord,
   type DelegationToken,
+  type RevocationRecord,
 } from '@fides/core'
 import { createAuthorityStore } from './storage.js'
 import type {
@@ -239,18 +239,11 @@ app.post('/v1/sessions/:id/revoke', async (c) => {
 // ─── Revocation and Incidents (local) ────────────────────────────
 app.post('/v1/revocations', async (c) => {
   const body = await c.req.json()
-  if (!body.did || !body.reason || !body.revokedBy) {
-    return c.json({ error: 'did, reason, and revokedBy are required' }, 400)
+  const record = body.record as RevocationRecord | undefined
+  if (!isSignedRevocationRecord(record)) {
+    return c.json({ error: 'signed revocation record is required' }, 400)
   }
 
-  const record = {
-    ...createRevocationRecord({
-      did: body.did,
-      reason: body.reason,
-      revokedBy: body.revokedBy,
-    }),
-    signature: body.signature ?? 'local-agentd',
-  }
   await authorityStore.putRevocation(record)
   const propagation = await propagateRevocation(record)
   const outbox = await persistPropagationOutcome(record.did, 'revocation', record.id, propagation)
@@ -269,14 +262,11 @@ app.get('/v1/revocations/:did', async (c) => {
 
 app.post('/v1/incidents', async (c) => {
   const body = await c.req.json()
-  if (!body.type || !body.severity || !body.actor || !body.description) {
-    return c.json({ error: 'type, severity, actor, and description are required' }, 400)
+  const record = body.record as IncidentRecord | undefined
+  if (!isSignedIncidentRecord(record)) {
+    return c.json({ error: 'signed incident record is required' }, 400)
   }
 
-  const record = {
-    ...createIncidentRecord(body),
-    signature: body.signature ?? 'local-agentd',
-  }
   await authorityStore.putIncident(record)
   const incidents = await authorityStore.listIncidents(record.actor)
   const propagation = await propagateIncident(record)
@@ -513,9 +503,8 @@ function clampScore(score: number): number {
   return Math.max(0, Math.min(1, score))
 }
 
-async function propagateRevocation(record: ReturnType<typeof createRevocationRecord> & { signature: string }) {
-  const path = '/v1/revocations'
-  return postToTrustGraph(path, {
+async function propagateRevocation(record: RevocationRecord) {
+  return postToTrustGraph('/v1/revocations', {
     did: record.did,
     reason: record.reason,
     revokedBy: record.revokedBy,
@@ -525,18 +514,53 @@ async function propagateRevocation(record: ReturnType<typeof createRevocationRec
   })
 }
 
-async function propagateIncident(record: ReturnType<typeof createIncidentRecord> & { signature: string }) {
-  const path = '/v1/incidents'
-  return postToTrustGraph(path, {
-    actor: record.actor,
+async function propagateIncident(record: IncidentRecord) {
+  return postToTrustGraph('/v1/incidents', {
+    actorDid: record.actor,
+    reportedBy: record.reportedBy,
     type: record.type,
     severity: record.severity,
     description: record.description,
     evidenceRefs: record.evidenceRefs,
-    impact: record.impact,
-    signature: record.signature,
+    trustPenalty: record.impact.trustPenalty,
+    reputationPenalty: record.impact.reputationPenalty,
+    capabilitiesRevoked: record.impact.capabilitiesRevoked,
     record,
   })
+}
+
+function isSignedRevocationRecord(record: RevocationRecord | undefined): record is RevocationRecord {
+  return Boolean(
+    record &&
+    typeof record.id === 'string' &&
+    typeof record.did === 'string' &&
+    typeof record.reason === 'string' &&
+    typeof record.revokedBy === 'string' &&
+    typeof record.revokedAt === 'string' &&
+    typeof record.signature === 'string' &&
+    record.signature.length > 0 &&
+    Array.isArray(record.propagatedTo)
+  )
+}
+
+function isSignedIncidentRecord(record: IncidentRecord | undefined): record is IncidentRecord {
+  return Boolean(
+    record &&
+    typeof record.id === 'string' &&
+    typeof record.actor === 'string' &&
+    typeof record.reportedBy === 'string' &&
+    typeof record.type === 'string' &&
+    typeof record.severity === 'string' &&
+    typeof record.description === 'string' &&
+    typeof record.reportedAt === 'string' &&
+    typeof record.signature === 'string' &&
+    record.signature.length > 0 &&
+    Array.isArray(record.evidenceRefs) &&
+    record.impact &&
+    typeof record.impact.trustPenalty === 'number' &&
+    typeof record.impact.reputationPenalty === 'number' &&
+    Array.isArray(record.impact.capabilitiesRevoked)
+  )
 }
 
 interface PropagationResult {

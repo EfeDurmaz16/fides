@@ -13,6 +13,7 @@
     "@fides/sdk": "workspace:*",
     "@fides/shared": "workspace:*",
     "@fides/evidence": "workspace:*",
+    "@fides/policy": "workspace:*",
     "@fides/runtime": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "hono": "^4.6.14"

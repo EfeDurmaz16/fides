@@ -1,193 +1,153 @@
 /**
- * FIDES v2 End-to-End Demo
+ * FIDES v2 end-to-end demo.
  *
- * Demonstrates the full trust fabric flow:
- * 1. Identity creation & AgentCard
- * 2. Trust graph edges & reputation scoring
- * 3. Capability descriptors & risk classification
- * 4. Delegation tokens
- * 5. Policy evaluation with pre-execution guards
- * 6. Evidence ledger with Merkle root
- * 7. Runtime attestation
- * 8. Unified guard decision engine
- * 9. Kill switch
+ * Demonstrates the local Agent Trust Fabric primitives:
+ * identity, AgentCard, capabilities, delegation, policy, evidence,
+ * runtime attestation, kill switch, and guard decisions.
  *
- * Run: npx tsx examples/demo.ts
+ * Run: pnpm exec tsx examples/demo.ts
  */
 
-import { createIdentity, signObject, canonicalJson } from '@fides/core'
-import { createAgentCard, classifyCapabilityRisk } from '@fides/core'
-import { createDelegationToken, validateDelegationToken } from '@fides/core'
-import { evaluatePolicy, runPreExecutionPipeline, type Guard } from '@fides/policy'
+import {
+  createIdentity,
+  classifyCapabilityRisk,
+  validateAgentCard,
+  createDelegationToken,
+  validateDelegationToken,
+  type AgentCard,
+  type CapabilityDescriptor,
+} from '@fides/core'
+import { evaluatePolicy } from '@fides/policy'
 import { createEvidenceChain, appendEvidenceEvent, buildMerkleRoot, verifyEvidenceChain } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateGuard, createTrustContext } from '@fides/guard'
 
 async function demo() {
-  console.log('═'.repeat(60))
-  console.log('  FIDES v2 — Agent Trust Fabric Demo')
-  console.log('═'.repeat(60))
-  console.log()
+  console.log('='.repeat(60))
+  console.log('  FIDES v2 - Agent Trust Fabric Demo')
+  console.log('='.repeat(60))
 
-  // ─── Step 1: Create Identities ───────────────────────────────
-  console.log('📝 Step 1: Creating Identities')
-  console.log('─'.repeat(40))
-
+  console.log('\nStep 1: Creating identities')
   const alice = createIdentity('did:fides:alice', 'agent', { name: 'Alice Assistant' })
   const bob = createIdentity('did:fides:bob', 'agent', { name: 'Bob Scheduler' })
   const charlie = createIdentity('did:fides:charlie', 'principal', { name: 'Charlie User' })
-
-  console.log(`  Alice:   ${alice.did}`)
-  console.log(`  Bob:     ${bob.did}`)
+  console.log(`  Alice: ${alice.did}`)
+  console.log(`  Bob: ${bob.did}`)
   console.log(`  Charlie: ${charlie.did}`)
-  console.log()
 
-  // ─── Step 2: Create AgentCards ───────────────────────────────
-  console.log('🃏 Step 2: Creating AgentCards')
-  console.log('─'.repeat(40))
+  console.log('\nStep 2: Creating an AgentCard')
+  const capabilities: CapabilityDescriptor[] = [
+    {
+      id: 'email:send',
+      name: 'Send Email',
+      description: 'Send emails on behalf of a principal',
+      inputSchema: { type: 'object', required: ['to', 'subject'] },
+      outputSchema: { type: 'object' },
+      riskLevel: 'high',
+      requiresApproval: true,
+      requiresRuntimeAttestation: true,
+    },
+    {
+      id: 'calendar:create',
+      name: 'Create Calendar Event',
+      description: 'Create calendar events on behalf of a principal',
+      inputSchema: { type: 'object', required: ['title', 'start'] },
+      outputSchema: { type: 'object' },
+      riskLevel: 'medium',
+      requiresApproval: false,
+      requiresRuntimeAttestation: false,
+    },
+  ]
 
-  const aliceCard = createAgentCard({
-    did: alice.did,
-    name: 'Alice Assistant',
-    description: 'General-purpose AI assistant',
-    capabilities: [
-      { id: 'email:send', name: 'Send Email', description: 'Send emails on behalf of user', riskLevel: 'high', parameters: [], output: { type: 'boolean', description: 'Sent successfully' }, constraints: [] },
-      { id: 'calendar:create', name: 'Create Calendar Event', description: 'Create calendar events', riskLevel: 'medium', parameters: [], output: { type: 'object', description: 'Created event' }, constraints: [] },
+  const aliceCard: AgentCard = {
+    id: alice.did,
+    identity: alice,
+    capabilities,
+    endpoints: [
+      {
+        url: 'https://alice.example.com/fides',
+        protocol: 'https',
+        capabilities: ['email:send', 'calendar:create'],
+        auth: 'signature',
+      },
     ],
-    protocols: ['mcp', 'a2a'],
-    endpoints: [{ url: 'https://alice.example.com/fides', protocol: 'mcp', capabilities: ['email:send', 'calendar:create'] }],
-  })
-
-  const bobCard = createAgentCard({
-    did: bob.did,
-    name: 'Bob Scheduler',
-    description: 'Task scheduling agent',
-    capabilities: [
-      { id: 'task:create', name: 'Create Task', description: 'Create tasks in project management', riskLevel: 'medium', parameters: [], output: { type: 'object', description: 'Created task' }, constraints: [] },
-    ],
-    protocols: ['mcp'],
-    endpoints: [{ url: 'https://bob.example.com/fides', protocol: 'mcp', capabilities: ['task:create'] }],
-  })
-
-  console.log(`  Alice: ${aliceCard.name} (${aliceCard.capabilities.length} capabilities)`)
-  console.log(`  Bob:   ${bobCard.name} (${bobCard.capabilities.length} capabilities)`)
-  console.log()
-
-  // ─── Step 3: Capability Risk Classification ──────────────────
-  console.log('⚠️  Step 3: Capability Risk Classification')
-  console.log('─'.repeat(40))
-
-  for (const cap of aliceCard.capabilities) {
-    const risk = classifyCapabilityRisk(cap)
-    console.log(`  ${cap.id}: ${risk.level} (${risk.factors.join(', ')})`)
+    policies: [{ requiresRuntimeAttestation: true, requiresApproval: true, minTrustScore: 0.8 }],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   }
-  console.log()
+  const cardValidation = validateAgentCard(aliceCard)
+  console.log(`  Card valid: ${cardValidation.valid}`)
+  console.log(`  Capabilities: ${aliceCard.capabilities.length}`)
 
-  // ─── Step 4: Delegation Token ────────────────────────────────
-  console.log('🔑 Step 4: Delegation Token')
-  console.log('─'.repeat(40))
+  console.log('\nStep 3: Classifying capability risk')
+  for (const capability of aliceCard.capabilities) {
+    console.log(`  ${capability.id}: ${classifyCapabilityRisk(capability.id)}`)
+  }
 
+  console.log('\nStep 4: Creating a delegation token')
   const delegation = createDelegationToken({
     delegator: charlie.did,
     delegatee: alice.did,
     capabilities: ['email:send', 'calendar:create'],
-    constraints: {
-      maxActions: 10,
-      maxSpend: '10.00',
-      allowedContexts: ['work'],
-    },
-    expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    constraints: { maxActions: 10, maxSpend: '10.00', allowedContexts: ['work'] },
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
   })
+  const delegationValidation = validateDelegationToken({ ...delegation, signature: 'demo-signature' })
+  console.log(`  Token: ${delegation.id}`)
+  console.log(`  Delegator -> delegatee: ${delegation.delegator} -> ${delegation.delegatee}`)
+  console.log(`  Structure valid with demo signature: ${delegationValidation.valid}`)
 
-  const validation = validateDelegationToken(delegation)
-  console.log(`  Token ID: ${delegation.id}`)
-  console.log(`  Delegator: ${delegation.delegator}`)
-  console.log(`  Delegatee: ${delegation.delegatee}`)
-  console.log(`  Valid: ${validation.valid}`)
-  console.log()
-
-  // ─── Step 5: Policy Evaluation ───────────────────────────────
-  console.log('📋 Step 5: Policy Evaluation')
-  console.log('─'.repeat(40))
-
+  console.log('\nStep 5: Evaluating policy')
   const policy = {
     id: 'demo-policy',
     version: '1.0.0',
     rules: [
-      { id: 'rate-limit', condition: { operator: 'gt', field: 'requestCount', value: 100 }, action: 'deny' as const, explanation: 'Rate limit exceeded' },
-      { id: 'high-trust', condition: { operator: 'gte', field: 'reputationScore', value: 0.8 }, action: 'allow' as const, explanation: 'High trust agent' },
+      {
+        id: 'rate-limit',
+        condition: { operator: 'gt' as const, field: 'requestCount', value: 100 },
+        action: 'deny' as const,
+        explanation: 'Rate limit exceeded',
+      },
+      {
+        id: 'high-trust',
+        condition: { operator: 'gte' as const, field: 'reputationScore', value: 0.8 },
+        action: 'allow' as const,
+        explanation: 'High trust agent',
+      },
     ],
     defaultAction: 'deny' as const,
   }
+  console.log(`  High trust: ${evaluatePolicy(policy, { requestCount: 10, reputationScore: 0.9 }).decision}`)
+  console.log(`  Rate limited: ${evaluatePolicy(policy, { requestCount: 200, reputationScore: 0.9 }).decision}`)
 
-  const allowResult = evaluatePolicy(policy, { requestCount: 10, reputationScore: 0.9 })
-  const denyResult = evaluatePolicy(policy, { requestCount: 200, reputationScore: 0.5 })
-
-  console.log(`  Low usage, high trust: ${allowResult.decision} (${allowResult.explanation.decision})`)
-  console.log(`  High usage, mid trust: ${denyResult.decision} (${denyResult.explanation.decision})`)
-  console.log()
-
-  // ─── Step 6: Evidence Ledger ─────────────────────────────────
-  console.log('📜 Step 6: Evidence Ledger')
-  console.log('─'.repeat(40))
-
+  console.log('\nStep 6: Appending evidence events')
   let chain = createEvidenceChain()
-
-  const events = [
-    { id: 'e1', type: 'capability_invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'email:send', target: 'user@example.com', payload: { subject: 'Hello' }, privacy: { level: 'redacted' as const } },
-    { id: 'e2', type: 'capability_invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'calendar:create', target: 'meeting', payload: { title: 'Standup' }, privacy: { level: 'hash-only' as const } },
-    { id: 'e3', type: 'policy_eval', timestamp: new Date().toISOString(), actor: alice.did, action: 'evaluate', payload: { policy: 'demo-policy', decision: 'allow' }, privacy: { level: 'public' as const } },
-  ]
-
-  for (const evt of events) {
-    chain = appendEvidenceEvent(chain, evt, 'mock-signature')
+  for (const event of [
+    { id: 'e1', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'email:send', payload: {}, privacy: { level: 'redacted' as const } },
+    { id: 'e2', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'calendar:create', payload: {}, privacy: { level: 'hash-only' as const } },
+    { id: 'e3', type: 'policy', timestamp: new Date().toISOString(), actor: alice.did, action: 'evaluate', payload: {}, privacy: { level: 'public' as const } },
+  ]) {
+    chain = appendEvidenceEvent(chain, event, 'demo-signature')
   }
-
-  const chainValid = verifyEvidenceChain(chain)
-  const merkleRoot = buildMerkleRoot(chain.events.map(e => e.hash))
-
   console.log(`  Events: ${chain.events.length}`)
-  console.log(`  Chain valid: ${chainValid}`)
-  console.log(`  Merkle root: ${merkleRoot.slice(0, 16)}...`)
-  console.log(`  Privacy levels: ${chain.events.map(e => e.privacy.level).join(', ')}`)
-  console.log()
+  console.log(`  Chain valid: ${verifyEvidenceChain(chain)}`)
+  console.log(`  Merkle root: ${buildMerkleRoot(chain.events.map((event) => event.hash)).slice(0, 16)}...`)
 
-  // ─── Step 7: Runtime Attestation ─────────────────────────────
-  console.log('🔒 Step 7: Runtime Attestation')
-  console.log('─'.repeat(40))
-
-  const teeProvider = new MockTEEProvider()
-  const attestation = await teeProvider.attest(alice.did)
-  const verified = await teeProvider.verify(attestation)
-
+  console.log('\nStep 7: Runtime attestation')
+  const tee = new MockTEEProvider()
+  const attestation = await tee.attest(alice.did)
   console.log(`  Provider: ${attestation.provider}`)
-  console.log(`  Agent: ${attestation.agentDid}`)
-  console.log(`  Verified: ${verified}`)
-  console.log(`  Expires: ${attestation.expiresAt}`)
-  console.log()
+  console.log(`  Verified: ${await tee.verify(attestation)}`)
 
-  // ─── Step 8: Kill Switch ─────────────────────────────────────
-  console.log('🛑 Step 8: Kill Switch')
-  console.log('─'.repeat(40))
-
+  console.log('\nStep 8: Kill switch')
   const killSwitch = new InMemoryKillSwitch()
-
-  console.log(`  Global engaged: ${killSwitch.isEngaged({ type: 'global' })}`)
-  console.log(`  Alice engaged: ${killSwitch.isEngaged({ type: 'agent', did: alice.did })}`)
-
   killSwitch.engage({ type: 'agent', did: alice.did })
-  console.log(`  After engaging Alice: ${killSwitch.isEngaged({ type: 'agent', did: alice.did })}`)
-
+  console.log(`  Alice engaged: ${killSwitch.isEngaged({ type: 'agent', did: alice.did })}`)
   killSwitch.disengage({ type: 'agent', did: alice.did })
-  console.log(`  After disengaging: ${killSwitch.isEngaged({ type: 'agent', did: alice.did })}`)
-  console.log()
+  console.log(`  Alice disengaged: ${!killSwitch.isEngaged({ type: 'agent', did: alice.did })}`)
 
-  // ─── Step 9: Unified Guard Decision ──────────────────────────
-  console.log('🛡️  Step 9: Unified Guard Decision Engine')
-  console.log('─'.repeat(40))
-
-  // Scenario A: Good agent, good trust
-  const trustA = createTrustContext({
+  console.log('\nStep 9: Guard decisions')
+  const goodTrust = createTrustContext({
     reputationScore: 0.9,
     capabilityScore: 0.95,
     attestation,
@@ -195,80 +155,41 @@ async function demo() {
     killSwitchEngaged: false,
     recentIncidents: 0,
   })
-
-  const decisionA = await evaluateGuard({
+  const goodDecision = await evaluateGuard({
     agentDid: alice.did,
     capabilityId: 'email:send',
     policy,
     context: { requestCount: 10 },
-    trust: trustA,
+    trust: goodTrust,
   })
+  console.log(`  Good agent: ${goodDecision.decision}`)
 
-  console.log(`  Scenario A (good agent):`)
-  console.log(`    Decision: ${decisionA.decision}`)
-  console.log(`    Factors: ${decisionA.factors.length}`)
-  console.log(`    Explanation: ${decisionA.explanation}`)
-  console.log()
-
-  // Scenario B: Kill switch engaged
-  const trustB = createTrustContext({
-    reputationScore: 0.9,
-    killSwitchEngaged: true,
-    recentIncidents: 0,
-  })
-
-  const decisionB = await evaluateGuard({
-    agentDid: alice.did,
-    capabilityId: 'email:send',
-    policy,
-    context: { requestCount: 10 },
-    trust: trustB,
-  })
-
-  console.log(`  Scenario B (kill switch):`)
-  console.log(`    Decision: ${decisionB.decision}`)
-  console.log(`    Explanation: ${decisionB.explanation}`)
-  console.log()
-
-  // Scenario C: Low trust, many incidents
-  const trustC = createTrustContext({
-    reputationScore: 0.05,
-    killSwitchEngaged: false,
-    recentIncidents: 10,
-  })
-
-  const decisionC = await evaluateGuard({
+  const badTrust = createTrustContext({ reputationScore: 0.05, killSwitchEngaged: false, recentIncidents: 10 })
+  const badDecision = await evaluateGuard({
     agentDid: bob.did,
-    capabilityId: 'task:create',
+    capabilityId: 'calendar:create',
     policy,
     context: { requestCount: 10 },
-    trust: trustC,
+    trust: badTrust,
   })
+  console.log(`  Bad agent: ${badDecision.decision}`)
 
-  console.log(`  Scenario C (low trust, high incidents):`)
-  console.log(`    Decision: ${decisionC.decision}`)
-  console.log(`    Explanation: ${decisionC.explanation}`)
-  console.log()
+  const killSwitchTrust = createTrustContext({ reputationScore: 0.9, killSwitchEngaged: true, recentIncidents: 0 })
+  const killSwitchDecision = await evaluateGuard({
+    agentDid: alice.did,
+    capabilityId: 'email:send',
+    policy,
+    context: { requestCount: 10 },
+    trust: killSwitchTrust,
+  })
+  console.log(`  Kill switch: ${killSwitchDecision.decision}`)
 
-  // ─── Summary ─────────────────────────────────────────────────
-  console.log('═'.repeat(60))
-  console.log('  Demo Complete')
-  console.log('═'.repeat(60))
-  console.log()
-  console.log('  Packages demonstrated:')
-  console.log('    @fides/core      — Identity, AgentCard, delegation, canonical signing')
-  console.log('    @fides/policy    — Policy evaluation, pre-execution pipeline')
-  console.log('    @fides/evidence  — Hash chain, Merkle root, privacy levels')
-  console.log('    @fides/runtime   — TEE attestation, kill switch')
-  console.log('    @fides/guard     — Unified decision engine')
-  console.log()
-  console.log('  Services available:')
-  console.log('    services/discovery   — Agent discovery (well-known, registry, DHT)')
-  console.log('    services/trust-graph — Trust edges, reputation, capability scoring')
-  console.log('    services/registry    — Agent registry (stub)')
-  console.log('    services/relay       — Message relay (stub)')
-  console.log('    services/agentd      — Local daemon (stub)')
-  console.log()
+  console.log('\n' + '='.repeat(60))
+  console.log('  Demo complete - all 9 subsystems exercised')
+  console.log('='.repeat(60))
 }
 
-demo().catch(console.error)
+demo().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})

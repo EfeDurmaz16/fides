@@ -12,6 +12,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
 import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, type EvidenceChain } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
+import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
@@ -150,14 +151,25 @@ app.get('/v1/trust/:did/score', async (c) => {
 // ─── Policy Evaluation (local) ────────────────────────────────────
 app.post('/v1/policy/evaluate', async (c) => {
   const body = await c.req.json()
-  return c.json({
-    decision: body.policy?.defaultAction || 'allow',
-    matchedRules: [],
-    explanation: {
-      decision: body.policy ? 'Policy evaluated' : 'No policy provided, default allow',
-      factors: [],
-    },
-  })
+  if (!body.policy) {
+    return c.json({
+      decision: 'allow',
+      matchedRules: [],
+      explanation: {
+        decision: 'No policy provided, default allow',
+        factors: [],
+      },
+    })
+  }
+
+  const policy = body.policy as PolicyBundle
+  const context = {
+    ...(body.context ?? {}),
+    agentDid: body.agentDid,
+    capabilityId: body.capabilityId,
+  }
+
+  return c.json(evaluatePolicy(policy, context))
 })
 
 // ─── Evidence Ledger (local) ──────────────────────────────────────

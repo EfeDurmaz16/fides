@@ -201,6 +201,14 @@ pnpm --filter @fides/agentd db:migrate
 pnpm --filter @fides/agentd dev
 ```
 
+When using Stripe Projects with a resource named `fides-authority-db`, map the generated connection string before running migrations:
+
+```bash
+source .env
+export AGENTD_DATABASE_URL="$FIDES_AUTHORITY_DB_CONNECTION_STRING"
+pnpm --filter @fides/agentd db:migrate
+```
+
 Set `AGENTD_DB_AUTO_MIGRATE=false` when migrations are managed externally. `/health` reports the active authority store kind and readiness.
 
 ---

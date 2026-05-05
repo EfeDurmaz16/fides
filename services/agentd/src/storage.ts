@@ -62,6 +62,23 @@ export interface AuthorityPropagationAttemptResult {
   nextAttemptAt?: string
 }
 
+export const AUTHORITY_MIGRATIONS = [
+  {
+    id: '001_authority_store',
+    statements: [
+      'CREATE TABLE IF NOT EXISTS agentd_delegation_nonces (nonce TEXT PRIMARY KEY, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())',
+      'CREATE TABLE IF NOT EXISTS agentd_sessions (id TEXT PRIMARY KEY, delegatee_did TEXT NOT NULL, session JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())',
+      'CREATE TABLE IF NOT EXISTS agentd_evidence_chains (did TEXT PRIMARY KEY, chain JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())',
+      'CREATE TABLE IF NOT EXISTS agentd_revocations (did TEXT PRIMARY KEY, record JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())',
+      'CREATE TABLE IF NOT EXISTS agentd_incidents (id TEXT PRIMARY KEY, actor_did TEXT NOT NULL, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())',
+      'CREATE TABLE IF NOT EXISTS agentd_authority_propagations (id TEXT PRIMARY KEY, actor_did TEXT NOT NULL, record_type TEXT NOT NULL, record_id TEXT NOT NULL, target TEXT NOT NULL, path TEXT NOT NULL, body JSONB NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 5, next_attempt_at TIMESTAMPTZ NOT NULL, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())',
+      'CREATE INDEX IF NOT EXISTS idx_agentd_sessions_delegatee ON agentd_sessions(delegatee_did)',
+      'CREATE INDEX IF NOT EXISTS idx_agentd_incidents_actor ON agentd_incidents(actor_did)',
+      'CREATE INDEX IF NOT EXISTS idx_agentd_propagations_pending ON agentd_authority_propagations(status, next_attempt_at)',
+    ],
+  },
+] as const
+
 interface AuthoritySnapshot {
   nonces: NonceUseRecord[]
   sessions: StoredSession[]
@@ -476,15 +493,23 @@ export class PostgresAuthorityStore implements AuthorityStore {
 }
 
 export async function runAuthorityMigrations(sql: postgres.Sql): Promise<void> {
-  await sql`CREATE TABLE IF NOT EXISTS agentd_delegation_nonces (nonce TEXT PRIMARY KEY, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`
-  await sql`CREATE TABLE IF NOT EXISTS agentd_sessions (id TEXT PRIMARY KEY, delegatee_did TEXT NOT NULL, session JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`
-  await sql`CREATE TABLE IF NOT EXISTS agentd_evidence_chains (did TEXT PRIMARY KEY, chain JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`
-  await sql`CREATE TABLE IF NOT EXISTS agentd_revocations (did TEXT PRIMARY KEY, record JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`
-  await sql`CREATE TABLE IF NOT EXISTS agentd_incidents (id TEXT PRIMARY KEY, actor_did TEXT NOT NULL, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`
-  await sql`CREATE TABLE IF NOT EXISTS agentd_authority_propagations (id TEXT PRIMARY KEY, actor_did TEXT NOT NULL, record_type TEXT NOT NULL, record_id TEXT NOT NULL, target TEXT NOT NULL, path TEXT NOT NULL, body JSONB NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 5, next_attempt_at TIMESTAMPTZ NOT NULL, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`
-  await sql`CREATE INDEX IF NOT EXISTS idx_agentd_sessions_delegatee ON agentd_sessions(delegatee_did)`
-  await sql`CREATE INDEX IF NOT EXISTS idx_agentd_incidents_actor ON agentd_incidents(actor_did)`
-  await sql`CREATE INDEX IF NOT EXISTS idx_agentd_propagations_pending ON agentd_authority_propagations(status, next_attempt_at)`
+  await sql`SELECT pg_advisory_lock(hashtext('agentd_authority_migrations'))`
+
+  try {
+    await sql`CREATE TABLE IF NOT EXISTS agentd_schema_migrations (id TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`
+    for (const migration of AUTHORITY_MIGRATIONS) {
+      const existing = await sql`SELECT id FROM agentd_schema_migrations WHERE id = ${migration.id} LIMIT 1`
+      if (existing.length > 0) continue
+
+      for (const statement of migration.statements) {
+        await sql.unsafe(statement)
+      }
+
+      await sql`INSERT INTO agentd_schema_migrations (id) VALUES (${migration.id})`
+    }
+  } finally {
+    await sql`SELECT pg_advisory_unlock(hashtext('agentd_authority_migrations'))`
+  }
 }
 
 async function assertAuthoritySchema(sql: postgres.Sql): Promise<void> {
@@ -498,10 +523,20 @@ async function assertAuthoritySchema(sql: postgres.Sql): Promise<void> {
         'agentd_evidence_chains',
         'agentd_revocations',
         'agentd_incidents',
-        'agentd_authority_propagations'
+        'agentd_authority_propagations',
+        'agentd_schema_migrations'
       )
   `
-  if (rows.length !== 6) {
+  if (rows.length !== 7) {
+    throw new Error('agentd authority store schema is not migrated')
+  }
+
+  const applied = await sql`
+    SELECT id
+    FROM agentd_schema_migrations
+    WHERE id IN ${sql(AUTHORITY_MIGRATIONS.map(migration => migration.id))}
+  `
+  if (applied.length !== AUTHORITY_MIGRATIONS.length) {
     throw new Error('agentd authority store schema is not migrated')
   }
 }

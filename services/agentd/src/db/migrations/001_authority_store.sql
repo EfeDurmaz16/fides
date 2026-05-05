@@ -1,3 +1,8 @@
+CREATE TABLE IF NOT EXISTS agentd_schema_migrations (
+  id TEXT PRIMARY KEY,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS agentd_delegation_nonces (
   nonce TEXT PRIMARY KEY,
   record JSONB NOT NULL,
@@ -55,3 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_agentd_incidents_actor
 
 CREATE INDEX IF NOT EXISTS idx_agentd_propagations_pending
   ON agentd_authority_propagations(status, next_attempt_at);
+
+INSERT INTO agentd_schema_migrations (id)
+VALUES ('001_authority_store')
+ON CONFLICT (id) DO NOTHING;

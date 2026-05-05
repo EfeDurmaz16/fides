@@ -1,10 +1,17 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import postgres from 'postgres'
 import { afterEach, describe, expect, it } from 'vitest'
 import { appendEvidenceEvent, createEvidenceChain } from '@fides/evidence'
 import { createDelegationToken, toStoredSession, createSessionGrant } from '@fides/core'
-import { FileAuthorityStore, InMemoryAuthorityStore, PostgresAuthorityStore } from '../src/storage.js'
+import {
+  AUTHORITY_MIGRATIONS,
+  FileAuthorityStore,
+  InMemoryAuthorityStore,
+  PostgresAuthorityStore,
+  runAuthorityMigrations,
+} from '../src/storage.js'
 
 const tempDirs: string[] = []
 const postgresUrl = process.env.AGENTD_DATABASE_URL || process.env.DATABASE_URL
@@ -121,6 +128,27 @@ describe('agentd authority stores', () => {
   })
 
   describe.skipIf(!postgresUrl)('postgres authority store', () => {
+    it('records applied authority migrations once', async () => {
+      const sql = postgres(postgresUrl!, { max: 1 })
+
+      try {
+        await runAuthorityMigrations(sql)
+        await runAuthorityMigrations(sql)
+
+        const rows = await sql`
+          SELECT id, count(*)::int AS count
+          FROM agentd_schema_migrations
+          WHERE id IN ${sql(AUTHORITY_MIGRATIONS.map(migration => migration.id))}
+          GROUP BY id
+        `
+
+        expect(rows).toHaveLength(AUTHORITY_MIGRATIONS.length)
+        expect(rows.every(row => row.count === 1)).toBe(true)
+      } finally {
+        await sql.end()
+      }
+    }, 30_000)
+
     it('round-trips authority state through Postgres', async () => {
       const store = new PostgresAuthorityStore(postgresUrl!)
       const did = `did:fides:pg-agent-${crypto.randomUUID()}`

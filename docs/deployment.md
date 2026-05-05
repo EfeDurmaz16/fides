@@ -43,7 +43,7 @@ cp .env.example .env
 | ------------------------- | ------- | -------- | ----------- |
 | `AGENTD_AUTHORITY_STORE`  | `file`  | production | `file` for local JSON state, `postgres` for durable authority state |
 | `AGENTD_DATABASE_URL`     | _(empty)_ | production when `AGENTD_AUTHORITY_STORE=postgres` | Dedicated agentd authority database URL. Falls back to `DATABASE_URL` when unset. |
-| `AGENTD_DB_AUTO_MIGRATE`  | `true`  | no | Runs idempotent authority table creation on startup. Set `false` when migrations are managed externally. |
+| `AGENTD_DB_AUTO_MIGRATE`  | `true`  | no | Runs idempotent authority migrations on startup and records applied ids in `agentd_schema_migrations`. Set `false` when migrations are managed externally. |
 | `AGENTD_DB_POOL_MAX`      | `10`    | no | Agentd authority store connection pool size. Falls back to `DB_POOL_MAX`. |
 | `AGENTD_STATE_STORE_PATH` | _(empty)_ | no | File authority store path. Defaults to `~/.fides/agentd/authority-store.json`. |
 
@@ -146,6 +146,8 @@ export AGENTD_DATABASE_URL="postgresql://fides:CHANGEME@localhost:5432/fides"
 pnpm --filter @fides/agentd db:migrate
 export AGENTD_DB_AUTO_MIGRATE=false
 ```
+
+`pnpm --filter @fides/agentd db:migrate` creates the authority tables and records `001_authority_store` in `agentd_schema_migrations`. When `AGENTD_DB_AUTO_MIGRATE=false`, startup validates both the tables and the migration ledger instead of silently creating missing schema.
 
 ### 2. Run Each Service
 
@@ -324,7 +326,8 @@ fides.example.com {
 4. Enable rate limiting via `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS`
 5. Set `LOG_LEVEL=warn` to reduce noise, use `LOG_FORMAT=json` for log aggregation
 6. Run PostgreSQL with TLS if accessed over untrusted networks
-7. Rotate `SERVICE_API_KEY` periodically
+7. Run `pnpm --filter @fides/agentd db:migrate` before setting `AGENTD_DB_AUTO_MIGRATE=false`
+8. Rotate `SERVICE_API_KEY` periodically
 
 ---
 

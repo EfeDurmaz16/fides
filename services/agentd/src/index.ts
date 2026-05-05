@@ -34,6 +34,7 @@ const collector = new MetricsCollector()
 const DISCOVERY_URL = process.env.DISCOVERY_URL || 'http://localhost:3100'
 const TRUST_GRAPH_URL = process.env.TRUST_GRAPH_URL || 'http://localhost:3200'
 const REGISTRY_URL = process.env.REGISTRY_URL || 'http://localhost:7346'
+const TRUST_GRAPH_SERVICE_ID = 'trust-graph'
 
 const teeProvider = new MockTEEProvider()
 const killSwitch = new InMemoryKillSwitch()
@@ -246,6 +247,7 @@ app.post('/v1/revocations', async (c) => {
   }
   await authorityStore.putRevocation(record)
   const propagation = await propagateRevocation(record)
+  await appendPropagationEvidence(record.did, 'revocation', record.id, propagation)
 
   return c.json({ revoked: true, record, propagation }, 201)
 })
@@ -272,6 +274,7 @@ app.post('/v1/incidents', async (c) => {
   await authorityStore.putIncident(record)
   const incidents = await authorityStore.listIncidents(record.actor)
   const propagation = await propagateIncident(record)
+  await appendPropagationEvidence(record.actor, 'incident', record.id, propagation)
 
   return c.json({ recorded: true, record, impact: aggregateIncidentImpact(incidents), propagation }, 201)
 })
@@ -388,6 +391,23 @@ app.get('/v1/evidence/:did', async (c) => {
   return c.json({ did, events: chain.events, count: chain.events.length, valid, merkleRoot: chain.merkleRoot })
 })
 
+app.get('/v1/evidence/:did/verify', async (c) => {
+  const did = c.req.param('did')
+  const chain = await authorityStore.getEvidenceChain(did)
+  if (!chain) {
+    return c.json({ did, valid: true, count: 0, merkleRoot: null, lastHash: null, checkedAt: new Date().toISOString() })
+  }
+  const lastEvent = chain.events.at(-1)
+  return c.json({
+    did,
+    valid: verifyEvidenceChain(chain),
+    count: chain.events.length,
+    merkleRoot: chain.merkleRoot,
+    lastHash: lastEvent?.hash ?? null,
+    checkedAt: new Date().toISOString(),
+  })
+})
+
 async function appendLocalEvidence(actor: string, action: string, payload: Record<string, unknown>) {
   let chain = await authorityStore.getEvidenceChain(actor) || createEvidenceChain()
   chain = appendEvidenceEvent(chain, {
@@ -400,6 +420,22 @@ async function appendLocalEvidence(actor: string, action: string, payload: Recor
     privacy: { level: 'private' },
   }, 'local-agentd')
   await authorityStore.setEvidenceChain(actor, chain)
+}
+
+async function appendPropagationEvidence(
+  actor: string,
+  recordType: 'revocation' | 'incident',
+  recordId: string,
+  propagation: PropagationResult
+) {
+  await appendLocalEvidence(actor, `authority.${recordType}.propagation.${propagation.ok ? 'confirmed' : 'failed'}`, {
+    recordId,
+    target: propagation.target,
+    path: propagation.path,
+    status: propagation.status,
+    attemptedAt: propagation.attemptedAt,
+    error: propagation.error,
+  })
 }
 
 function redactSessionKey<T extends { sessionKey: string }>(session: T): Omit<T, 'sessionKey'> & { sessionKey: string } {
@@ -434,16 +470,35 @@ async function propagateIncident(record: ReturnType<typeof createIncidentRecord>
   })
 }
 
-async function postToTrustGraph(path: string, body: Record<string, unknown>) {
+interface PropagationResult {
+  attempted: true
+  ok: boolean
+  status: number
+  target: string
+  path: string
+  attemptedAt: string
+  error?: string
+}
+
+async function postToTrustGraph(path: string, body: Record<string, unknown>): Promise<PropagationResult> {
+  const attemptedAt = new Date().toISOString()
   try {
     const resp = await fetch(`${TRUST_GRAPH_URL}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    return { attempted: true, ok: resp.ok, status: resp.status }
-  } catch {
-    return { attempted: true, ok: false, status: 0 }
+    return { attempted: true, ok: resp.ok, status: resp.status, target: TRUST_GRAPH_SERVICE_ID, path, attemptedAt }
+  } catch (error) {
+    return {
+      attempted: true,
+      ok: false,
+      status: 0,
+      target: TRUST_GRAPH_SERVICE_ID,
+      path,
+      attemptedAt,
+      error: error instanceof Error ? error.message : String(error),
+    }
   }
 }
 

@@ -77,7 +77,8 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
       const id = await trustService.recordIncident(db, body)
       return c.json({ id }, 201)
     } catch (error) {
-      return c.json({ error: 'Internal server error' }, 500)
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      return c.json({ error: message }, 400)
     }
   })
 

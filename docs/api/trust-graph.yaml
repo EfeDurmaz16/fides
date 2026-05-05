@@ -7,7 +7,7 @@ info:
     computation, and incident tracking for the FIDES v2 trust fabric.
   contact:
     name: FIDES Protocol
-    url: https://github.com/anthropic-ai/fides
+    url: https://github.com/EfeDurmaz16/fides
 
 servers:
   - url: http://localhost:3200

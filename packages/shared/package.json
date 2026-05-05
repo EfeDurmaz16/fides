@@ -8,7 +8,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/anthropic-ai/fides",
+    "url": "https://github.com/EfeDurmaz16/fides",
     "directory": "packages/shared"
   },
   "keywords": ["fides", "trust", "ai-agents", "did", "decentralized-identity"],

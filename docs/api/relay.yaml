@@ -8,7 +8,7 @@ info:
     polling-based retrieval.
   contact:
     name: FIDES Protocol
-    url: https://github.com/anthropic-ai/fides
+    url: https://github.com/EfeDurmaz16/fides
 
 servers:
   - url: http://localhost:7347

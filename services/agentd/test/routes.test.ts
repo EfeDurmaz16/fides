@@ -18,7 +18,13 @@ afterEach(() => {
 vi.stubGlobal('fetch', vi.fn())
 
 import { app } from '../src/index.js'
-import { createDelegationToken } from '@fides/core'
+import {
+  createDelegationToken,
+  createIncidentRecord,
+  createRevocationRecord,
+  signIncidentRecord,
+  signRevocationRecord,
+} from '@fides/core'
 
 const mockFetch = fetch as ReturnType<typeof vi.fn>
 
@@ -49,6 +55,27 @@ describe('Agentd Service Routes', () => {
       text: () => Promise.resolve(bodyStr),
       headers: new Headers(),
     })
+  }
+
+  async function signedRevocationRecord(did: string) {
+    const privateKey = Buffer.from('01'.repeat(32), 'hex')
+    return signRevocationRecord(createRevocationRecord({
+      did,
+      reason: 'principal revoked delegation',
+      revokedBy: 'did:fides:principal',
+    }), privateKey)
+  }
+
+  async function signedIncidentRecord(actor: string) {
+    const privateKey = Buffer.from('01'.repeat(32), 'hex')
+    return signIncidentRecord(createIncidentRecord({
+      actor,
+      reportedBy: 'did:fides:principal',
+      type: 'policy_violation',
+      severity: 'critical',
+      description: 'Repeated unauthorized payment attempts',
+      capabilitiesRevoked: ['payments.execute'],
+    }), privateKey)
   }
 
   describe('GET /health', () => {
@@ -461,14 +488,11 @@ describe('Agentd Service Routes', () => {
     it('records revocations and denies future authorization', async () => {
       const did = `did:fides:revoked-${Date.now()}`
       mockFetch.mockResolvedValueOnce(createMockResponse({ id: 'trust-graph-revocation' }, 201))
+      const record = await signedRevocationRecord(did)
       const revokeRes = await app.request('/v1/revocations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          did,
-          reason: 'principal revoked delegation',
-          revokedBy: 'did:fides:principal',
-        }),
+        body: JSON.stringify({ record }),
       })
       expect(revokeRes.status).toBe(201)
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:3200/v1/revocations', expect.objectContaining({ method: 'POST' }))
@@ -494,15 +518,12 @@ describe('Agentd Service Routes', () => {
     it('audits failed revocation propagation to local evidence', async () => {
       const did = `did:fides:revocation-audit-${Date.now()}`
       mockFetch.mockRejectedValueOnce(new Error('trust graph unavailable'))
+      const record = await signedRevocationRecord(did)
 
       const revokeRes = await app.request('/v1/revocations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          did,
-          reason: 'principal revoked delegation',
-          revokedBy: 'did:fides:principal',
-        }),
+        body: JSON.stringify({ record }),
       })
 
       expect(revokeRes.status).toBe(201)
@@ -542,22 +563,18 @@ describe('Agentd Service Routes', () => {
     it('records incidents and uses their impact in authorization', async () => {
       const did = `did:fides:incident-${Date.now()}`
       mockFetch.mockResolvedValueOnce(createMockResponse({ id: 'trust-graph-incident' }, 201))
+      const record = await signedIncidentRecord(did)
       const incidentRes = await app.request('/v1/incidents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          actor: did,
-          type: 'policy_violation',
-          severity: 'critical',
-          description: 'Repeated unauthorized payment attempts',
-          capabilitiesRevoked: ['payments.execute'],
-        }),
+        body: JSON.stringify({ record }),
       })
       expect(incidentRes.status).toBe(201)
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:3200/v1/incidents', expect.objectContaining({ method: 'POST' }))
       const propagationBody = JSON.parse(mockFetch.mock.calls[0][1].body)
-      expect(propagationBody.actor).toBe(did)
-      expect(propagationBody.impact.capabilitiesRevoked).toContain('payments.execute')
+      expect(propagationBody.actorDid).toBe(did)
+      expect(propagationBody.capabilitiesRevoked).toContain('payments.execute')
+      expect(propagationBody.record.actor).toBe(did)
 
       const listRes = await app.request(`/v1/incidents/${encodeURIComponent(did)}`)
       const list = await listRes.json()
@@ -576,6 +593,39 @@ describe('Agentd Service Routes', () => {
       expect(authRes.status).toBe(200)
       const auth = await authRes.json()
       expect(auth.decision).toBe('approve-required')
+    })
+
+    it('rejects unsigned revocation payloads', async () => {
+      const res = await app.request('/v1/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          did: 'did:fides:unsigned-revocation',
+          reason: 'missing canonical record',
+          revokedBy: 'did:fides:principal',
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('signed revocation record')
+    })
+
+    it('rejects unsigned incident payloads', async () => {
+      const res = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actor: 'did:fides:unsigned-incident',
+          type: 'policy_violation',
+          severity: 'critical',
+          description: 'missing canonical record',
+        }),
+      })
+
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('signed incident record')
     })
   })
 

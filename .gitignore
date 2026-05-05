@@ -6,7 +6,6 @@ dist/
 *.tsbuildinfo
 
 # Environment
-.env
 .env.*
 !.env.example
 
@@ -27,6 +26,7 @@ npm-debug.log*
 
 # Test
 coverage/
+.turbo/
 
 # Docker
 docker-compose.override.yml
@@ -36,6 +36,10 @@ docker-compose.override.yml
 *.key
 credentials.json
 
-# OMC state (Claude Code plugin)
-.omc/state/
+# Local agent state
+.omc/
 .omc/security-hardening-summary.md
+
+.projects/*
+!.projects/state.json
+.env

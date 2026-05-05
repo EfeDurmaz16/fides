@@ -5,9 +5,14 @@ import { join } from 'node:path'
 import {
   createDelegationToken,
   createIdentity,
+  createIncidentRecord,
+  createRevocationRecord,
+  signIncidentRecord,
+  signRevocationRecord,
   type AgentCard,
   type CapabilityDescriptor,
 } from '@fides/core'
+import { generateDID, generateKeyPair } from '@fides/sdk'
 
 interface ServiceProcess {
   name: string
@@ -152,9 +157,10 @@ async function waitForService(service: ServiceProcess): Promise<void> {
 }
 
 async function runAuthorityFlow() {
-  const runId = crypto.randomUUID().slice(0, 8)
-  const agentDid = `did:fides:process-agent-${runId}`
-  const principalDid = `did:fides:process-principal-${runId}`
+  const agentKey = await generateKeyPair()
+  const principalKey = await generateKeyPair()
+  const agentDid = generateDID(agentKey.publicKey)
+  const principalDid = generateDID(principalKey.publicKey)
 
   const capability: CapabilityDescriptor = {
     id: 'payments.execute',
@@ -198,6 +204,8 @@ async function runAuthorityFlow() {
     updatedAt: new Date().toISOString(),
   }
 
+  await registerIdentity(agentDid, agentKey.publicKey, 'process demo agent')
+  await registerIdentity(principalDid, principalKey.publicKey, 'process demo principal')
   await expectStatus(await postJson(`http://127.0.0.1:${ports.registry}/v1/cards`, card), 201, 'registered AgentCard')
   await expectDecision(await postJson(`http://127.0.0.1:${ports.policyEngine}/v1/policies/evaluate`, {
     policy,
@@ -258,17 +266,29 @@ async function runAuthorityFlow() {
     audience: 'agentd',
   }), 403, 'denied revoked session invocation')
   await expectStatus(await postJson(`http://127.0.0.1:${ports.agentd}/v1/revocations`, {
-    did: agentDid,
-    reason: 'principal disabled process demo agent',
-    revokedBy: principalDid,
+    record: await signRevocationRecord(createRevocationRecord({
+      did: agentDid,
+      reason: 'principal disabled process demo agent',
+      revokedBy: principalDid,
+    }), principalKey.privateKey),
   }), 201, 'recorded agent revocation')
   await expectStatus(await postJson(`http://127.0.0.1:${ports.agentd}/v1/incidents`, {
-    actor: agentDid,
-    reporter: principalDid,
-    type: 'policy_violation',
-    severity: 'high',
-    description: 'Process demo incident report',
+    record: await signIncidentRecord(createIncidentRecord({
+      actor: agentDid,
+      reportedBy: principalDid,
+      type: 'policy_violation',
+      severity: 'high',
+      description: 'Process demo incident report',
+    }), principalKey.privateKey),
   }), 201, 'recorded incident')
+}
+
+async function registerIdentity(did: string, publicKey: Uint8Array, name: string): Promise<void> {
+  await expectStatus(await postJson(`http://127.0.0.1:${ports.discovery}/identities`, {
+    did,
+    publicKey: Buffer.from(publicKey).toString('hex'),
+    metadata: { name },
+  }), 201, `registered identity ${name}`)
 }
 
 async function postJson(url: string, body: unknown): Promise<Response> {

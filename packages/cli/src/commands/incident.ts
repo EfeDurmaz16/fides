@@ -1,5 +1,6 @@
 import { Command } from 'commander'
 import { parseList, postJson, printResult } from './authority-utils.js'
+import { createIncidentRecord, signIncidentRecord } from '@fides/core'
 
 export function createIncidentCommand(): Command {
   const cmd = new Command('incident')
@@ -11,19 +12,23 @@ export function createIncidentCommand(): Command {
     .requiredOption('--type <type>', 'Incident type')
     .requiredOption('--severity <level>', 'Incident severity')
     .requiredOption('--description <text>', 'Incident description')
-    .option('--reporter <did>', 'Reporter DID')
+    .requiredOption('--reporter <did>', 'Reporter DID')
+    .requiredOption('--private-key-hex <hex>', 'Reporter Ed25519 private key')
     .option('--evidence-refs <ids>', 'Comma-separated evidence references')
     .option('--agentd-url <url>', 'agentd base URL', 'http://localhost:7345')
     .option('--json', 'Print JSON only')
     .action(async (options) => {
       try {
-        const result = await postJson(`${options.agentdUrl.replace(/\/$/, '')}/v1/incidents`, {
+        const record = await signIncidentRecord(createIncidentRecord({
           actor: options.actor,
-          reporter: options.reporter,
+          reportedBy: options.reporter,
           type: options.type,
           severity: options.severity,
           description: options.description,
           evidenceRefs: parseList(options.evidenceRefs),
+        }), Buffer.from(options.privateKeyHex, 'hex'))
+        const result = await postJson(`${options.agentdUrl.replace(/\/$/, '')}/v1/incidents`, {
+          record,
         })
         printResult('Incident recorded:', result, options)
       } catch (error) {
@@ -34,4 +39,3 @@ export function createIncidentCommand(): Command {
 
   return cmd
 }
-

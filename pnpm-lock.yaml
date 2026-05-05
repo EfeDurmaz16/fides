@@ -409,6 +409,9 @@ importers:
 
   services/trust-graph:
     dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@fides/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk

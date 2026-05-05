@@ -65,6 +65,7 @@ describe('agentd authority stores', () => {
     await store.putIncident({
       id: 'inc-1',
       actor: grant.token.delegatee,
+      reportedBy: grant.token.delegator,
       type: 'policy_violation',
       severity: 'high',
       description: 'test',

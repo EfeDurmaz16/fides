@@ -5,6 +5,9 @@
  */
 
 import type { SignedObject } from './canonical-signer.js'
+import { canonicalDigest } from './canonical-signer.js'
+import * as ed from '@noble/ed25519'
+import { bytesToHex } from '@noble/hashes/utils'
 
 export interface DelegationConstraint {
   maxActions?: number
@@ -56,8 +59,36 @@ export function createDelegationToken(input: DelegationInput): DelegationToken {
     expiresAt: input.expiresAt,
     nonce: crypto.randomUUID(),
     audience: input.audience,
-    signature: '', // Must be signed separately using CanonicalSigner
+    signature: '',
   }
+}
+
+/**
+ * Sign a delegation token with the delegator's private key.
+ * The signature covers the canonical JSON of the token (excluding signature field).
+ */
+export async function signDelegationToken(
+  token: DelegationToken,
+  privateKey: Uint8Array
+): Promise<DelegationToken> {
+  const { signature: _, ...unsigned } = token
+  const digest = canonicalDigest(unsigned)
+  const sig = await ed.signAsync(digest, privateKey)
+  return { ...token, signature: bytesToHex(sig) }
+}
+
+/**
+ * Verify a delegation token's signature against the delegator's public key.
+ */
+export async function verifyDelegationTokenSignature(
+  token: DelegationToken,
+  delegatorPublicKey: Uint8Array
+): Promise<boolean> {
+  if (!token.signature) return false
+  const { signature, ...unsigned } = token
+  const digest = canonicalDigest(unsigned)
+  const sigBytes = Uint8Array.from(Buffer.from(signature, 'hex'))
+  return ed.verifyAsync(sigBytes, digest, delegatorPublicKey)
 }
 
 export function isDelegationExpired(token: DelegationToken): boolean {

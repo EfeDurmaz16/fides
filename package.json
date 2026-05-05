@@ -20,7 +20,8 @@
     "dev": "turbo run dev --parallel",
     "clean": "turbo run clean",
     "demo": "tsx examples/demo.ts",
-    "demo:authority": "tsx scripts/authority-path-demo.ts"
+    "demo:authority": "tsx scripts/authority-path-demo.ts",
+    "demo:authority:processes": "tsx scripts/multiprocess-authority-demo.ts"
   },
   "dependencies": {
     "@fides/core": "workspace:*",

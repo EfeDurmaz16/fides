@@ -27,7 +27,7 @@ Services:
 
 - `discovery` — Extended with registry + federation
 - `trust-graph` — Extended with reputation v2 + incidents
-- `policy-engine` — Stub → full implementation
+- `policy-engine` — Standalone policy evaluation service
 - `registry` — New (or merged into discovery)
 - `relay` — New mock relay server
 - `agentd` — New local daemon

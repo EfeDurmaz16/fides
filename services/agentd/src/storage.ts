@@ -12,13 +12,21 @@ import type {
 } from '@fides/core'
 
 export interface AuthorityStore extends SessionStore {
+  readonly kind: 'memory' | 'file' | 'postgres'
   getEvidenceChain(did: string): Promise<EvidenceChain | null>
   setEvidenceChain(did: string, chain: EvidenceChain): Promise<void>
   putRevocation(record: RevocationRecord): Promise<void>
   getRevocation(did: string): Promise<RevocationRecord | null>
   putIncident(record: IncidentRecord): Promise<void>
   listIncidents(did: string): Promise<IncidentRecord[]>
+  healthCheck(): Promise<AuthorityStoreHealth>
   close?(): Promise<void>
+}
+
+export interface AuthorityStoreHealth {
+  ok: boolean
+  kind: AuthorityStore['kind']
+  detail?: string
 }
 
 interface AuthoritySnapshot {
@@ -40,6 +48,7 @@ function emptySnapshot(): AuthoritySnapshot {
 }
 
 export class InMemoryAuthorityStore implements AuthorityStore {
+  readonly kind = 'memory' as const
   private nonces = new Map<string, NonceUseRecord>()
   private sessions = new Map<string, StoredSession>()
   private evidenceChains = new Map<string, EvidenceChain>()
@@ -98,9 +107,15 @@ export class InMemoryAuthorityStore implements AuthorityStore {
   async listIncidents(did: string): Promise<IncidentRecord[]> {
     return this.incidents.get(did) ?? []
   }
+
+  async healthCheck(): Promise<AuthorityStoreHealth> {
+    return { ok: true, kind: this.kind }
+  }
 }
 
 export class FileAuthorityStore implements AuthorityStore {
+  readonly kind = 'file' as const
+
   constructor(private readonly path = join(homedir(), '.fides', 'agentd', 'authority-store.json')) {}
 
   async hasNonce(nonce: string): Promise<boolean> {
@@ -171,6 +186,16 @@ export class FileAuthorityStore implements AuthorityStore {
     return (await this.read()).incidents[did] ?? []
   }
 
+  async healthCheck(): Promise<AuthorityStoreHealth> {
+    try {
+      await mkdir(dirname(this.path), { recursive: true })
+      await this.read()
+      return { ok: true, kind: this.kind, detail: this.path }
+    } catch (error) {
+      return { ok: false, kind: this.kind, detail: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
   private async read(): Promise<AuthoritySnapshot> {
     try {
       const raw = await readFile(this.path, 'utf8')
@@ -192,6 +217,7 @@ export class FileAuthorityStore implements AuthorityStore {
 }
 
 export class PostgresAuthorityStore implements AuthorityStore {
+  readonly kind = 'postgres' as const
   private sql: postgres.Sql
   private initialized: Promise<void>
 
@@ -297,14 +323,50 @@ export class PostgresAuthorityStore implements AuthorityStore {
     await this.sql.end()
   }
 
+  async healthCheck(): Promise<AuthorityStoreHealth> {
+    try {
+      await this.initialized
+      await this.sql`SELECT 1`
+      return { ok: true, kind: this.kind }
+    } catch (error) {
+      return { ok: false, kind: this.kind, detail: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
   private async init(): Promise<void> {
-    await this.sql`CREATE TABLE IF NOT EXISTS agentd_delegation_nonces (nonce TEXT PRIMARY KEY, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`
-    await this.sql`CREATE TABLE IF NOT EXISTS agentd_sessions (id TEXT PRIMARY KEY, delegatee_did TEXT NOT NULL, session JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`
-    await this.sql`CREATE TABLE IF NOT EXISTS agentd_evidence_chains (did TEXT PRIMARY KEY, chain JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`
-    await this.sql`CREATE TABLE IF NOT EXISTS agentd_revocations (did TEXT PRIMARY KEY, record JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`
-    await this.sql`CREATE TABLE IF NOT EXISTS agentd_incidents (id TEXT PRIMARY KEY, actor_did TEXT NOT NULL, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`
-    await this.sql`CREATE INDEX IF NOT EXISTS idx_agentd_sessions_delegatee ON agentd_sessions(delegatee_did)`
-    await this.sql`CREATE INDEX IF NOT EXISTS idx_agentd_incidents_actor ON agentd_incidents(actor_did)`
+    if (process.env.AGENTD_DB_AUTO_MIGRATE === 'false') {
+      await assertAuthoritySchema(this.sql)
+      return
+    }
+    await runAuthorityMigrations(this.sql)
+  }
+}
+
+export async function runAuthorityMigrations(sql: postgres.Sql): Promise<void> {
+  await sql`CREATE TABLE IF NOT EXISTS agentd_delegation_nonces (nonce TEXT PRIMARY KEY, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`
+  await sql`CREATE TABLE IF NOT EXISTS agentd_sessions (id TEXT PRIMARY KEY, delegatee_did TEXT NOT NULL, session JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`
+  await sql`CREATE TABLE IF NOT EXISTS agentd_evidence_chains (did TEXT PRIMARY KEY, chain JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`
+  await sql`CREATE TABLE IF NOT EXISTS agentd_revocations (did TEXT PRIMARY KEY, record JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`
+  await sql`CREATE TABLE IF NOT EXISTS agentd_incidents (id TEXT PRIMARY KEY, actor_did TEXT NOT NULL, record JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`
+  await sql`CREATE INDEX IF NOT EXISTS idx_agentd_sessions_delegatee ON agentd_sessions(delegatee_did)`
+  await sql`CREATE INDEX IF NOT EXISTS idx_agentd_incidents_actor ON agentd_incidents(actor_did)`
+}
+
+async function assertAuthoritySchema(sql: postgres.Sql): Promise<void> {
+  const rows = await sql`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name IN (
+        'agentd_delegation_nonces',
+        'agentd_sessions',
+        'agentd_evidence_chains',
+        'agentd_revocations',
+        'agentd_incidents'
+      )
+  `
+  if (rows.length !== 5) {
+    throw new Error('agentd authority store schema is not migrated')
   }
 }
 

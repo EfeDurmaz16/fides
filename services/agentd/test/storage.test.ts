@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
 import { appendEvidenceEvent, createEvidenceChain } from '@fides/evidence'
 import { createDelegationToken, toStoredSession, createSessionGrant } from '@fides/core'
-import { FileAuthorityStore, InMemoryAuthorityStore } from '../src/storage.js'
+import { FileAuthorityStore, InMemoryAuthorityStore, PostgresAuthorityStore } from '../src/storage.js'
 
 const tempDirs: string[] = []
 
@@ -90,5 +90,54 @@ describe('agentd authority stores', () => {
 
     expect(revoked?.revoked).toBe(true)
     expect((await store.getSession(grant.id))?.revocationReason).toBe('manual')
+  })
+
+  describe.skipIf(!process.env.DATABASE_URL)('postgres authority store', () => {
+    it('round-trips authority state through Postgres', async () => {
+      const store = new PostgresAuthorityStore(process.env.DATABASE_URL)
+      const did = `did:fides:pg-agent-${crypto.randomUUID()}`
+      const baseSession = session()
+      const grant = {
+        ...baseSession,
+        token: {
+          ...baseSession.token,
+          delegatee: did,
+          nonce: crypto.randomUUID(),
+        },
+      }
+
+      try {
+        await store.markNonceUsed({ nonce: grant.token.nonce, tokenId: grant.token.id, usedAt: new Date().toISOString() })
+        await store.createSession(grant)
+        await store.putRevocation({
+          id: crypto.randomUUID(),
+          did,
+          reason: 'postgres test',
+          revokedAt: new Date().toISOString(),
+          revokedBy: grant.token.delegator,
+          signature: 'test',
+          propagatedTo: [],
+        })
+        await store.putIncident({
+          id: crypto.randomUUID(),
+          actor: did,
+          type: 'policy_violation',
+          severity: 'medium',
+          description: 'postgres test',
+          evidenceRefs: [],
+          reportedAt: new Date().toISOString(),
+          impact: { trustPenalty: 0.15, reputationPenalty: 0.3, capabilitiesRevoked: [] },
+          signature: 'test',
+        })
+
+        expect(await store.hasNonce(grant.token.nonce)).toBe(true)
+        expect((await store.getSession(grant.id))?.token.delegatee).toBe(did)
+        expect((await store.getRevocation(did))?.reason).toBe('postgres test')
+        expect(await store.listIncidents(did)).toHaveLength(1)
+        expect((await store.healthCheck()).ok).toBe(true)
+      } finally {
+        await store.close()
+      }
+    })
   })
 })

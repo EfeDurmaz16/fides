@@ -69,6 +69,8 @@ describe('Agentd Service Routes', () => {
       expect(data.checks.discovery).toBe('connected')
       expect(data.checks.trustGraph).toBe('connected')
       expect(data.checks.registry).toBe('connected')
+      expect(data.checks.authorityStore).toBe('ready')
+      expect(data.authorityStore.kind).toBe('memory')
       expect(data.status).toBe('healthy')
     })
 
@@ -82,6 +84,7 @@ describe('Agentd Service Routes', () => {
       expect(data.checks.discovery).toBe('unreachable')
       expect(data.checks.trustGraph).toBe('unreachable')
       expect(data.checks.registry).toBe('unreachable')
+      expect(data.checks.authorityStore).toBe('ready')
     })
   })
 
@@ -504,6 +507,9 @@ describe('Agentd Service Routes', () => {
       })
       expect(incidentRes.status).toBe(201)
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:3200/v1/incidents', expect.objectContaining({ method: 'POST' }))
+      const propagationBody = JSON.parse(mockFetch.mock.calls[0][1].body)
+      expect(propagationBody.actor).toBe(did)
+      expect(propagationBody.impact.capabilitiesRevoked).toContain('payments.execute')
 
       const listRes = await app.request(`/v1/incidents/${encodeURIComponent(did)}`)
       const list = await listRes.json()

@@ -190,6 +190,19 @@ const decision = await evaluateGuard({
 | `@fides/platform-api` | Platform REST/gRPC API (stub) |
 | `@fides/policy-engine` | Standalone policy evaluation service |
 
+### agentd production authority store
+
+`agentd` defaults to a local file-backed authority store. For production, run it with Postgres:
+
+```bash
+export AGENTD_AUTHORITY_STORE=postgres
+export DATABASE_URL=postgresql://...
+pnpm --filter @fides/agentd db:migrate
+pnpm --filter @fides/agentd dev
+```
+
+Set `AGENTD_DB_AUTO_MIGRATE=false` when migrations are managed externally. `/health` reports the active authority store kind and readiness.
+
 ---
 
 ## Project Structure

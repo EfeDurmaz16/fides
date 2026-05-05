@@ -91,13 +91,14 @@ app.get('/health', async (c) => {
     }
   }
 
-  const [discovery, trustGraph, registry] = await Promise.all([
+  const [discovery, trustGraph, registry, authority] = await Promise.all([
     probe(DISCOVERY_URL),
     probe(TRUST_GRAPH_URL),
     probe(REGISTRY_URL),
+    authorityStore.healthCheck(),
   ])
 
-  const allOk = discovery.reachable && trustGraph.reachable && registry.reachable
+  const allOk = discovery.reachable && trustGraph.reachable && registry.reachable && authority.ok
   const status = allOk ? 'healthy' : 'degraded'
 
   return c.json({
@@ -109,6 +110,12 @@ app.get('/health', async (c) => {
       discovery: discovery.reachable ? 'connected' : 'unreachable',
       trustGraph: trustGraph.reachable ? 'connected' : 'unreachable',
       registry: registry.reachable ? 'connected' : 'unreachable',
+      authorityStore: authority.ok ? 'ready' : 'unready',
+    },
+    authorityStore: {
+      kind: authority.kind,
+      ok: authority.ok,
+      detail: authority.detail,
     },
   }, allOk ? 200 : 503)
 })
@@ -416,14 +423,14 @@ async function propagateRevocation(record: ReturnType<typeof createRevocationRec
 
 async function propagateIncident(record: ReturnType<typeof createIncidentRecord> & { signature: string }) {
   return postToTrustGraph('/v1/incidents', {
-    actorDid: record.actor,
+    actor: record.actor,
     type: record.type,
     severity: record.severity,
     description: record.description,
     evidenceRefs: record.evidenceRefs,
-    trustPenalty: record.impact.trustPenalty,
-    reputationPenalty: record.impact.reputationPenalty,
-    capabilitiesRevoked: record.impact.capabilitiesRevoked,
+    impact: record.impact,
+    signature: record.signature,
+    record,
   })
 }
 

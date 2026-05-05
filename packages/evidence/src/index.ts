@@ -74,7 +74,7 @@ export function createEvidenceChain(): EvidenceChain {
 
 export function appendEvidenceEvent(
   chain: EvidenceChain,
-  eventData: Omit<EvidenceEvent, 'prevHash' | 'hash'>,
+  eventData: Omit<EvidenceEvent, 'prevHash' | 'hash' | 'signature'>,
   signature: string
 ): EvidenceChain {
   const prevHash = chain.events.length > 0 ? chain.events[chain.events.length - 1].hash : '0'

@@ -176,6 +176,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/EvidenceChainResponse"
 
+  /v1/evidence/{did}/verify:
+    get:
+      operationId: verifyEvidence
+      tags: [Evidence]
+      summary: Verify evidence chain integrity for a DID
+      description: |
+        Returns evidence chain integrity metadata without returning full event payloads.
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Evidence chain verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceVerificationResponse"
+
   /v1/attest:
     post:
       operationId: createAttestation
@@ -465,6 +482,26 @@ components:
           description: Hash chain integrity verified
         merkleRoot:
           type: string
+
+    EvidenceVerificationResponse:
+      type: object
+      properties:
+        did:
+          type: string
+        valid:
+          type: boolean
+          description: Hash chain integrity verified
+        count:
+          type: integer
+        merkleRoot:
+          type: string
+          nullable: true
+        lastHash:
+          type: string
+          nullable: true
+        checkedAt:
+          type: string
+          format: date-time
 
     EvidenceEvent:
       type: object

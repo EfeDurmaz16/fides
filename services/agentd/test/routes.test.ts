@@ -491,6 +491,32 @@ describe('Agentd Service Routes', () => {
       expect(auth.explanation).toContain('Agent authority revoked')
     })
 
+    it('audits failed revocation propagation to local evidence', async () => {
+      const did = `did:fides:revocation-audit-${Date.now()}`
+      mockFetch.mockRejectedValueOnce(new Error('trust graph unavailable'))
+
+      const revokeRes = await app.request('/v1/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          did,
+          reason: 'principal revoked delegation',
+          revokedBy: 'did:fides:principal',
+        }),
+      })
+
+      expect(revokeRes.status).toBe(201)
+      const revoke = await revokeRes.json()
+      expect(revoke.propagation.ok).toBe(false)
+      expect(revoke.propagation.target).toBe('trust-graph')
+      expect(revoke.propagation.error).toContain('trust graph unavailable')
+
+      const evidenceRes = await app.request(`/v1/evidence/${encodeURIComponent(did)}`)
+      const evidence = await evidenceRes.json()
+      expect(evidence.valid).toBe(true)
+      expect(evidence.events.at(-1).action).toBe('authority.revocation.propagation.failed')
+    })
+
     it('records incidents and uses their impact in authorization', async () => {
       const did = `did:fides:incident-${Date.now()}`
       mockFetch.mockResolvedValueOnce(createMockResponse({ id: 'trust-graph-incident' }, 201))
@@ -528,6 +554,31 @@ describe('Agentd Service Routes', () => {
       expect(authRes.status).toBe(200)
       const auth = await authRes.json()
       expect(auth.decision).toBe('approve-required')
+    })
+  })
+
+  describe('Evidence Verification', () => {
+    it('verifies an evidence chain without returning full event payloads', async () => {
+      const did = `did:fides:evidence-verify-${Date.now()}`
+      const submitRes = await app.request('/v1/evidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actor: did,
+          type: 'authorization',
+          action: 'authorization.allow',
+          payload: { capabilityId: 'payments.execute' },
+        }),
+      })
+      expect(submitRes.status).toBe(201)
+
+      const verifyRes = await app.request(`/v1/evidence/${encodeURIComponent(did)}/verify`)
+      expect(verifyRes.status).toBe(200)
+      const verification = await verifyRes.json()
+      expect(verification.valid).toBe(true)
+      expect(verification.count).toBe(1)
+      expect(verification.lastHash).toBeTruthy()
+      expect(verification).not.toHaveProperty('events')
     })
   })
 

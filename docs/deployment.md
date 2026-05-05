@@ -69,7 +69,7 @@ cp .env.example .env
 
 | Variable          | Default | Required | Description                                   |
 | ----------------- | ------- | -------- | --------------------------------------------- |
-| `SERVICE_API_KEY` | _(empty)_ | production | Shared API key for mutating endpoints. When unset, auth is disabled (development mode). |
+| `SERVICE_API_KEY` | _(empty)_ | production | Shared API key for mutating endpoints. In production, mutating endpoints return `503` when this is unset. Outside production, leaving it unset disables write auth for local development. |
 
 ### Logging
 
@@ -319,7 +319,7 @@ fides.example.com {
 ### Production Checklist
 
 1. Set `NODE_ENV=production` on all services
-2. Set `SERVICE_API_KEY` to a strong random value (generated via `openssl rand -hex 32`)
+2. Set `SERVICE_API_KEY` to a strong random value (generated via `openssl rand -hex 32`); mutating endpoints fail closed with `503` in production when it is missing
 3. Set `CORS_ORIGIN` to your frontend origin (not `*`)
 4. Enable rate limiting via `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS`
 5. Set `LOG_LEVEL=warn` to reduce noise, use `LOG_FORMAT=json` for log aggregation

@@ -7,29 +7,100 @@
 
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
+import { cors } from 'hono/cors'
+import { bodyLimit } from 'hono/body-limit'
+import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
 import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, type EvidenceChain } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
+import { logger } from './middleware/logger.js'
+import { securityHeaders } from './middleware/security.js'
+import { errorHandler } from './middleware/error-handler.js'
+import { apiKeyAuth } from './middleware/auth.js'
 
 const app = new Hono()
+const collector = new MetricsCollector()
 
-// Service URLs
 const DISCOVERY_URL = process.env.DISCOVERY_URL || 'http://localhost:3100'
-const TRUST_GRAPH_URL = process.env.TRUST_GRAPH_URL || 'http://localhost:3101'
+const TRUST_GRAPH_URL = process.env.TRUST_GRAPH_URL || 'http://localhost:3200'
 const REGISTRY_URL = process.env.REGISTRY_URL || 'http://localhost:7346'
 
-// Local state
 const teeProvider = new MockTEEProvider()
 const killSwitch = new InMemoryKillSwitch()
 const evidenceChains = new Map<string, EvidenceChain>()
 
-// ─── Health ───────────────────────────────────────────────────────
-app.get('/health', (c) => c.json({
-  status: 'ok',
-  service: 'agentd',
-  discovery: DISCOVERY_URL,
-  trustGraph: TRUST_GRAPH_URL,
-  registry: REGISTRY_URL,
+const startTime = Date.now()
+
+function getCorsOrigin(): string {
+  const corsOrigin = process.env.CORS_ORIGIN
+  if (process.env.NODE_ENV === 'production') {
+    if (!corsOrigin) {
+      console.warn('CORS_ORIGIN not set in production — using restrictive default')
+    }
+    return corsOrigin || 'https://localhost'
+  }
+  return corsOrigin || '*'
+}
+
+// Global middleware stack
+app.use('*', metricsMiddleware(collector))
+app.use('*', logger())
+app.use('*', securityHeaders())
+app.use('*', cors({
+  origin: getCorsOrigin(),
+  exposeHeaders: ['X-Request-Id'],
 }))
+// Auth on mutating endpoints (skip GET /health)
+app.use('/v1/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth()
+  return auth(c, next)
+})
+app.post('*', rateLimitMiddleware({ maxRequests: 100, windowMs: 60_000 }))
+app.get('*', rateLimitMiddleware({ maxRequests: 300, windowMs: 60_000 }))
+app.use('*', bodyLimit({ maxSize: 1024 * 1024 }))
+
+app.onError(errorHandler)
+
+// Metrics endpoint
+app.get('/metrics', (c) => {
+  return c.text(collector.toPrometheus(), 200, { 'Content-Type': 'text/plain; version=0.0.4' })
+})
+
+// ─── Health ───────────────────────────────────────────────────────
+app.get('/health', async (c) => {
+  const probe = async (url: string): Promise<{ reachable: boolean }> => {
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 2000)
+      const resp = await fetch(`${url}/health`, { signal: controller.signal })
+      clearTimeout(timeout)
+      return { reachable: resp.ok }
+    } catch {
+      return { reachable: false }
+    }
+  }
+
+  const [discovery, trustGraph, registry] = await Promise.all([
+    probe(DISCOVERY_URL),
+    probe(TRUST_GRAPH_URL),
+    probe(REGISTRY_URL),
+  ])
+
+  const allOk = discovery.reachable && trustGraph.reachable && registry.reachable
+  const status = allOk ? 'healthy' : 'degraded'
+
+  return c.json({
+    status,
+    service: 'agentd',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    timestamp: new Date().toISOString(),
+    checks: {
+      discovery: discovery.reachable ? 'connected' : 'unreachable',
+      trustGraph: trustGraph.reachable ? 'connected' : 'unreachable',
+      registry: registry.reachable ? 'connected' : 'unreachable',
+    },
+  }, allOk ? 200 : 503)
+})
 
 // ─── Identity Resolution (proxy to discovery) ─────────────────────
 app.get('/v1/identities/:did', async (c) => {
@@ -79,8 +150,6 @@ app.get('/v1/trust/:did/score', async (c) => {
 // ─── Policy Evaluation (local) ────────────────────────────────────
 app.post('/v1/policy/evaluate', async (c) => {
   const body = await c.req.json()
-  // For now, return a structured response. Real evaluation requires
-  // @fides/policy which is available in the SDK layer.
   return c.json({
     decision: body.policy?.defaultAction || 'allow',
     matchedRules: [],
@@ -180,6 +249,56 @@ app.post('/v1/killswitch/disengage', async (c) => {
   return c.json({ engaged: false, scope: 'all' })
 })
 
-const port = Number(process.env.AGENTD_PORT) || 7345
-serve({ fetch: app.fetch, port })
-console.log(`FIDES agentd running on port ${port}`)
+export { app }
+
+// Start server only when not imported as module
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const port = parseInt(process.env.AGENTD_PORT || '7345', 10)
+
+  let inFlightRequests = 0
+  let isShuttingDown = false
+
+  const originalFetch = app.fetch
+  const wrappedFetch: typeof originalFetch = async (req, ...args) => {
+    if (isShuttingDown) {
+      return new Response(JSON.stringify({ error: 'Service shutting down' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    inFlightRequests++
+    try {
+      return await originalFetch.call(app, req, ...args)
+    } finally {
+      inFlightRequests--
+    }
+  }
+
+  console.log(`FIDES agentd starting on port ${port}`)
+
+  const server = serve({
+    fetch: wrappedFetch,
+    port,
+  })
+
+  const shutdown = async () => {
+    if (isShuttingDown) return
+    isShuttingDown = true
+    console.log('Shutting down agentd service...')
+
+    const deadline = Date.now() + 10_000
+    while (inFlightRequests > 0 && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+
+    if (inFlightRequests > 0) {
+      console.warn(`Force closing with ${inFlightRequests} in-flight requests`)
+    }
+
+    server.close()
+    process.exit(0)
+  }
+
+  process.on('SIGTERM', shutdown)
+  process.on('SIGINT', shutdown)
+}

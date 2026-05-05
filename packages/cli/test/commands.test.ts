@@ -66,6 +66,7 @@ describe('CLI Commands', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   describe('init command', () => {
@@ -316,6 +317,130 @@ describe('CLI Commands', () => {
 
       expect(mockKeyStore.load).toHaveBeenCalledWith(mockDid);
       expect(mockTrustClient.getScore).toHaveBeenCalledWith(mockDid);
+    });
+  });
+
+  describe('authority commands', () => {
+    it('delegate create should emit a DelegationToken', async () => {
+      const { createDelegateCommand } = await import('../src/commands/delegate.js');
+      const cmd = createDelegateCommand();
+
+      await cmd.parseAsync([
+        'create',
+        '--delegator',
+        'did:fides:principal',
+        '--delegatee',
+        'did:fides:agent',
+        '--capabilities',
+        'payments.execute,tools.call',
+        '--max-actions',
+        '3',
+        '--json',
+      ], { from: 'user' });
+
+      const output = JSON.parse(vi.mocked(console.log).mock.calls[0][0] as string);
+      expect(output.delegator).toBe('did:fides:principal');
+      expect(output.delegatee).toBe('did:fides:agent');
+      expect(output.capabilities).toEqual(['payments.execute', 'tools.call']);
+      expect(output.constraints.maxActions).toBe(3);
+    });
+
+    it('session create should call agentd with a DelegationToken', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        session: { id: 'sess-1', sessionKey: 'redacted' },
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const token = {
+        id: 'tok-1',
+        delegator: 'did:fides:principal',
+        delegatee: 'did:fides:agent',
+        capabilities: ['payments.execute'],
+        constraints: {},
+        issuedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        nonce: 'nonce-1',
+        audience: ['agentd'],
+        signature: 'sig',
+      };
+
+      const { createSessionCommand } = await import('../src/commands/session.js');
+      const cmd = createSessionCommand();
+
+      await cmd.parseAsync([
+        'create',
+        '--agentd-url',
+        'http://agentd.test',
+        '--capability',
+        'payments.execute',
+        '--token-json',
+        JSON.stringify(token),
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/v1/sessions',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+
+    it('revoke agent should call agentd revocations', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({ recorded: true }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRevokeCommand } = await import('../src/commands/revoke.js');
+      const cmd = createRevokeCommand();
+
+      await cmd.parseAsync([
+        'agent',
+        'did:fides:agent',
+        '--agentd-url',
+        'http://agentd.test',
+        '--revoked-by',
+        'did:fides:principal',
+        '--reason',
+        'disabled',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/v1/revocations',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+
+    it('incident report should call agentd incidents', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({ recorded: true }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createIncidentCommand } = await import('../src/commands/incident.js');
+      const cmd = createIncidentCommand();
+
+      await cmd.parseAsync([
+        'report',
+        '--agentd-url',
+        'http://agentd.test',
+        '--actor',
+        'did:fides:agent',
+        '--type',
+        'policy_violation',
+        '--severity',
+        'high',
+        '--description',
+        'merchant policy bypass',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/v1/incidents',
+        expect.objectContaining({ method: 'POST' })
+      );
     });
   });
 });

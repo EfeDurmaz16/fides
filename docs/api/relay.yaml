@@ -1,0 +1,320 @@
+openapi: "3.0.3"
+info:
+  title: FIDES Relay Service
+  version: "2.0.0"
+  description: |
+    Message relay for agents behind NAT/firewalls or with dynamic addresses.
+    Supports in-memory message queuing with TTL, delivery tracking, and
+    polling-based retrieval.
+  contact:
+    name: FIDES Protocol
+    url: https://github.com/anthropic-ai/fides
+
+servers:
+  - url: http://localhost:7347
+    description: Local development
+  - url: https://relay.fides.example.com
+    description: Production
+
+tags:
+  - name: Health
+  - name: Messages
+  - name: Stats
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: Service health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /v1/relay:
+    post:
+      operationId: submitMessage
+      tags: [Messages]
+      summary: Submit a message for relay
+      description: |
+        Enqueues a message for delivery to a target DID. Messages have a
+        configurable TTL (default 5 minutes). Requires API key authentication
+        when `SERVICE_API_KEY` is configured.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RelayMessageRequest"
+      responses:
+        "201":
+          description: Message accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RelayAcceptResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/relay/{did}/messages:
+    get:
+      operationId: pollMessages
+      tags: [Messages]
+      summary: Poll for pending messages
+      description: |
+        Retrieves all pending messages for a target DID and marks them
+        as delivered. Subsequent polls return only newly arrived messages.
+      parameters:
+        - name: did
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "did:fides:receiver01"
+      responses:
+        "200":
+          description: Pending messages delivered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PollMessagesResponse"
+
+  /v1/relay/{id}:
+    get:
+      operationId: getMessage
+      tags: [Messages]
+      summary: Get message by relay ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Message details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RelayMessage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deleteMessage
+      tags: [Messages]
+      summary: Delete a relay message
+      description: Requires API key authentication when `SERVICE_API_KEY` is configured.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Message deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                    example: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/relay/stats:
+    get:
+      operationId: getStats
+      tags: [Stats]
+      summary: Relay statistics
+      responses:
+        "200":
+          description: Relay stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [Health]
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: Metrics in Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy]
+        service:
+          type: string
+          example: relay
+        uptime:
+          type: integer
+          description: Seconds since process start
+        timestamp:
+          type: string
+          format: date-time
+        queues:
+          type: object
+          properties:
+            total:
+              type: integer
+            pending:
+              type: integer
+            delivered:
+              type: integer
+            expired:
+              type: integer
+            activeQueues:
+              type: integer
+
+    RelayMessageRequest:
+      type: object
+      required: [to, payload]
+      properties:
+        to:
+          type: string
+          description: Target DID
+        from:
+          type: string
+          description: Sender DID (defaults to "anonymous")
+        payload:
+          description: Message content
+        ttlMs:
+          type: integer
+          description: Time-to-live in milliseconds (default 300000)
+          example: 300000
+
+    RelayAcceptResponse:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+          example: true
+        relayId:
+          type: string
+          format: uuid
+        expiresAt:
+          type: string
+          format: date-time
+
+    RelayMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        to:
+          type: string
+        from:
+          type: string
+        payload: {}
+        status:
+          type: string
+          enum: [pending, delivered, expired]
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        deliveredAt:
+          type: string
+          format: date-time
+
+    PollMessagesResponse:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/RelayMessage"
+        count:
+          type: integer
+
+    StatsResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+        pending:
+          type: integer
+        delivered:
+          type: integer
+        expired:
+          type: integer
+        queues:
+          type: integer
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      headers:
+        Retry-After:
+          schema:
+            type: integer

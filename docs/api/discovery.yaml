@@ -1,0 +1,576 @@
+openapi: "3.0.3"
+info:
+  title: FIDES Discovery Service
+  version: "2.0.0"
+  description: |
+    Identity registration, resolution, and agent discovery for the FIDES v2
+    trust fabric. Supports DID-based identity persistence, agent capability
+    registry, and well-known discovery endpoints.
+  contact:
+    name: FIDES Protocol
+    url: https://github.com/anthropic-ai/fides
+
+servers:
+  - url: http://localhost:3100
+    description: Local development
+  - url: https://discovery.fides.example.com
+    description: Production
+
+tags:
+  - name: Health
+  - name: Identities
+  - name: Agents
+  - name: Discovery
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: Service health check
+      responses:
+        "200":
+          description: All checks pass
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Degraded (database unreachable)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /identities:
+    post:
+      operationId: registerIdentity
+      tags: [Identities]
+      summary: Register a new identity
+      description: |
+        Creates a new FIDES identity. The DID must be a valid `did:fides:...` URI
+        derived from the Ed25519 public key. DID-verification is enforced — the
+        provided DID must match the provided public key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterIdentityRequest"
+      responses:
+        "201":
+          description: Identity registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: DID does not match public key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Identity already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /identities/{did}:
+    get:
+      operationId: getIdentity
+      tags: [Identities]
+      summary: Resolve identity by DID
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Identity found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /identities/by-domain:
+    get:
+      operationId: lookupIdentityByDomain
+      tags: [Identities]
+      summary: Lookup identity by domain
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          schema:
+            type: string
+          example: agent.example.com
+      responses:
+        "200":
+          description: Matching identities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IdentityResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /agents:
+    get:
+      operationId: searchAgents
+      tags: [Agents]
+      summary: Search registered agents
+      parameters:
+        - name: capability
+          in: query
+          schema:
+            type: string
+          example: "web:search"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [online, offline]
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: provider
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of matching agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentResponse"
+
+    post:
+      operationId: registerAgent
+      tags: [Agents]
+      summary: Register an agent
+      description: Requires the identity to already exist via POST /identities.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterAgentRequest"
+      responses:
+        "201":
+          description: Agent registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Identity not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Agent already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /agents/{did}:
+    get:
+      operationId: getAgent
+      tags: [Agents]
+      summary: Get agent by DID
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Agent found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      operationId: updateAgent
+      tags: [Agents]
+      summary: Update agent registration
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterAgentRequest"
+      responses:
+        "200":
+          description: Agent updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      operationId: deregisterAgent
+      tags: [Agents]
+      summary: Deregister an agent
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Agent deregistered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /agents/{did}/heartbeat:
+    put:
+      operationId: sendHeartbeat
+      tags: [Agents]
+      summary: Send heartbeat signal
+      description: Marks the agent as online and updates heartbeat timestamp.
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Heartbeat acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: online
+                  heartbeatAt:
+                    type: string
+                    format: date-time
+
+  /.well-known/fides.json:
+    get:
+      operationId: getDiscoveryDocument
+      tags: [Discovery]
+      summary: Service discovery document
+      responses:
+        "200":
+          description: Discovery document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryDocument"
+
+  /.well-known/agent.json:
+    get:
+      operationId: getAgentCardA2A
+      tags: [Discovery]
+      summary: A2A-compatible Agent Card
+      parameters:
+        - name: did
+          in: query
+          schema:
+            type: string
+          description: Specific agent DID (defaults to service DID)
+      responses:
+        "200":
+          description: Agent card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentCard"
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [Health]
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: Metrics in Prometheus text format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  parameters:
+    DidParam:
+      name: did
+      in: path
+      required: true
+      schema:
+        type: string
+        example: "did:fides:CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "Identity not found"
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        service:
+          type: string
+          example: discovery
+        version:
+          type: string
+          example: "0.1.0"
+        uptime:
+          type: integer
+          example: 3600
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [connected, disconnected]
+
+    RegisterIdentityRequest:
+      type: object
+      required: [did, publicKey]
+      properties:
+        did:
+          type: string
+          example: "did:fides:CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB"
+        publicKey:
+          type: string
+          description: 64-character hex-encoded Ed25519 public key
+          example: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        metadata:
+          type: object
+        domain:
+          type: string
+          example: "agent.example.com"
+
+    IdentityResponse:
+      type: object
+      properties:
+        did:
+          type: string
+        publicKey:
+          type: string
+        metadata:
+          type: object
+        domain:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    RegisterAgentRequest:
+      type: object
+      required: [did, name, url]
+      properties:
+        did:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+          format: uri
+        version:
+          type: string
+        provider:
+          type: string
+        capabilities:
+          type: object
+        skills:
+          type: array
+          items:
+            type: object
+        defaultInputModes:
+          type: array
+          items:
+            type: string
+        defaultOutputModes:
+          type: array
+          items:
+            type: string
+
+    AgentResponse:
+      type: object
+      properties:
+        did:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        url:
+          type: string
+        version:
+          type: string
+        publicKey:
+          type: string
+        algorithm:
+          type: string
+          example: ed25519
+        provider:
+          type: string
+          nullable: true
+        capabilities:
+          type: object
+        skills:
+          type: array
+          items:
+            type: object
+        defaultInputModes:
+          type: array
+          nullable: true
+        defaultOutputModes:
+          type: array
+          nullable: true
+        status:
+          type: string
+          enum: [online, offline]
+        heartbeatAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DiscoveryDocument:
+      type: object
+      properties:
+        did:
+          type: string
+        publicKey:
+          type: string
+        algorithm:
+          type: string
+          example: ed25519
+        endpoints:
+          type: object
+          properties:
+            discovery:
+              type: string
+              format: uri
+            trust:
+              type: string
+              format: uri
+              nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    AgentCard:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+        version:
+          type: string
+        provider:
+          type: string
+        capabilities:
+          type: object
+        skills:
+          type: array
+          items:
+            type: object
+        defaultInputModes:
+          type: array
+          items:
+            type: string
+        defaultOutputModes:
+          type: array
+          items:
+            type: string
+        securitySchemes:
+          type: object
+        security:
+          type: array
+          items:
+            type: string
+        x-fides-did:
+          type: string
+        x-fides-publicKey:
+          type: string
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Agent deregistered"
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+      headers:
+        Retry-After:
+          schema:
+            type: integer

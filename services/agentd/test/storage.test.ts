@@ -7,6 +7,7 @@ import { createDelegationToken, toStoredSession, createSessionGrant } from '@fid
 import { FileAuthorityStore, InMemoryAuthorityStore, PostgresAuthorityStore } from '../src/storage.js'
 
 const tempDirs: string[] = []
+const postgresUrl = process.env.AGENTD_DATABASE_URL || process.env.DATABASE_URL
 
 afterEach(async () => {
   await Promise.all(tempDirs.map(dir => rm(dir, { recursive: true, force: true })))
@@ -92,9 +93,9 @@ describe('agentd authority stores', () => {
     expect((await store.getSession(grant.id))?.revocationReason).toBe('manual')
   })
 
-  describe.skipIf(!process.env.DATABASE_URL)('postgres authority store', () => {
+  describe.skipIf(!postgresUrl)('postgres authority store', () => {
     it('round-trips authority state through Postgres', async () => {
-      const store = new PostgresAuthorityStore(process.env.DATABASE_URL)
+      const store = new PostgresAuthorityStore(postgresUrl!)
       const did = `did:fides:pg-agent-${crypto.randomUUID()}`
       const baseSession = session()
       const grant = {
@@ -138,6 +139,6 @@ describe('agentd authority stores', () => {
       } finally {
         await store.close()
       }
-    })
+    }, 30_000)
   })
 })

@@ -23,6 +23,15 @@ importers:
       '@fides/core':
         specifier: workspace:*
         version: link:../core
+      '@fides/discovery':
+        specifier: workspace:*
+        version: link:../discovery
+      '@fides/policy':
+        specifier: workspace:*
+        version: link:../policy
+      '@fides/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@fides/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -217,6 +226,12 @@ importers:
       '@fides/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@fides/evidence':
+        specifier: workspace:*
+        version: link:../../packages/evidence
+      '@fides/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@fides/shared':
         specifier: workspace:*
         version: link:../../packages/shared

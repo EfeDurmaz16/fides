@@ -26,6 +26,20 @@ export interface TrustContext {
   evidenceChain?: EvidenceChain
   /** Whether the kill switch is engaged for this agent */
   killSwitchEngaged: boolean
+  /** Whether the agent authority has been revoked */
+  agentRevoked?: boolean
+  /** Whether the active session grant has been revoked */
+  sessionRevoked?: boolean
+  /** Revocation reason, if available */
+  revocationReason?: string
+  /** Whether this capability is treated as high-risk */
+  capabilityHighRisk?: boolean
+  /** Whether policy requires runtime attestation for this request */
+  requiresRuntimeAttestation?: boolean
+  /** Whether policy requires human/principal approval for this request */
+  requiresApproval?: boolean
+  /** Whether the required approval has already been granted */
+  approvalGranted?: boolean
   /** Incident count in last 24h */
   recentIncidents: number
 }
@@ -89,7 +103,48 @@ export async function evaluateGuard(request: GuardRequest): Promise<GuardDecisio
     }
   }
 
+  if (trust.agentRevoked) {
+    return {
+      decision: 'deny',
+      explanation: `Agent authority revoked for ${agentDid}`,
+      factors: [{ source: 'revocation', factor: 'agent-revoked', weight: 1.0, description: trust.revocationReason ?? 'Agent revocation record is active' }],
+    }
+  }
+
+  if (trust.sessionRevoked) {
+    return {
+      decision: 'deny',
+      explanation: `Session authority revoked for ${agentDid}`,
+      factors: [{ source: 'revocation', factor: 'session-revoked', weight: 1.0, description: trust.revocationReason ?? 'Session revocation record is active' }],
+    }
+  }
+
   // 2. Attestation check
+  if (trust.capabilityHighRisk) {
+    factors.push({
+      source: 'risk',
+      factor: 'high-risk-capability',
+      weight: 0.7,
+      description: `${capabilityId} is marked as high-risk`,
+    })
+  }
+
+  if (trust.requiresRuntimeAttestation && !trust.attestationValid) {
+    return {
+      decision: 'deny',
+      explanation: `Runtime attestation is required for ${capabilityId}`,
+      factors: [...factors, { source: 'attestation', factor: 'attestation-required', weight: 1.0, description: 'No valid runtime attestation is available' }],
+    }
+  }
+
+  if (trust.requiresApproval && !trust.approvalGranted) {
+    return {
+      decision: 'approve-required',
+      explanation: `Approval is required for ${capabilityId}`,
+      factors: [...factors, { source: 'approval', factor: 'approval-required', weight: 1.0, description: 'Policy requires principal approval before execution' }],
+    }
+  }
+
   if (trust.attestation) {
     const expiresAt = new Date(trust.attestation.expiresAt)
     if (expiresAt < new Date()) {
@@ -194,6 +249,12 @@ export async function evaluateGuard(request: GuardRequest): Promise<GuardDecisio
     ...(trust.capabilityScore !== undefined && { capabilityScore: trust.capabilityScore }),
     recentIncidents: trust.recentIncidents,
     attestationValid: trust.attestationValid,
+    agentRevoked: trust.agentRevoked ?? false,
+    sessionRevoked: trust.sessionRevoked ?? false,
+    capabilityHighRisk: trust.capabilityHighRisk ?? false,
+    requiresRuntimeAttestation: trust.requiresRuntimeAttestation ?? false,
+    requiresApproval: trust.requiresApproval ?? false,
+    approvalGranted: trust.approvalGranted ?? false,
   }
 
   // Run pre-execution pipeline (guards)
@@ -268,6 +329,13 @@ export function createTrustContext(input: {
   evidenceChain?: EvidenceChain | null
   killSwitchEngaged: boolean
   recentIncidents: number
+  agentRevoked?: boolean
+  sessionRevoked?: boolean
+  revocationReason?: string
+  capabilityHighRisk?: boolean
+  requiresRuntimeAttestation?: boolean
+  requiresApproval?: boolean
+  approvalGranted?: boolean
 }): TrustContext {
   return {
     reputationScore: input.reputationScore,
@@ -276,6 +344,13 @@ export function createTrustContext(input: {
     attestation: input.attestation ?? undefined,
     evidenceChain: input.evidenceChain ?? undefined,
     killSwitchEngaged: input.killSwitchEngaged,
+    agentRevoked: input.agentRevoked ?? false,
+    sessionRevoked: input.sessionRevoked ?? false,
+    revocationReason: input.revocationReason,
+    capabilityHighRisk: input.capabilityHighRisk ?? false,
+    requiresRuntimeAttestation: input.requiresRuntimeAttestation ?? false,
+    requiresApproval: input.requiresApproval ?? false,
+    approvalGranted: input.approvalGranted ?? false,
     recentIncidents: input.recentIncidents,
   }
 }

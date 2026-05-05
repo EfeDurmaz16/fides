@@ -232,6 +232,9 @@ importers:
       '@fides/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@fides/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@fides/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -300,6 +303,9 @@ importers:
       '@fides/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@fides/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@fides/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -325,6 +331,9 @@ importers:
 
   services/relay:
     dependencies:
+      '@fides/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@fides/shared':
         specifier: workspace:*
         version: link:../../packages/shared

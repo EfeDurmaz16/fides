@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Command } from 'commander';
 import * as sdk from '@fides/sdk';
 
+const ORIGINAL_FIDES_API_KEY = process.env.FIDES_API_KEY;
+
 // Mock the SDK
 vi.mock('@fides/sdk', () => ({
   generateKeyPair: vi.fn(),
@@ -59,12 +61,18 @@ vi.mock('ora', () => ({
 describe('CLI Commands', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.FIDES_API_KEY;
     // Suppress console output in tests
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
+    if (ORIGINAL_FIDES_API_KEY) {
+      process.env.FIDES_API_KEY = ORIGINAL_FIDES_API_KEY;
+    } else {
+      delete process.env.FIDES_API_KEY;
+    }
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -346,6 +354,7 @@ describe('CLI Commands', () => {
     });
 
     it('session create should call agentd with a DelegationToken', async () => {
+      process.env.FIDES_API_KEY = 'cli-api-key'
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({
         session: { id: 'sess-1', sessionKey: 'redacted' },
       }), { status: 201, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
@@ -380,7 +389,13 @@ describe('CLI Commands', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://agentd.test/v1/sessions',
-        expect.objectContaining({ method: 'POST' })
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'X-API-Key': 'cli-api-key',
+          }),
+        })
       );
     });
 

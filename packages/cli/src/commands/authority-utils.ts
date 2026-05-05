@@ -38,9 +38,15 @@ export function parseTokenInput(options: { tokenFile?: string; tokenJson?: strin
 }
 
 export async function postJson(url: string, body: unknown): Promise<unknown> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const apiKey = process.env.FIDES_API_KEY || process.env.SERVICE_API_KEY
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey
+  }
+
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   })
   const text = await response.text()
@@ -50,4 +56,3 @@ export async function postJson(url: string, body: unknown): Promise<unknown> {
   }
   return payload
 }
-

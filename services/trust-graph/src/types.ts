@@ -44,6 +44,15 @@ export interface CreateTrustRequest {
   expiresAt?: string
 }
 
+export interface RevocationRecordInput {
+  did: string
+  reason: string
+  revokedBy: string
+  revokedAt?: string
+  signature?: string
+  record?: Record<string, unknown>
+}
+
 export interface TrustPathNode {
   did: string
   trustLevel: number

@@ -48,6 +48,17 @@ export const incidentRecords = pgTable('incident_records', {
   capabilitiesRevoked: jsonb('capabilities_revoked').notNull().default([]),
 })
 
+export const revocationRecords = pgTable('revocation_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  did: text('did').notNull(),
+  reason: text('reason').notNull(),
+  revokedBy: text('revoked_by').notNull(),
+  record: jsonb('record').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  idxRevocationDid: index('idx_revocation_records_did').on(table.did),
+}))
+
 export const capabilityScores = pgTable('capability_scores', {
   did: text('did').notNull().references(() => identities.did),
   capabilityId: text('capability_id').notNull(),

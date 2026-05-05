@@ -164,4 +164,26 @@ describe('TrustService', () => {
       expect(mockDb.insert).toHaveBeenCalled()
     })
   })
+
+  describe('recordRevocation', () => {
+    it('records a revocation and invalidates reputation cache', async () => {
+      const result = await service.recordRevocation(mockDb, {
+        did: 'did:fides:agent',
+        reason: 'principal revoked authority',
+        revokedBy: 'did:fides:principal',
+      })
+
+      expect(result.id).toBe('test-uuid-123')
+      expect(mockDb.insert).toHaveBeenCalled()
+      expect(mockDb.update).toHaveBeenCalled()
+    })
+
+    it('rejects missing revocation fields', async () => {
+      await expect(service.recordRevocation(mockDb, {
+        did: 'did:fides:agent',
+        reason: '',
+        revokedBy: '',
+      })).rejects.toThrow('did, reason, and revokedBy')
+    })
+  })
 })

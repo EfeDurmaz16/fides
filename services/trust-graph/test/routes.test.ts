@@ -142,6 +142,38 @@ describe('HTTP Routes', () => {
       expect(json.to).toBe('did:fides:bob')
       expect(json.found).toBe(true)
     })
+
+    it('POST /v1/revocations should record revocation and revoke matching edges', async () => {
+      const app = createTrustRoutes(mockDb)
+      const res = await app.request('/v1/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          did: 'did:fides:agent',
+          reason: 'principal revoked authority',
+          revokedBy: 'did:fides:principal',
+        }),
+      })
+
+      expect(res.status).toBe(201)
+      const json = await res.json()
+      expect(json.id).toBe('test-uuid-123')
+      expect(mockDb.insert).toHaveBeenCalled()
+      expect(mockDb.update).toHaveBeenCalled()
+    })
+
+    it('POST /v1/revocations should reject invalid payloads', async () => {
+      const app = createTrustRoutes(mockDb)
+      const res = await app.request('/v1/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ did: 'did:fides:agent' }),
+      })
+
+      expect(res.status).toBe(400)
+      const json = await res.json()
+      expect(json.error).toContain('did, reason, and revokedBy')
+    })
   })
 
   describe('Identity Routes', () => {

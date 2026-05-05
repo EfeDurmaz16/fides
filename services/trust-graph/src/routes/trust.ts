@@ -81,6 +81,18 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
     }
   })
 
+  // Record authority revocation and mark active trust edges revoked
+  app.post('/v1/revocations', async (c) => {
+    try {
+      const body = await c.req.json()
+      const result = await trustService.recordRevocation(db, body)
+      return c.json(result, 201)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      return c.json({ error: message }, 400)
+    }
+  })
+
   // Get incidents for a DID
   app.get('/v1/incidents/:did', async (c) => {
     try {

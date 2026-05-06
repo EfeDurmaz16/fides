@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { TrustService } from '../src/services/trust-service.js'
 import type { CreateTrustRequest } from '../src/types.js'
 import {
@@ -37,6 +37,10 @@ describe('TrustService', () => {
         })),
       })),
     }
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   function mockIdentity(publicKey: Uint8Array) {
@@ -212,6 +216,25 @@ describe('TrustService', () => {
   })
 
   describe('getScore', () => {
+    it('opens the discovery circuit breaker after repeated 5xx responses', async () => {
+      service = new TrustService('http://discovery.test')
+      const fetchMock = vi.fn(() => Promise.resolve(new Response('unavailable', { status: 503 })))
+      vi.stubGlobal('fetch', fetchMock)
+
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await expect(service.getScore(mockDb, `did:fides:missing-${attempt}`)).rejects.toThrow(
+          'Discovery service unavailable'
+        )
+      }
+
+      expect(fetchMock).toHaveBeenCalledTimes(5)
+
+      await expect(service.getScore(mockDb, 'did:fides:circuit-open')).rejects.toThrow(
+        'Discovery service unavailable'
+      )
+      expect(fetchMock).toHaveBeenCalledTimes(5)
+    })
+
     it('should return cached score if valid', async () => {
       const now = new Date()
       const recentCompute = new Date(now.getTime() - 1800000) // 30 min ago

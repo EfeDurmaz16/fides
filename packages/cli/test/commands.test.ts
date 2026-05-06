@@ -30,7 +30,16 @@ vi.mock('node:fs', () => ({
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
+    openSync: vi.fn(() => 1),
+    rmSync: vi.fn(),
   },
+}));
+
+vi.mock('node:child_process', () => ({
+  spawn: vi.fn(() => ({
+    pid: 12345,
+    unref: vi.fn(),
+  })),
 }));
 
 vi.mock('node:os', () => ({
@@ -331,6 +340,48 @@ describe('CLI Commands', () => {
   });
 
   describe('daemon command', () => {
+    it('should start agentd as a background process', async () => {
+      const fs = await import('node:fs');
+      const childProcess = await import('node:child_process');
+      vi.mocked(fs.default.existsSync).mockReturnValue(false);
+
+      const { createDaemonCommand } = await import('../src/commands/daemon.js');
+      const cmd = createDaemonCommand();
+
+      await cmd.parseAsync([
+        'start',
+        '--port',
+        '7444',
+        '--pid-file',
+        '/tmp/fides-agentd.pid',
+        '--log-file',
+        '/tmp/fides-agentd.log',
+      ], { from: 'user' });
+
+      expect(childProcess.spawn).toHaveBeenCalledWith('pnpm', ['--filter', '@fides/agentd', 'dev'], expect.objectContaining({
+        detached: true,
+        stdio: ['ignore', 1, 1],
+        env: expect.objectContaining({ AGENTD_PORT: '7444' }),
+      }));
+      expect(fs.default.writeFileSync).toHaveBeenCalledWith('/tmp/fides-agentd.pid', '12345', 'utf-8');
+    });
+
+    it('should stop agentd from the pid file', async () => {
+      const fs = await import('node:fs');
+      vi.mocked(fs.default.existsSync).mockReturnValue(true);
+      vi.mocked(fs.default.readFileSync).mockReturnValue('12345');
+      const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+      const { createDaemonCommand } = await import('../src/commands/daemon.js');
+      const cmd = createDaemonCommand();
+
+      await cmd.parseAsync(['stop', '--pid-file', '/tmp/fides-agentd.pid'], { from: 'user' });
+
+      expect(killSpy).toHaveBeenCalledWith(12345, 0);
+      expect(killSpy).toHaveBeenCalledWith(12345, 'SIGTERM');
+      expect(fs.default.rmSync).toHaveBeenCalledWith('/tmp/fides-agentd.pid', { force: true });
+    });
+
     it('should check agentd health status', async () => {
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({
         status: 'healthy',

@@ -1,11 +1,19 @@
 import { Command } from 'commander'
+import { spawn } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
+import { dirname, join } from 'node:path'
 import { formatTable } from '../utils/output.js'
+
+const AGENTD_PID_PATH = join(os.homedir(), '.fides', 'agentd.pid')
+const AGENTD_LOG_PATH = join(os.homedir(), '.fides', 'agentd.log')
 
 interface AgentdHealth {
   status?: string
   service?: string
   uptime?: number
   timestamp?: string
+  pid?: number
   checks?: Record<string, string>
   authorityStore?: {
     kind?: string
@@ -21,8 +29,41 @@ export function createDaemonCommand(): Command {
   cmd.command('start')
     .description('Start agentd')
     .option('--port <port>', 'Port to listen on', '7345')
+    .option('--command <command>', 'Command used to start agentd', 'pnpm')
+    .option('--args <args>', 'Comma-separated command args', '--filter,@fides/agentd,dev')
+    .option('--pid-file <path>', 'PID file path', AGENTD_PID_PATH)
+    .option('--log-file <path>', 'Log file path', AGENTD_LOG_PATH)
     .action((options) => {
-      console.log(`Starting agentd on port ${options.port}...`)
+      try {
+        const existingPid = readPid(options.pidFile)
+        if (existingPid) {
+          console.log(`agentd already appears to be running (pid ${existingPid})`)
+          return
+        }
+
+        ensureDir(options.pidFile)
+        ensureDir(options.logFile)
+        const logFd = fs.openSync(options.logFile, 'a')
+        const args = String(options.args).split(',').map(item => item.trim()).filter(Boolean)
+        const child = spawn(options.command, args, {
+          detached: true,
+          stdio: ['ignore', logFd, logFd],
+          env: {
+            ...process.env,
+            AGENTD_PORT: String(options.port),
+          },
+        })
+        if (!child.pid) {
+          throw new Error('agentd process did not expose a pid')
+        }
+        child.unref()
+        fs.writeFileSync(options.pidFile, String(child.pid), 'utf-8')
+        console.log(`agentd started on port ${options.port} (pid ${child.pid})`)
+        console.log(`logs: ${options.logFile}`)
+      } catch (error) {
+        console.error('Error:', error instanceof Error ? error.message : String(error))
+        process.exitCode = 1
+      }
     })
 
   cmd.command('status')
@@ -32,6 +73,10 @@ export function createDaemonCommand(): Command {
     .action(async (options) => {
       try {
         const result = await fetchAgentdHealth(options.agentdUrl)
+        const pid = readPid(AGENTD_PID_PATH)
+        if (pid) {
+          result.pid = pid
+        }
         if (options.json) {
           console.log(JSON.stringify(result, null, 2))
         } else {
@@ -56,8 +101,21 @@ export function createDaemonCommand(): Command {
 
   cmd.command('stop')
     .description('Stop agentd')
-    .action(() => {
-      console.log('Stopping agentd...')
+    .option('--pid-file <path>', 'PID file path', AGENTD_PID_PATH)
+    .action((options) => {
+      try {
+        const pid = readPid(options.pidFile)
+        if (!pid) {
+          console.log('agentd is not running')
+          return
+        }
+        process.kill(pid, 'SIGTERM')
+        fs.rmSync(options.pidFile, { force: true })
+        console.log(`agentd stop signal sent (pid ${pid})`)
+      } catch (error) {
+        console.error('Error:', error instanceof Error ? error.message : String(error))
+        process.exitCode = 1
+      }
     })
 
   return cmd
@@ -82,6 +140,9 @@ function printAgentdHealth(agentdUrl: string, health: AgentdHealth): void {
   if (typeof health.uptime === 'number') {
     rows.push(['Uptime:', `${health.uptime}s`])
   }
+  if (typeof health.pid === 'number') {
+    rows.push(['PID:', String(health.pid)])
+  }
   if (health.timestamp) {
     rows.push(['Timestamp:', health.timestamp])
   }
@@ -98,4 +159,28 @@ function printAgentdHealth(agentdUrl: string, health: AgentdHealth): void {
   console.log('')
   formatTable(rows)
   console.log('')
+}
+
+function ensureDir(filePath: string): void {
+  const dir = dirname(filePath)
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true })
+  }
+}
+
+function readPid(pidFile: string): number | null {
+  if (!fs.existsSync(pidFile)) {
+    return null
+  }
+  const pid = Number(fs.readFileSync(pidFile, 'utf-8'))
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return null
+  }
+  try {
+    process.kill(pid, 0)
+    return pid
+  } catch {
+    fs.rmSync(pidFile, { force: true })
+    return null
+  }
 }

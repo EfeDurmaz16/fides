@@ -10,53 +10,15 @@ import { serve } from '@hono/node-server'
 import { cors } from 'hono/cors'
 import { bodyLimit } from 'hono/body-limit'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
 import { apiKeyAuth } from './middleware/auth.js'
+import { createRegistryStore } from './storage.js'
 
 const app = new Hono()
 const collector = new MetricsCollector()
-
-const REGISTRY_DIR = join(homedir(), '.fides', 'registry')
-const REGISTRY_FILE = join(REGISTRY_DIR, 'registry.json')
-
-interface RegistryEntry {
-  card: Record<string, unknown>
-  mode: 'public' | 'private'
-  registeredAt: string
-  updatedAt: string
-  metadata: Record<string, unknown>
-}
-
-function ensureDir(): void {
-  if (!existsSync(REGISTRY_DIR)) {
-    mkdirSync(REGISTRY_DIR, { recursive: true })
-  }
-}
-
-function loadRegistry(): Map<string, RegistryEntry> {
-  ensureDir()
-  if (!existsSync(REGISTRY_FILE)) {
-    return new Map()
-  }
-  const data = JSON.parse(readFileSync(REGISTRY_FILE, 'utf-8'))
-  return new Map(Object.entries(data))
-}
-
-function saveRegistry(reg: Map<string, RegistryEntry>): void {
-  ensureDir()
-  const obj: Record<string, RegistryEntry> = {}
-  for (const [did, entry] of reg) {
-    obj[did] = entry
-  }
-  writeFileSync(REGISTRY_FILE, JSON.stringify(obj, null, 2))
-}
-
-const registry = loadRegistry()
+const registry = createRegistryStore()
 
 function getCorsOrigin(): string {
   const corsOrigin = process.env.CORS_ORIGIN
@@ -95,27 +57,21 @@ app.get('/metrics', (c) => {
 })
 
 // ─── Health ───────────────────────────────────────────────────────
-app.get('/health', (c) => {
-  let persistenceOk = false
-  try {
-    const testPath = join(REGISTRY_DIR, '.healthcheck')
-    writeFileSync(testPath, JSON.stringify({ ts: Date.now() }))
-    const data = JSON.parse(readFileSync(testPath, 'utf-8'))
-    persistenceOk = !!data.ts
-  } catch {
-    // persistence broken
-  }
+app.get('/health', async (c) => {
+  const persistence = await registry.healthCheck()
+  const stats = persistence.ok ? await registry.stats() : { total: 0, public: 0, private: 0 }
 
-  const status = persistenceOk ? 'healthy' : 'degraded'
+  const status = persistence.ok ? 'healthy' : 'degraded'
   return c.json({
     status,
     service: 'registry',
-    count: registry.size,
+    count: stats.total,
     timestamp: new Date().toISOString(),
     checks: {
-      persistence: persistenceOk ? 'ok' : 'fail',
+      persistence: persistence.ok ? 'ok' : 'fail',
+      store: persistence,
     },
-  }, persistenceOk ? 200 : 503)
+  }, persistence.ok ? 200 : 503)
 })
 
 /**
@@ -129,14 +85,13 @@ app.post('/v1/cards', async (c) => {
   }
 
   const now = new Date().toISOString()
-  registry.set(did, {
+  await registry.put(did, {
     card: body,
     mode: 'public',
     registeredAt: now,
     updatedAt: now,
     metadata: {},
   })
-  saveRegistry(registry)
 
   return c.json({ success: true, did, registeredAt: now }, 201)
 })
@@ -144,9 +99,9 @@ app.post('/v1/cards', async (c) => {
 /**
  * Get an AgentCard by DID.
  */
-app.get('/v1/cards/:did', (c) => {
+app.get('/v1/cards/:did', async (c) => {
   const did = c.req.param('did')
-  const entry = registry.get(did)
+  const entry = await registry.get(did)
   if (!entry) {
     return c.json({ error: 'Not found' }, 404)
   }
@@ -159,11 +114,11 @@ app.get('/v1/cards/:did', (c) => {
 /**
  * Search AgentCards.
  */
-app.get('/v1/search', (c) => {
+app.get('/v1/search', async (c) => {
   const query = c.req.query('q')?.toLowerCase() || ''
   const results: Array<{ did: string; name?: string; capabilities?: string[] }> = []
 
-  for (const [did, entry] of registry) {
+  for (const [did, entry] of await registry.list()) {
     if (entry.mode === 'private') continue
 
     const card = entry.card as Record<string, unknown>
@@ -185,13 +140,12 @@ app.get('/v1/search', (c) => {
 /**
  * Delete an AgentCard.
  */
-app.delete('/v1/cards/:did', (c) => {
+app.delete('/v1/cards/:did', async (c) => {
   const did = c.req.param('did')
-  if (!registry.has(did)) {
+  const deleted = await registry.delete(did)
+  if (!deleted) {
     return c.json({ error: 'Not found' }, 404)
   }
-  registry.delete(did)
-  saveRegistry(registry)
   return c.json({ success: true })
 })
 
@@ -200,7 +154,7 @@ app.delete('/v1/cards/:did', (c) => {
  */
 app.post('/v1/cards/:did/mode', async (c) => {
   const did = c.req.param('did')
-  const entry = registry.get(did)
+  const entry = await registry.get(did)
   if (!entry) return c.json({ error: 'Not found' }, 404)
 
   const { mode } = await c.req.json<{ mode: 'public' | 'private' }>()
@@ -210,7 +164,7 @@ app.post('/v1/cards/:did/mode', async (c) => {
 
   entry.mode = mode
   entry.updatedAt = new Date().toISOString()
-  saveRegistry(registry)
+  await registry.put(did, entry)
 
   return c.json({ success: true, mode })
 })
@@ -220,13 +174,13 @@ app.post('/v1/cards/:did/mode', async (c) => {
  */
 app.patch('/v1/cards/:did/metadata', async (c) => {
   const did = c.req.param('did')
-  const entry = registry.get(did)
+  const entry = await registry.get(did)
   if (!entry) return c.json({ error: 'Not found' }, 404)
 
   const metadata = await c.req.json()
   entry.metadata = { ...entry.metadata, ...metadata }
   entry.updatedAt = new Date().toISOString()
-  saveRegistry(registry)
+  await registry.put(did, entry)
 
   return c.json({ success: true })
 })
@@ -234,14 +188,8 @@ app.patch('/v1/cards/:did/metadata', async (c) => {
 /**
  * Get registry stats.
  */
-app.get('/v1/stats', (c) => {
-  let publicCount = 0
-  let privateCount = 0
-  for (const entry of registry.values()) {
-    if (entry.mode === 'public') publicCount++
-    else privateCount++
-  }
-  return c.json({ total: registry.size, public: publicCount, private: privateCount })
+app.get('/v1/stats', async (c) => {
+  return c.json(await registry.stats())
 })
 
 export { app }
@@ -291,6 +239,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
 
     server.close()
+    await registry.close?.()
     process.exit(0)
   }
 

@@ -8,6 +8,7 @@ import {
   InMemoryRegistryStore,
   PostgresRegistryStore,
   REGISTRY_MIGRATIONS,
+  createRegistryClient,
   runRegistryMigrations,
   type RegistryEntry,
 } from '../src/storage.js'
@@ -70,6 +71,23 @@ describe('Registry stores', () => {
     expect(await reader.healthCheck()).toMatchObject({ ok: true, kind: 'file' })
   })
 
+  it('rejects unsafe configured registry schema names', () => {
+    const previousSchema = process.env.REGISTRY_DB_SCHEMA
+
+    try {
+      process.env.REGISTRY_DB_SCHEMA = 'registry;DROP'
+      expect(() => createRegistryClient('postgresql://fides:fides@localhost:5432/fides')).toThrow(
+        'REGISTRY_DB_SCHEMA must be a simple Postgres identifier',
+      )
+    } finally {
+      if (previousSchema === undefined) {
+        delete process.env.REGISTRY_DB_SCHEMA
+      } else {
+        process.env.REGISTRY_DB_SCHEMA = previousSchema
+      }
+    }
+  })
+
   describe.skipIf(!postgresUrl)('postgres registry store', () => {
     it('records applied registry migrations once with checksums', async () => {
       const sql = postgres(postgresUrl, { max: 1 })
@@ -114,6 +132,47 @@ describe('Registry stores', () => {
         expect((await store.healthCheck()).ok).toBe(true)
       } finally {
         await store.close()
+      }
+    }, 30_000)
+
+    it('creates and uses the configured registry schema', async () => {
+      const schema = `registry_configured_${crypto.randomUUID().replaceAll('-', '')}`
+      const schemaIdentifier = quoteIdentifier(schema)
+      const adminSql = postgres(postgresUrl, { max: 1 })
+      const scopedUrl = postgresUrlWithSearchPath(postgresUrl, schema)
+      const scopedSql = postgres(scopedUrl, { max: 1 })
+      const previousSchema = process.env.REGISTRY_DB_SCHEMA
+
+      try {
+        process.env.REGISTRY_DB_SCHEMA = schema
+        await runRegistryMigrations(scopedSql)
+
+        const schemaRows = await adminSql`
+          SELECT schema_name
+          FROM information_schema.schemata
+          WHERE schema_name = ${schema}
+        `
+        expect(schemaRows).toHaveLength(1)
+
+        const tableRows = await adminSql`
+          SELECT table_name
+          FROM information_schema.tables
+          WHERE table_schema = ${schema}
+            AND table_name IN ('registry_cards', 'registry_schema_migrations')
+        `
+        expect(tableRows).toHaveLength(2)
+
+        const currentSchema = await scopedSql`SELECT current_schema() AS schema`
+        expect(currentSchema[0]?.schema).toBe(schema)
+      } finally {
+        if (previousSchema === undefined) {
+          delete process.env.REGISTRY_DB_SCHEMA
+        } else {
+          process.env.REGISTRY_DB_SCHEMA = previousSchema
+        }
+        await scopedSql.end()
+        await adminSql.unsafe(`DROP SCHEMA IF EXISTS ${schemaIdentifier} CASCADE`)
+        await adminSql.end()
       }
     }, 30_000)
 

@@ -146,11 +146,7 @@ export class PostgresRegistryStore implements RegistryStore {
   private initialized: Promise<void>
 
   constructor(connectionString = requiredDatabaseUrl()) {
-    this.sql = postgres(connectionString, {
-      max: parseInt(process.env.REGISTRY_DB_POOL_MAX || process.env.DB_POOL_MAX || '10', 10),
-      idle_timeout: 20,
-      connect_timeout: 10,
-    })
+    this.sql = createRegistryClient(connectionString)
     this.initialized = this.init()
   }
 
@@ -245,6 +241,7 @@ export async function runRegistryMigrations(sql: postgres.Sql): Promise<void> {
   await sql`SELECT pg_advisory_lock(hashtext('registry_migrations'))`
 
   try {
+    await ensureConfiguredRegistrySchema(sql)
     await ensureRegistryMigrationLedger(sql)
     for (const migration of REGISTRY_MIGRATIONS) {
       const checksum = registryMigrationChecksum(migration)
@@ -278,6 +275,14 @@ export async function runRegistryMigrations(sql: postgres.Sql): Promise<void> {
   } finally {
     await sql`SELECT pg_advisory_unlock(hashtext('registry_migrations'))`
   }
+}
+
+async function ensureConfiguredRegistrySchema(sql: postgres.Sql): Promise<void> {
+  const schemaName = process.env.REGISTRY_DB_SCHEMA
+  if (!schemaName) return
+
+  assertValidRegistrySchemaName(schemaName)
+  await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`)
 }
 
 async function ensureRegistryMigrationLedger(sql: postgres.Sql): Promise<void> {
@@ -361,4 +366,28 @@ function requiredDatabaseUrl(): string {
     throw new Error('REGISTRY_DATABASE_URL or DATABASE_URL is required for REGISTRY_STORE=postgres')
   }
   return url
+}
+
+export function createRegistryClient(connectionString = requiredDatabaseUrl()): postgres.Sql {
+  return postgres(withRegistrySearchPath(connectionString, process.env.REGISTRY_DB_SCHEMA), {
+    max: parseInt(process.env.REGISTRY_DB_POOL_MAX || process.env.DB_POOL_MAX || '10', 10),
+    idle_timeout: 20,
+    connect_timeout: 10,
+  })
+}
+
+function withRegistrySearchPath(connectionString: string, schemaName?: string): string {
+  if (!schemaName) return connectionString
+
+  assertValidRegistrySchemaName(schemaName)
+
+  const url = new URL(connectionString)
+  url.searchParams.set('options', `-c search_path=${schemaName},public`)
+  return url.toString()
+}
+
+function assertValidRegistrySchemaName(schemaName: string): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(schemaName)) {
+    throw new Error('REGISTRY_DB_SCHEMA must be a simple Postgres identifier')
+  }
 }

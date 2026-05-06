@@ -6,6 +6,25 @@ export interface RegisterIdentityParams {
   did: string
   publicKey: string
   metadata?: Record<string, unknown>
+  domain?: string
+}
+
+export interface VerifyIdentityDomainResponse {
+  did: string
+  publicKey: string
+  metadata: Record<string, unknown>
+  domain: string
+  domainVerified: true
+  domainVerifiedAt: string
+  verificationMethod: 'dns'
+  createdAt: string
+  updatedAt: string
+  verification: {
+    domain: string
+    did: string
+    recordName: string
+    verified: true
+  }
 }
 
 export class DiscoveryClient {
@@ -69,6 +88,38 @@ export class DiscoveryClient {
       }
       throw new DiscoveryError(
         `Failed to resolve DID: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+  }
+
+  /**
+   * Verify a registered identity's domain through DNS TXT and persist the result.
+   */
+  async verifyDomain(did: string, domain?: string): Promise<VerifyIdentityDomainResponse> {
+    try {
+      const response = await fetch(
+        `${this.options.baseUrl}/identities/${encodeURIComponent(did)}/domain/verify`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(domain ? { domain } : {}),
+        }
+      )
+
+      if (!response.ok) {
+        const text = await response.text()
+        throw new DiscoveryError(
+          `Failed to verify identity domain: ${response.status} ${text}`
+        )
+      }
+
+      return await response.json()
+    } catch (error) {
+      if (error instanceof DiscoveryError) {
+        throw error
+      }
+      throw new DiscoveryError(
+        `Failed to verify identity domain: ${error instanceof Error ? error.message : String(error)}`
       )
     }
   }

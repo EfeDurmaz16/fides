@@ -1,9 +1,11 @@
 import { Hono } from 'hono'
+import { resolveTxt } from 'node:dns/promises'
 import { eq } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { identities } from '../db/schema.js'
 import { DiscoveryError, DID_PREFIX, ED25519_PUBLIC_KEY_LENGTH } from '@fides/shared'
-import type { RegisterIdentityRequest, IdentityResponse } from '../types.js'
+import { verifyDomainDid } from '@fides/core'
+import type { RegisterIdentityRequest, IdentityResponse, VerifyIdentityDomainRequest } from '../types.js'
 import bs58 from 'bs58'
 
 const identitiesRouter = new Hono()
@@ -65,6 +67,9 @@ identitiesRouter.post('/', async (c) => {
       publicKey: identity.publicKey,
       metadata: identity.metadata as Record<string, unknown>,
       domain: identity.domain,
+      domainVerified: identity.domainVerified,
+      domainVerifiedAt: identity.domainVerifiedAt?.toISOString() ?? null,
+      verificationMethod: identity.verificationMethod as 'dns' | null,
       createdAt: identity.createdAt.toISOString(),
       updatedAt: identity.updatedAt.toISOString(),
     }
@@ -99,6 +104,9 @@ identitiesRouter.get('/:did', async (c) => {
       publicKey: identity.publicKey,
       metadata: identity.metadata as Record<string, unknown>,
       domain: identity.domain,
+      domainVerified: identity.domainVerified,
+      domainVerifiedAt: identity.domainVerifiedAt?.toISOString() ?? null,
+      verificationMethod: identity.verificationMethod as 'dns' | null,
       createdAt: identity.createdAt.toISOString(),
       updatedAt: identity.updatedAt.toISOString(),
     }
@@ -126,10 +134,68 @@ identitiesRouter.get('/', async (c) => {
       publicKey: identity.publicKey,
       metadata: identity.metadata as Record<string, unknown>,
       domain: identity.domain,
+      domainVerified: identity.domainVerified,
+      domainVerifiedAt: identity.domainVerifiedAt?.toISOString() ?? null,
+      verificationMethod: identity.verificationMethod as 'dns' | null,
       createdAt: identity.createdAt.toISOString(),
       updatedAt: identity.updatedAt.toISOString(),
     }))
 
+    return c.json(response)
+  } catch (error) {
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// POST /identities/:did/domain/verify - Verify and persist DNS domain ownership
+identitiesRouter.post('/:did/domain/verify', async (c) => {
+  try {
+    const did = c.req.param('did')
+    const body: VerifyIdentityDomainRequest = await c.req.json<VerifyIdentityDomainRequest>().catch(() => ({}))
+
+    const [existing] = await db.select().from(identities).where(eq(identities.did, did))
+    if (!existing) {
+      return c.json({ error: 'Identity not found' }, 404)
+    }
+
+    const domain = body.domain || existing.domain
+    if (!domain) {
+      return c.json({ error: 'Domain is required because this identity has no stored domain' }, 400)
+    }
+
+    const verification = await verifyDomainDid({
+      domain,
+      did,
+      resolver: resolveTxt,
+    })
+
+    if (!verification.verified) {
+      return c.json({ ...verification, persisted: false }, 422)
+    }
+
+    const verifiedAt = new Date()
+    const [identity] = await db.update(identities).set({
+      domain: verification.domain,
+      domainVerified: true,
+      domainVerifiedAt: verifiedAt,
+      verificationMethod: 'dns',
+      updatedAt: verifiedAt,
+    }).where(eq(identities.did, did)).returning()
+
+    const response: IdentityResponse & { verification: typeof verification } = {
+      did: identity.did,
+      publicKey: identity.publicKey,
+      metadata: identity.metadata as Record<string, unknown>,
+      domain: identity.domain,
+      domainVerified: identity.domainVerified,
+      domainVerifiedAt: identity.domainVerifiedAt?.toISOString() ?? null,
+      verificationMethod: identity.verificationMethod as 'dns' | null,
+      createdAt: identity.createdAt.toISOString(),
+      updatedAt: identity.updatedAt.toISOString(),
+      verification,
+    }
+
+    c.header('Cache-Control', 'no-store')
     return c.json(response)
   } catch (error) {
     return c.json({ error: 'Internal server error' }, 500)

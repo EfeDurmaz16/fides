@@ -7,29 +7,40 @@ const TEST_DID = 'did:fides:CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB'
 
 // Mock the database module
 vi.mock('../src/db/client.js', () => {
+  const baseIdentity = {
+    did: 'did:fides:CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB',
+    publicKey: 'aa'.repeat(32),
+    metadata: {},
+    domain: null,
+    domainVerified: false,
+    domainVerifiedAt: null,
+    verificationMethod: null,
+    createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+  }
   const mockDb = {
     insert: vi.fn().mockReturnValue({
       values: vi.fn().mockReturnValue({
-        returning: vi.fn().mockResolvedValue([{
-          did: 'did:fides:CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB',
-          publicKey: 'aa'.repeat(32),
-          metadata: {},
-          domain: null,
-          createdAt: new Date('2024-01-01T00:00:00.000Z'),
-          updatedAt: new Date('2024-01-01T00:00:00.000Z'),
-        }]),
+        returning: vi.fn().mockResolvedValue([baseIdentity]),
       }),
     }),
     select: vi.fn().mockReturnValue({
       from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue([{
-          did: 'did:fides:CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB',
-          publicKey: 'aa'.repeat(32),
-          metadata: {},
-          domain: null,
-          createdAt: new Date('2024-01-01T00:00:00.000Z'),
-          updatedAt: new Date('2024-01-01T00:00:00.000Z'),
-        }]),
+        where: vi.fn().mockResolvedValue([baseIdentity]),
+      }),
+    }),
+    update: vi.fn().mockReturnValue({
+      set: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([{
+            ...baseIdentity,
+            domain: 'example.com',
+            domainVerified: true,
+            domainVerifiedAt: new Date('2024-01-02T00:00:00.000Z'),
+            verificationMethod: 'dns',
+            updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+          }]),
+        }),
       }),
     }),
   }
@@ -45,6 +56,10 @@ vi.mock('../src/db/client.js', () => {
     sql: mockSql,
   }
 })
+
+vi.mock('node:dns/promises', () => ({
+  resolveTxt: vi.fn(),
+}))
 
 describe('Discovery Service Routes', () => {
   beforeEach(() => {
@@ -71,6 +86,7 @@ describe('Discovery Service Routes', () => {
         did: TEST_DID,
         publicKey: TEST_PUBLIC_KEY,
         metadata: {},
+        domainVerified: false,
       })
     })
 
@@ -139,6 +155,7 @@ describe('Discovery Service Routes', () => {
       expect(data).toMatchObject({
         did: TEST_DID,
         publicKey: TEST_PUBLIC_KEY,
+        domainVerified: false,
       })
     })
 
@@ -160,6 +177,63 @@ describe('Discovery Service Routes', () => {
       expect(res.status).toBe(404)
       const data = await res.json()
       expect(data.error).toContain('not found')
+    })
+  })
+
+  describe('POST /identities/:did/domain/verify', () => {
+    it('verifies and persists domain ownership', async () => {
+      const dns = await import('node:dns/promises')
+      vi.mocked(dns.resolveTxt).mockResolvedValue([['fides-did=', TEST_DID]])
+
+      const req = new Request(`http://localhost/identities/${encodeURIComponent(TEST_DID)}/domain/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'Example.COM.' }),
+      })
+
+      const res = await app.fetch(req)
+
+      expect(res.status).toBe(200)
+      expect(dns.resolveTxt).toHaveBeenCalledWith('_fides.example.com')
+      const data = await res.json()
+      expect(data).toMatchObject({
+        did: TEST_DID,
+        domain: 'example.com',
+        domainVerified: true,
+        verificationMethod: 'dns',
+        verification: {
+          domain: 'example.com',
+          did: TEST_DID,
+          recordName: '_fides.example.com',
+          verified: true,
+        },
+      })
+    })
+
+    it('does not persist when DNS verification fails', async () => {
+      const dns = await import('node:dns/promises')
+      vi.mocked(dns.resolveTxt).mockResolvedValue(['other=value'])
+
+      const req = new Request(`http://localhost/identities/${encodeURIComponent(TEST_DID)}/domain/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'example.com' }),
+      })
+
+      const res = await app.fetch(req)
+
+      expect(res.status).toBe(422)
+      const data = await res.json()
+      expect(data).toMatchObject({
+        domain: 'example.com',
+        did: TEST_DID,
+        verified: false,
+        reason: 'record-not-found',
+        persisted: false,
+      })
+
+      const { db } = await import('../src/db/client.js')
+      expect(db.update).not.toHaveBeenCalled()
     })
   })
 

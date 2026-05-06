@@ -101,6 +101,51 @@ describe('platform-api service', () => {
     }
   })
 
+  it('enforces scoped platform API keys when configured', async () => {
+    const previousApiKey = process.env.SERVICE_API_KEY
+    const previousScopedKeys = process.env.PLATFORM_API_KEYS
+    delete process.env.SERVICE_API_KEY
+    process.env.PLATFORM_API_KEYS = JSON.stringify([
+      { key: 'passkey-key', scopes: ['platform:passkeys:write', 'platform:passkeys:read'] },
+      { key: 'trust-key', scopes: ['platform:trust-anchors:write', 'platform:trust-anchors:read'] },
+    ])
+
+    try {
+      const passkeyRes = await app.request('/v1/passkeys/principals/did%3Afides%3Aprincipal/credentials', {
+        headers: { 'X-API-Key': 'passkey-key' },
+      })
+      expect(passkeyRes.status).toBe(200)
+
+      const trustAnchorRes = await app.request('/v1/trust-anchors', {
+        headers: { 'X-API-Key': 'passkey-key' },
+      })
+      expect(trustAnchorRes.status).toBe(403)
+      expect((await trustAnchorRes.json()).error).toContain('platform:trust-anchors:read')
+    } finally {
+      restoreEnv('SERVICE_API_KEY', previousApiKey)
+      restoreEnv('PLATFORM_API_KEYS', previousScopedKeys)
+    }
+  })
+
+  it('fails closed when scoped platform API keys are malformed', async () => {
+    const previousApiKey = process.env.SERVICE_API_KEY
+    const previousScopedKeys = process.env.PLATFORM_API_KEYS
+    delete process.env.SERVICE_API_KEY
+    process.env.PLATFORM_API_KEYS = '{bad-json'
+
+    try {
+      const res = await app.request('/v1/trust-anchors', {
+        headers: { 'X-API-Key': 'trust-key' },
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('PLATFORM_API_KEYS must be a JSON array')
+    } finally {
+      restoreEnv('SERVICE_API_KEY', previousApiKey)
+      restoreEnv('PLATFORM_API_KEYS', previousScopedKeys)
+    }
+  })
+
   it('creates, lists, reads, updates, and deletes passkey credential bindings', async () => {
     const binding = {
       principalDid: 'did:fides:principal-passkey-01',

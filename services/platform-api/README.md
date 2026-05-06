@@ -69,7 +69,38 @@ Returns configured service URLs. Defaults are local development ports and can be
 - `RELAY_URL`
 - `AGENTD_URL`
 
-When `SERVICE_API_KEY` is set, callers must include `X-API-Key`. In `NODE_ENV=production`, this endpoint fails closed with `503` if `SERVICE_API_KEY` is unset.
+Protected platform routes accept either the legacy `SERVICE_API_KEY` or scoped
+platform keys from `PLATFORM_API_KEYS`. Legacy `SERVICE_API_KEY` remains
+full-access. When `PLATFORM_API_KEYS` is set, it takes precedence for
+platform-api routes and must be a JSON array:
+
+```json
+[
+  {
+    "key": "operator-key",
+    "scopes": [
+      "platform:topology:read",
+      "platform:passkeys:read",
+      "platform:passkeys:write",
+      "platform:trust-anchors:read",
+      "platform:trust-anchors:write"
+    ]
+  }
+]
+```
+
+Available scopes are:
+
+- `platform:topology:read`
+- `platform:passkeys:read`
+- `platform:passkeys:write`
+- `platform:trust-anchors:read`
+- `platform:trust-anchors:write`
+- `*` for explicit full platform access
+
+In `NODE_ENV=production`, protected routes fail closed with `503` if neither
+`SERVICE_API_KEY` nor valid `PLATFORM_API_KEYS` are configured. Malformed
+`PLATFORM_API_KEYS` also fails closed with `503`.
 
 ### `POST /v1/passkeys/bindings`
 

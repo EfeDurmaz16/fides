@@ -41,4 +41,43 @@ describe('evaluateApiKeyAuth', () => {
       productionRequirement: 'topology metadata',
     })).toEqual({ ok: true })
   })
+
+  it('accepts scoped API keys when they include the required scope', () => {
+    expect(evaluateApiKeyAuth({
+      configuredKeys: [
+        { key: 'topology-key', scopes: ['platform:topology:read'] },
+        { key: 'trust-key', scopes: ['platform:trust-anchors:write'] },
+      ],
+      providedKey: 'trust-key',
+      nodeEnv: 'production',
+      productionRequirement: 'trust-anchor governance',
+      requiredScope: 'platform:trust-anchors:write',
+    })).toEqual({ ok: true })
+  })
+
+  it('rejects scoped API keys missing the required scope', () => {
+    expect(evaluateApiKeyAuth({
+      configuredKeys: [
+        { key: 'topology-key', scopes: ['platform:topology:read'] },
+      ],
+      providedKey: 'topology-key',
+      nodeEnv: 'production',
+      productionRequirement: 'trust-anchor governance',
+      requiredScope: 'platform:trust-anchors:write',
+    })).toEqual({
+      ok: false,
+      status: 403,
+      error: 'Forbidden - API key is missing required scope platform:trust-anchors:write',
+    })
+  })
+
+  it('keeps legacy SERVICE_API_KEY as full access when scoped keys are absent', () => {
+    expect(evaluateApiKeyAuth({
+      configuredKey: 'legacy-key',
+      providedKey: 'legacy-key',
+      nodeEnv: 'production',
+      productionRequirement: 'trust-anchor governance',
+      requiredScope: 'platform:trust-anchors:write',
+    })).toEqual({ ok: true })
+  })
 })

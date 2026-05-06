@@ -331,6 +331,12 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
+      description: >
+        Use the legacy SERVICE_API_KEY for full platform access, or configure
+        PLATFORM_API_KEYS with scoped keys. Supported platform-api scopes are
+        platform:topology:read, platform:passkeys:read,
+        platform:passkeys:write, platform:trust-anchors:read,
+        platform:trust-anchors:write, and *.
   responses:
     ErrorResponse:
       description: Error response.

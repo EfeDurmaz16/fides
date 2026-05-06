@@ -10,7 +10,7 @@ import {
   type PasskeyCredentialBinding,
   type TrustAnchorStatus,
 } from '@fides/core'
-import { evaluateApiKeyAuth, MetricsCollector, metricsMiddleware } from '@fides/shared'
+import { evaluateApiKeyAuth, MetricsCollector, metricsMiddleware, type ScopedApiKey } from '@fides/shared'
 import { createPlatformStore, type PlatformTrustAnchorRecord } from './storage.js'
 
 const app = new Hono()
@@ -27,6 +27,13 @@ const SERVICE_PORTS = {
   agentd: 7345,
 } as const
 const PASSKEY_TRANSPORTS = ['ble', 'hybrid', 'internal', 'nfc', 'usb'] as const
+const PLATFORM_API_SCOPES = {
+  topologyRead: 'platform:topology:read',
+  passkeysRead: 'platform:passkeys:read',
+  passkeysWrite: 'platform:passkeys:write',
+  trustAnchorsRead: 'platform:trust-anchors:read',
+  trustAnchorsWrite: 'platform:trust-anchors:write',
+} as const
 
 app.use('*', metricsMiddleware(collector))
 app.use('*', cors({ origin: getCorsOrigin() }))
@@ -56,7 +63,7 @@ app.get('/metrics', (c) => {
   return c.text(collector.toPrometheus(), 200, { 'Content-Type': 'text/plain; version=0.0.4' })
 })
 
-app.get('/v1/topology', apiKeyAuth('topology metadata'), (c) => c.json({
+app.get('/v1/topology', apiKeyAuth('topology metadata', PLATFORM_API_SCOPES.topologyRead), (c) => c.json({
   service: 'platform-api',
   components: {
     discovery: serviceUrl('DISCOVERY_URL', SERVICE_PORTS.discovery),
@@ -68,7 +75,7 @@ app.get('/v1/topology', apiKeyAuth('topology metadata'), (c) => c.json({
   },
 }))
 
-app.post('/v1/passkeys/bindings', apiKeyAuth('passkey credential bindings'), async (c) => {
+app.post('/v1/passkeys/bindings', apiKeyAuth('passkey credential bindings', PLATFORM_API_SCOPES.passkeysWrite), async (c) => {
   const body = await c.req.json()
   const binding = parsePasskeyBinding(body)
   if (!binding.ok) {
@@ -94,7 +101,7 @@ app.post('/v1/passkeys/bindings', apiKeyAuth('passkey credential bindings'), asy
   return c.json({ binding: stored }, existing ? 200 : 201)
 })
 
-app.get('/v1/passkeys/principals/:did/credentials', apiKeyAuth('passkey credential bindings'), async (c) => {
+app.get('/v1/passkeys/principals/:did/credentials', apiKeyAuth('passkey credential bindings', PLATFORM_API_SCOPES.passkeysRead), async (c) => {
   const principalDid = c.req.param('did')
   if (!isValidFidesDid(principalDid)) {
     return c.json({ error: 'invalid principal DID' }, 400)
@@ -105,7 +112,7 @@ app.get('/v1/passkeys/principals/:did/credentials', apiKeyAuth('passkey credenti
   return c.json({ principalDid, credentials, count: credentials.length })
 })
 
-app.get('/v1/passkeys/credentials/:credentialId', apiKeyAuth('passkey credential bindings'), async (c) => {
+app.get('/v1/passkeys/credentials/:credentialId', apiKeyAuth('passkey credential bindings', PLATFORM_API_SCOPES.passkeysRead), async (c) => {
   const credentialId = c.req.param('credentialId')
   const binding = await store.getPasskeyBinding(credentialId)
   if (!binding) {
@@ -114,7 +121,7 @@ app.get('/v1/passkeys/credentials/:credentialId', apiKeyAuth('passkey credential
   return c.json({ binding })
 })
 
-app.delete('/v1/passkeys/credentials/:credentialId', apiKeyAuth('passkey credential bindings'), async (c) => {
+app.delete('/v1/passkeys/credentials/:credentialId', apiKeyAuth('passkey credential bindings', PLATFORM_API_SCOPES.passkeysWrite), async (c) => {
   const credentialId = c.req.param('credentialId')
   const deleted = await store.deletePasskeyBinding(credentialId)
   if (!deleted) {
@@ -123,7 +130,7 @@ app.delete('/v1/passkeys/credentials/:credentialId', apiKeyAuth('passkey credent
   return c.json({ success: true })
 })
 
-app.post('/v1/trust-anchors', apiKeyAuth('trust-anchor governance'), async (c) => {
+app.post('/v1/trust-anchors', apiKeyAuth('trust-anchor governance', PLATFORM_API_SCOPES.trustAnchorsWrite), async (c) => {
   const body = await c.req.json()
   const parsed = parseTrustAnchorRecord(body)
   if (!parsed.ok) {
@@ -142,7 +149,7 @@ app.post('/v1/trust-anchors', apiKeyAuth('trust-anchor governance'), async (c) =
   return c.json({ anchor }, existing ? 200 : 201)
 })
 
-app.get('/v1/trust-anchors', apiKeyAuth('trust-anchor governance'), async (c) => {
+app.get('/v1/trust-anchors', apiKeyAuth('trust-anchor governance', PLATFORM_API_SCOPES.trustAnchorsRead), async (c) => {
   const status = c.req.query('status')
   if (status !== undefined && !isTrustAnchorStatus(status)) {
     return c.json({ error: 'status must be active, suspended, or revoked' }, 400)
@@ -155,7 +162,7 @@ app.get('/v1/trust-anchors', apiKeyAuth('trust-anchor governance'), async (c) =>
   return c.json({ anchors: filtered, count: filtered.length })
 })
 
-app.get('/v1/trust-anchors/distribution', apiKeyAuth('trust-anchor governance'), async (c) => {
+app.get('/v1/trust-anchors/distribution', apiKeyAuth('trust-anchor governance', PLATFORM_API_SCOPES.trustAnchorsRead), async (c) => {
   const requiredScope = c.req.query('requiredScope')
   const trustedIssuerDids = parseCsv(c.req.query('trustedIssuerDids'))
   const anchors = await store.listTrustAnchors()
@@ -173,7 +180,7 @@ app.get('/v1/trust-anchors/distribution', apiKeyAuth('trust-anchor governance'),
   return c.json({ distribution })
 })
 
-app.get('/v1/trust-anchors/:did', apiKeyAuth('trust-anchor governance'), async (c) => {
+app.get('/v1/trust-anchors/:did', apiKeyAuth('trust-anchor governance', PLATFORM_API_SCOPES.trustAnchorsRead), async (c) => {
   const did = c.req.param('did')
   const anchor = await store.getTrustAnchor(did)
   if (!anchor) {
@@ -182,7 +189,7 @@ app.get('/v1/trust-anchors/:did', apiKeyAuth('trust-anchor governance'), async (
   return c.json({ anchor })
 })
 
-app.patch('/v1/trust-anchors/:did/status', apiKeyAuth('trust-anchor governance'), async (c) => {
+app.patch('/v1/trust-anchors/:did/status', apiKeyAuth('trust-anchor governance', PLATFORM_API_SCOPES.trustAnchorsWrite), async (c) => {
   const did = c.req.param('did')
   const existing = await store.getTrustAnchor(did)
   if (!existing) {
@@ -208,7 +215,7 @@ app.patch('/v1/trust-anchors/:did/status', apiKeyAuth('trust-anchor governance')
   return c.json({ anchor: updated })
 })
 
-app.delete('/v1/trust-anchors/:did', apiKeyAuth('trust-anchor governance'), async (c) => {
+app.delete('/v1/trust-anchors/:did', apiKeyAuth('trust-anchor governance', PLATFORM_API_SCOPES.trustAnchorsWrite), async (c) => {
   const did = c.req.param('did')
   const deleted = await store.deleteTrustAnchor(did)
   if (!deleted) {
@@ -236,13 +243,20 @@ function getCorsOrigin(): string {
   return process.env.CORS_ORIGIN || '*'
 }
 
-function apiKeyAuth(productionRequirement: string): MiddlewareHandler {
+function apiKeyAuth(productionRequirement: string, requiredScope: string): MiddlewareHandler {
   return async (c, next) => {
+    const scopedKeys = parsePlatformApiKeys(process.env.PLATFORM_API_KEYS)
+    if (!scopedKeys.ok) {
+      return c.json({ error: scopedKeys.error }, 503)
+    }
+
     const decision = evaluateApiKeyAuth({
       configuredKey: process.env.SERVICE_API_KEY,
+      configuredKeys: scopedKeys.value,
       providedKey: c.req.header('X-API-Key'),
       nodeEnv: process.env.NODE_ENV,
       productionRequirement,
+      requiredScope,
     })
     if (!decision.ok) {
       return c.json({ error: decision.error }, decision.status)
@@ -250,6 +264,51 @@ function apiKeyAuth(productionRequirement: string): MiddlewareHandler {
 
     return next()
   }
+}
+
+function parsePlatformApiKeys(raw: string | undefined): { ok: true; value?: ScopedApiKey[] } | { ok: false; error: string } {
+  if (raw === undefined || raw.trim().length === 0) {
+    return { ok: true, value: undefined }
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return { ok: false, error: 'PLATFORM_API_KEYS must be a JSON array of scoped API keys' }
+  }
+
+  if (!Array.isArray(parsed)) {
+    return { ok: false, error: 'PLATFORM_API_KEYS must be a JSON array of scoped API keys' }
+  }
+
+  const keys: ScopedApiKey[] = []
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      return { ok: false, error: 'PLATFORM_API_KEYS entries must include a non-empty key and scopes array' }
+    }
+    const candidate = entry as { key?: unknown; scopes?: unknown }
+    if (typeof candidate.key !== 'string' || candidate.key.trim().length === 0) {
+      return { ok: false, error: 'PLATFORM_API_KEYS entries must include a non-empty key and scopes array' }
+    }
+    if (!Array.isArray(candidate.scopes) || candidate.scopes.length === 0) {
+      return { ok: false, error: 'PLATFORM_API_KEYS entries must include a non-empty key and scopes array' }
+    }
+    if (candidate.scopes.some(scope => typeof scope !== 'string' || scope.trim().length === 0)) {
+      return { ok: false, error: 'PLATFORM_API_KEYS scopes must be non-empty strings' }
+    }
+
+    keys.push({
+      key: candidate.key.trim(),
+      scopes: [...new Set(candidate.scopes.map(scope => scope.trim()))].sort(),
+    })
+  }
+
+  if (keys.length === 0) {
+    return { ok: false, error: 'PLATFORM_API_KEYS must contain at least one scoped API key' }
+  }
+
+  return { ok: true, value: keys }
 }
 
 function parsePasskeyBinding(body: unknown): { ok: true; value: PasskeyCredentialBinding } | { ok: false; error: string } {

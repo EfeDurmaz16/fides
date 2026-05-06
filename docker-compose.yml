@@ -148,6 +148,7 @@ services:
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       SERVICE_API_KEY: ${SERVICE_API_KEY:-}
+      PLATFORM_API_KEYS: ${PLATFORM_API_KEYS:-}
     depends_on:
       discovery:
         condition: service_started

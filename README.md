@@ -233,6 +233,7 @@ pnpm --filter @fides/cli fides incident report --agentd-url https://agentd.examp
 pnpm --filter @fides/cli fides propagation pending --agentd-url https://agentd.example.com --limit 25
 pnpm --filter @fides/cli fides propagation retry --agentd-url https://agentd.example.com --limit 25
 pnpm --filter @fides/cli fides authorize check --agentd-url https://agentd.example.com --agent-did did:fides:agent --capability payments.execute --session-id "$SESSION_ID" --audience agentd
+pnpm --filter @fides/cli fides card proxy did:fides:agent --agentd-url https://agentd.example.com
 ```
 
 When `--delegator-public-key` is provided, `agentd` verifies the DelegationToken signature before creating the session.

@@ -1,7 +1,7 @@
 import { Command } from 'commander'
 import { validateAgentCard, createIdentity, classifyCapabilityRisk } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
-import { RegistryClient, type AgentCard as RegistryAgentCard } from '@fides/sdk'
+import { AgentdClient, RegistryClient, type AgentCard as RegistryAgentCard } from '@fides/sdk'
 import { WellKnownDiscoveryProvider } from '@fides/discovery'
 import { readFileSync } from 'node:fs'
 import { loadConfig } from '../utils/config.js'
@@ -91,6 +91,26 @@ export function createCardCommand(): Command {
         console.log(JSON.stringify(card, null, 2))
       } catch (err) {
         error(`Failed to read AgentCard: ${err instanceof Error ? err.message : String(err)}`)
+        process.exit(1)
+      }
+    })
+
+  cmd.command('proxy')
+    .description('Read an AgentCard through the local agentd registry proxy')
+    .argument('<did>', 'Agent DID')
+    .option('--agentd-url <url>', 'agentd base URL', 'http://localhost:7345')
+    .option('--api-key <key>', 'agentd API key. Defaults to FIDES_API_KEY')
+    .action(async (did, options) => {
+      try {
+        const agentd = createAgentdClient(options)
+        const response = await agentd.getCard(did)
+        if (!response.card) {
+          error(response.error || `AgentCard not found: ${did}`)
+          process.exit(1)
+        }
+        console.log(JSON.stringify(response.card, null, 2))
+      } catch (err) {
+        error(`Failed to read AgentCard through agentd: ${err instanceof Error ? err.message : String(err)}`)
         process.exit(1)
       }
     })
@@ -216,6 +236,13 @@ function createRegistryClient(options: { registryUrl?: string; apiKey?: string }
   const config = loadConfig()
   return new RegistryClient({
     baseUrl: options.registryUrl || config.registryUrl,
+    apiKey: options.apiKey || process.env.FIDES_API_KEY,
+  })
+}
+
+function createAgentdClient(options: { agentdUrl?: string; apiKey?: string }): AgentdClient {
+  return new AgentdClient({
+    baseUrl: options.agentdUrl || process.env.FIDES_AGENTD_URL || 'http://localhost:7345',
     apiKey: options.apiKey || process.env.FIDES_API_KEY,
   })
 }

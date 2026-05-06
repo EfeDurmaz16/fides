@@ -13,6 +13,7 @@ vi.mock('@fides/sdk', () => ({
   createAttestation: vi.fn(),
   FileKeyStore: vi.fn(),
   DiscoveryClient: vi.fn(),
+  AgentdClient: vi.fn(),
   RegistryClient: vi.fn(),
   TrustClient: vi.fn(),
   TrustLevel: {
@@ -194,6 +195,34 @@ describe('CLI Commands', () => {
       await cmd.parseAsync(['search', 'Agent'], { from: 'user' });
 
       expect(mockRegistryClient.search).toHaveBeenCalledWith('Agent');
+    });
+
+    it('reads cards through the agentd registry proxy', async () => {
+      const mockAgentdClient = {
+        getCard: vi.fn().mockResolvedValue({
+          did: 'did:fides:agent',
+          card: {
+            id: 'did:fides:agent',
+            name: 'Agent',
+          },
+        }),
+      };
+      vi.mocked(sdk.AgentdClient).mockImplementation(() => mockAgentdClient as any);
+
+      const { createCardCommand } = await import('../src/commands/card.js');
+      const cmd = createCardCommand();
+
+      await cmd.parseAsync(['proxy', 'did:fides:agent', '--agentd-url', 'http://agentd.test', '--api-key', 'agentd-key'], { from: 'user' });
+
+      expect(sdk.AgentdClient).toHaveBeenCalledWith({
+        baseUrl: 'http://agentd.test',
+        apiKey: 'agentd-key',
+      });
+      expect(mockAgentdClient.getCard).toHaveBeenCalledWith('did:fides:agent');
+      expect(console.log).toHaveBeenCalledWith(JSON.stringify({
+        id: 'did:fides:agent',
+        name: 'Agent',
+      }, null, 2));
     });
   });
 

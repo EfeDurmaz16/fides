@@ -323,6 +323,7 @@ No database — in-memory only.
 | `fides trust score` | `fides trust score` | Output format changed |
 | *(none)* | `fides card publish <file>` | New: publish AgentCard JSON to the hosted registry |
 | *(none)* | `fides card get <did>` | New: read a public registry AgentCard |
+| *(none)* | `fides card proxy <did>` | New: read an AgentCard through the local agentd registry proxy |
 | *(none)* | `fides card search [query]` | New: search public registry AgentCards |
 | *(none)* | `fides relay send` | New: send relay message |
 | *(none)* | `fides relay poll` | New: poll relay messages |

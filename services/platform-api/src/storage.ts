@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import type { PasskeyCredentialBinding } from '@fides/core'
+import type { SignedObject, TrustAnchorStatus } from '@fides/core'
 
 export interface PlatformStoreHealth {
   ok: boolean
@@ -15,15 +16,36 @@ export interface PlatformStore {
   getPasskeyBinding(credentialId: string): Promise<PasskeyCredentialBinding | null>
   listPasskeyBindings(principalDid: string): Promise<PasskeyCredentialBinding[]>
   deletePasskeyBinding(credentialId: string): Promise<boolean>
+  putTrustAnchor(anchor: PlatformTrustAnchorRecord): Promise<PlatformTrustAnchorRecord>
+  getTrustAnchor(did: string): Promise<PlatformTrustAnchorRecord | null>
+  listTrustAnchors(): Promise<PlatformTrustAnchorRecord[]>
+  deleteTrustAnchor(did: string): Promise<boolean>
   healthCheck(): Promise<PlatformStoreHealth>
+}
+
+export interface PlatformTrustAnchorRecord {
+  did: string
+  name: string
+  publicKey: string
+  attestation: SignedObject<unknown>
+  status: TrustAnchorStatus
+  scopes: string[]
+  issuerDid?: string
+  createdAt: string
+  updatedAt?: string
+  expiresAt?: string
+  revokedAt?: string
+  reason?: string
+  metadata?: Record<string, unknown>
 }
 
 interface PlatformSnapshot {
   passkeyBindings: Record<string, PasskeyCredentialBinding>
+  trustAnchors: Record<string, PlatformTrustAnchorRecord>
 }
 
 function emptySnapshot(): PlatformSnapshot {
-  return { passkeyBindings: {} }
+  return { passkeyBindings: {}, trustAnchors: {} }
 }
 
 export class InMemoryPlatformStore implements PlatformStore {
@@ -47,6 +69,25 @@ export class InMemoryPlatformStore implements PlatformStore {
 
   async deletePasskeyBinding(credentialId: string): Promise<boolean> {
     return this.passkeyBindings.delete(credentialId)
+  }
+
+  private trustAnchors = new Map<string, PlatformTrustAnchorRecord>()
+
+  async putTrustAnchor(anchor: PlatformTrustAnchorRecord): Promise<PlatformTrustAnchorRecord> {
+    this.trustAnchors.set(anchor.did, anchor)
+    return anchor
+  }
+
+  async getTrustAnchor(did: string): Promise<PlatformTrustAnchorRecord | null> {
+    return this.trustAnchors.get(did) ?? null
+  }
+
+  async listTrustAnchors(): Promise<PlatformTrustAnchorRecord[]> {
+    return [...this.trustAnchors.values()].sort((a, b) => a.did.localeCompare(b.did))
+  }
+
+  async deleteTrustAnchor(did: string): Promise<boolean> {
+    return this.trustAnchors.delete(did)
   }
 
   async healthCheck(): Promise<PlatformStoreHealth> {
@@ -86,6 +127,35 @@ export class FilePlatformStore implements PlatformStore {
     if (!snapshot.passkeyBindings[credentialId]) return false
     const { [credentialId]: _removed, ...remaining } = snapshot.passkeyBindings
     await this.write({ ...snapshot, passkeyBindings: remaining })
+    return true
+  }
+
+  async putTrustAnchor(anchor: PlatformTrustAnchorRecord): Promise<PlatformTrustAnchorRecord> {
+    const snapshot = await this.read()
+    await this.write({
+      ...snapshot,
+      trustAnchors: {
+        ...snapshot.trustAnchors,
+        [anchor.did]: anchor,
+      },
+    })
+    return anchor
+  }
+
+  async getTrustAnchor(did: string): Promise<PlatformTrustAnchorRecord | null> {
+    return (await this.read()).trustAnchors[did] ?? null
+  }
+
+  async listTrustAnchors(): Promise<PlatformTrustAnchorRecord[]> {
+    return Object.values((await this.read()).trustAnchors)
+      .sort((a, b) => a.did.localeCompare(b.did))
+  }
+
+  async deleteTrustAnchor(did: string): Promise<boolean> {
+    const snapshot = await this.read()
+    if (!snapshot.trustAnchors[did]) return false
+    const { [did]: _removed, ...remaining } = snapshot.trustAnchors
+    await this.write({ ...snapshot, trustAnchors: remaining })
     return true
   }
 

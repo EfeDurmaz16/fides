@@ -47,6 +47,61 @@ export interface PlatformPasskeyCredentialsResponse {
   count: number
 }
 
+export type PlatformTrustAnchorStatus = 'active' | 'suspended' | 'revoked'
+
+export interface PlatformTrustAnchorRecord {
+  did: string
+  name: string
+  publicKey: string
+  attestation: Record<string, unknown>
+  status: PlatformTrustAnchorStatus
+  scopes: string[]
+  issuerDid?: string
+  createdAt: string
+  updatedAt?: string
+  expiresAt?: string
+  revokedAt?: string
+  reason?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface PlatformTrustAnchorResponse {
+  anchor: PlatformTrustAnchorRecord
+}
+
+export interface PlatformTrustAnchorsResponse {
+  anchors: PlatformTrustAnchorRecord[]
+  count: number
+}
+
+export interface PlatformTrustAnchorDistributionEntry {
+  did: string
+  name: string
+  publicKey: string
+  scopes: string[]
+  issuerDid?: string
+  createdAt: string
+  updatedAt?: string
+  expiresAt?: string
+}
+
+export interface PlatformTrustAnchorDistribution {
+  version: 'fides.trust-anchors.v1'
+  generatedAt: string
+  issuerDid?: string
+  anchors: PlatformTrustAnchorDistributionEntry[]
+}
+
+export interface PlatformTrustAnchorDistributionResponse {
+  distribution: PlatformTrustAnchorDistribution
+}
+
+export interface PlatformTrustAnchorDistributionOptions {
+  issuerDid?: string
+  requiredScope?: string
+  trustedIssuerDids?: string[]
+}
+
 export interface PlatformMutationResponse {
   success: boolean
 }
@@ -94,6 +149,57 @@ export class PlatformClient {
   async deletePasskeyBinding(credentialId: string): Promise<PlatformMutationResponse> {
     return this.request<PlatformMutationResponse>(
       `/v1/passkeys/credentials/${encodeURIComponent(credentialId)}`,
+      { method: 'DELETE' }
+    )
+  }
+
+  async storeTrustAnchor(anchor: PlatformTrustAnchorRecord): Promise<PlatformTrustAnchorResponse> {
+    return this.request<PlatformTrustAnchorResponse>('/v1/trust-anchors', {
+      method: 'POST',
+      body: JSON.stringify(anchor),
+    })
+  }
+
+  async listTrustAnchors(status?: PlatformTrustAnchorStatus): Promise<PlatformTrustAnchorsResponse> {
+    return this.request<PlatformTrustAnchorsResponse>(
+      `/v1/trust-anchors${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+      { method: 'GET' }
+    )
+  }
+
+  async trustAnchorDistribution(options: PlatformTrustAnchorDistributionOptions = {}): Promise<PlatformTrustAnchorDistributionResponse> {
+    const params = new URLSearchParams()
+    if (options.issuerDid) params.set('issuerDid', options.issuerDid)
+    if (options.requiredScope) params.set('requiredScope', options.requiredScope)
+    if (options.trustedIssuerDids?.length) params.set('trustedIssuerDids', options.trustedIssuerDids.join(','))
+
+    return this.request<PlatformTrustAnchorDistributionResponse>(
+      `/v1/trust-anchors/distribution${params.size > 0 ? `?${params.toString()}` : ''}`,
+      { method: 'GET' }
+    )
+  }
+
+  async getTrustAnchor(did: string): Promise<PlatformTrustAnchorRecord | null> {
+    const response = await this.request<PlatformTrustAnchorResponse>(
+      `/v1/trust-anchors/${encodeURIComponent(did)}`,
+      { method: 'GET', nullOn404: true }
+    )
+    return response?.anchor ?? null
+  }
+
+  async updateTrustAnchorStatus(
+    did: string,
+    update: { status: PlatformTrustAnchorStatus; revokedAt?: string; reason?: string }
+  ): Promise<PlatformTrustAnchorResponse> {
+    return this.request<PlatformTrustAnchorResponse>(
+      `/v1/trust-anchors/${encodeURIComponent(did)}/status`,
+      { method: 'PATCH', body: JSON.stringify(update) }
+    )
+  }
+
+  async deleteTrustAnchor(did: string): Promise<PlatformMutationResponse> {
+    return this.request<PlatformMutationResponse>(
+      `/v1/trust-anchors/${encodeURIComponent(did)}`,
       { method: 'DELETE' }
     )
   }

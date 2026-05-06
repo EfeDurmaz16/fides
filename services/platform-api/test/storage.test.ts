@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
 import { FilePlatformStore, InMemoryPlatformStore } from '../src/storage.js'
 import type { PasskeyCredentialBinding } from '@fides/core'
+import type { PlatformTrustAnchorRecord } from '../src/storage.js'
 
 const tempDirs: string[] = []
 
@@ -19,6 +20,30 @@ function binding(overrides: Partial<PasskeyCredentialBinding> = {}): PasskeyCred
     publicKey: 'public-key-material',
     relyingPartyId: 'example.com',
     signCount: 1,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function trustAnchor(overrides: Partial<PlatformTrustAnchorRecord> = {}): PlatformTrustAnchorRecord {
+  return {
+    did: 'did:fides:anchor-store-01',
+    name: 'Store Anchor',
+    publicKey: '00'.repeat(32),
+    attestation: {
+      payload: { did: 'did:fides:anchor-store-01' },
+      proof: {
+        type: 'Ed25519Signature2024',
+        created: '2026-01-01T00:00:00.000Z',
+        verificationMethod: 'did:fides:issuer-store-01#key-1',
+        proofPurpose: 'assertionMethod',
+        canonicalizationAlgorithm: 'https://fides.dev/canonical-json/v1',
+        proofValue: 'sig',
+      },
+    },
+    status: 'active',
+    scopes: ['identity.organization'],
+    issuerDid: 'did:fides:issuer-store-01',
     createdAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
   }
@@ -42,6 +67,24 @@ describe('platform stores', () => {
     expect(await store.deletePasskeyBinding('missing')).toBe(false)
   })
 
+  it('tracks governed trust anchors in memory', async () => {
+    const store = new InMemoryPlatformStore()
+
+    await store.putTrustAnchor(trustAnchor())
+    await store.putTrustAnchor(trustAnchor({
+      did: 'did:fides:anchor-store-02',
+      status: 'suspended',
+    }))
+
+    expect(await store.getTrustAnchor('did:fides:anchor-store-01')).toMatchObject({
+      name: 'Store Anchor',
+      status: 'active',
+    })
+    expect(await store.listTrustAnchors()).toHaveLength(2)
+    expect(await store.deleteTrustAnchor('did:fides:anchor-store-01')).toBe(true)
+    expect(await store.deleteTrustAnchor('missing')).toBe(false)
+  })
+
   it('persists passkey bindings through the file store', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'fides-platform-'))
     tempDirs.push(dir)
@@ -56,5 +99,21 @@ describe('platform stores', () => {
       backedUp: true,
     })
     expect(await reader.healthCheck()).toMatchObject({ ok: true, kind: 'file' })
+  })
+
+  it('persists governed trust anchors through the file store', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fides-platform-'))
+    tempDirs.push(dir)
+    const path = join(dir, 'platform-store.json')
+
+    const writer = new FilePlatformStore(path)
+    await writer.putTrustAnchor(trustAnchor({ metadata: { tier: 'root' } }))
+
+    const reader = new FilePlatformStore(path)
+    expect(await reader.getTrustAnchor('did:fides:anchor-store-01')).toMatchObject({
+      scopes: ['identity.organization'],
+      metadata: { tier: 'root' },
+    })
+    expect(await reader.listTrustAnchors()).toHaveLength(1)
   })
 })

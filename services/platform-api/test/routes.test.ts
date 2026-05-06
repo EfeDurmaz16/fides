@@ -224,6 +224,114 @@ describe('platform-api service', () => {
       restoreEnv('SERVICE_API_KEY', previousApiKey)
     }
   })
+
+  it('creates, lists, distributes, revokes, and deletes governed trust anchors', async () => {
+    const anchor = {
+      did: 'did:fides:anchor-platform-01',
+      name: 'Platform Root Anchor',
+      publicKey: '11'.repeat(32),
+      attestation: {
+        payload: { did: 'did:fides:anchor-platform-01' },
+        proof: {
+          type: 'Ed25519Signature2024',
+          created: '2026-01-01T00:00:00.000Z',
+          verificationMethod: 'did:fides:issuer-platform-01#key-1',
+          proofPurpose: 'assertionMethod',
+          canonicalizationAlgorithm: 'https://fides.dev/canonical-json/v1',
+          proofValue: 'signature',
+        },
+      },
+      status: 'active',
+      scopes: ['identity.organization', 'publisher.organization'],
+      issuerDid: 'did:fides:issuer-platform-01',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    }
+    const suspendedAnchor = {
+      ...anchor,
+      did: 'did:fides:anchor-platform-02',
+      publicKey: '22'.repeat(32),
+      status: 'suspended',
+      reason: 'manual review',
+    }
+
+    const createRes = await app.request('/v1/trust-anchors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(anchor),
+    })
+    expect(createRes.status).toBe(201)
+    const created = await createRes.json()
+    expect(created.anchor).toMatchObject({
+      did: anchor.did,
+      publicKey: anchor.publicKey,
+      status: 'active',
+      scopes: ['identity.organization', 'publisher.organization'],
+    })
+    expect(created.anchor.updatedAt).toBeDefined()
+
+    const suspendedRes = await app.request('/v1/trust-anchors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(suspendedAnchor),
+    })
+    expect(suspendedRes.status).toBe(201)
+
+    const listRes = await app.request('/v1/trust-anchors?status=active')
+    expect(listRes.status).toBe(200)
+    const list = await listRes.json()
+    expect(list.anchors.map((entry: { did: string }) => entry.did)).toContain(anchor.did)
+    expect(list.anchors.map((entry: { did: string }) => entry.did)).not.toContain(suspendedAnchor.did)
+
+    const getRes = await app.request(`/v1/trust-anchors/${encodeURIComponent(anchor.did)}`)
+    expect(getRes.status).toBe(200)
+    expect((await getRes.json()).anchor.name).toBe(anchor.name)
+
+    const distributionRes = await app.request('/v1/trust-anchors/distribution?requiredScope=identity.organization&trustedIssuerDids=did%3Afides%3Aissuer-platform-01')
+    expect(distributionRes.status).toBe(200)
+    const distribution = await distributionRes.json()
+    expect(distribution.distribution.version).toBe('fides.trust-anchors.v1')
+    expect(distribution.distribution.anchors.map((entry: { did: string }) => entry.did)).toContain(anchor.did)
+    expect(distribution.distribution.anchors.map((entry: { did: string }) => entry.did)).not.toContain(suspendedAnchor.did)
+
+    const revokeRes = await app.request(`/v1/trust-anchors/${encodeURIComponent(anchor.did)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'revoked', reason: 'key compromise' }),
+    })
+    expect(revokeRes.status).toBe(200)
+    const revoked = await revokeRes.json()
+    expect(revoked.anchor).toMatchObject({ status: 'revoked', reason: 'key compromise' })
+    expect(revoked.anchor.revokedAt).toBeDefined()
+
+    const deleteRes = await app.request(`/v1/trust-anchors/${encodeURIComponent(suspendedAnchor.did)}`, { method: 'DELETE' })
+    expect(deleteRes.status).toBe(200)
+  })
+
+  it('validates governed trust anchor input', async () => {
+    const res = await app.request('/v1/trust-anchors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        did: 'did:other:anchor',
+        name: '',
+        publicKey: 'not-hex',
+        attestation: {},
+        status: 'active',
+        scopes: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toContain('did')
+  })
+
+  it('validates governed trust anchor status filters', async () => {
+    const res = await app.request('/v1/trust-anchors?status=unknown')
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toContain('status')
+  })
 })
 
 function restoreEnv(name: string, value: string | undefined): void {

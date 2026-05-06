@@ -346,6 +346,9 @@ importers:
 
   services/platform-api:
     dependencies:
+      '@fides/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.9(hono@4.11.8)
@@ -371,6 +374,9 @@ importers:
       '@fides/policy':
         specifier: workspace:*
         version: link:../../packages/policy
+      '@fides/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.9(hono@4.11.8)

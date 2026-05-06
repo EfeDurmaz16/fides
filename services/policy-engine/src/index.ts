@@ -4,7 +4,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import type { MiddlewareHandler } from 'hono'
 import { evaluatePolicy, type PolicyBundle, type PolicyContext } from '@fides/policy'
-import { timingSafeEqual } from 'node:crypto'
+import { evaluateApiKeyAuth } from '@fides/shared'
 
 const app = new Hono()
 const startTime = Date.now()
@@ -112,26 +112,16 @@ function isRecord(value: unknown): value is Record<string, any> {
 
 function apiKeyAuth(): MiddlewareHandler {
   return async (c, next) => {
-    const apiKey = process.env.SERVICE_API_KEY
-    if (!apiKey) {
-      if (process.env.NODE_ENV === 'production') {
-        return c.json({ error: 'SERVICE_API_KEY is required in production for policy evaluation' }, 503)
-      }
-      return next()
-    }
-
-    const providedKey = c.req.header('X-API-Key')
-    if (!providedKey || !timingSafeStringEqual(providedKey, apiKey)) {
-      return c.json({ error: 'Unauthorized - invalid or missing API key' }, 401)
+    const decision = evaluateApiKeyAuth({
+      configuredKey: process.env.SERVICE_API_KEY,
+      providedKey: c.req.header('X-API-Key'),
+      nodeEnv: process.env.NODE_ENV,
+      productionRequirement: 'policy evaluation',
+    })
+    if (!decision.ok) {
+      return c.json({ error: decision.error }, decision.status)
     }
 
     return next()
   }
-}
-
-function timingSafeStringEqual(a: string, b: string): boolean {
-  const aBuffer = Buffer.from(a)
-  const bBuffer = Buffer.from(b)
-  if (aBuffer.length !== bBuffer.length) return false
-  return timingSafeEqual(aBuffer, bBuffer)
 }

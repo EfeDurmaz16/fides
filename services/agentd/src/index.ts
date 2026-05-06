@@ -797,9 +797,7 @@ app.post('/v1/killswitch/disengage', async (c) => {
     killSwitch.disengage({ type: 'capability', id: body.capabilityId })
     return c.json({ engaged: false, scope: 'capability', id: body.capabilityId })
   }
-  killSwitch.disengage({ type: 'global' })
-  killSwitch.disengage({ type: 'agent' })
-  killSwitch.disengage({ type: 'capability' })
+  killSwitch.disengageAll()
   return c.json({ engaged: false, scope: 'all' })
 })
 

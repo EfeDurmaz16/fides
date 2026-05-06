@@ -516,5 +516,63 @@ describe('CLI Commands', () => {
       expect(body.record.actor).toBe('did:fides:agent');
       expect(body.reporterPublicKey).toMatch(/^[0-9a-f]{64}$/);
     });
+
+    it('propagation pending should list due authority outbox records', async () => {
+      process.env.FIDES_API_KEY = 'cli-api-key';
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        count: 1,
+        propagations: [{ id: 'prop-1', status: 'pending' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createPropagationCommand } = await import('../src/commands/propagation.js');
+      const cmd = createPropagationCommand();
+
+      await cmd.parseAsync([
+        'pending',
+        '--agentd-url',
+        'http://agentd.test',
+        '--limit',
+        '5',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/v1/authority/propagations/pending?limit=5',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            'X-API-Key': 'cli-api-key',
+          }),
+        })
+      );
+    });
+
+    it('propagation retry should retry due authority outbox records', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        attempted: 1,
+        results: [{ id: 'prop-1', ok: true, outboxStatus: 'confirmed' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createPropagationCommand } = await import('../src/commands/propagation.js');
+      const cmd = createPropagationCommand();
+
+      await cmd.parseAsync([
+        'retry',
+        '--agentd-url',
+        'http://agentd.test',
+        '--limit',
+        '3',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/v1/authority/propagations/retry',
+        expect.objectContaining({ method: 'POST' })
+      );
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body as string)).toEqual({ limit: 3 });
+    });
   });
 });

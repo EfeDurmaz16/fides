@@ -54,7 +54,7 @@ export {
 // Trust module exports
 export { TrustLevel } from './trust/types.js'
 export { createAttestation, verifyAttestation } from './trust/attestation.js'
-export { TrustClient } from './trust/client.js'
+export { TrustClient, type TrustGraphRevocationState } from './trust/client.js'
 
 // Agent daemon exports
 export {

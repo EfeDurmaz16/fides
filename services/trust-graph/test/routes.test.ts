@@ -230,6 +230,48 @@ describe('HTTP Routes', () => {
       expect(json.error).toContain('signed revocation record')
     })
 
+    it('GET /v1/revocations/:did should return latest revocation state', async () => {
+      const record = await signedRevocationRecord()
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            orderBy: vi.fn(() => ({
+              limit: vi.fn(() => Promise.resolve([{ record }])),
+            })),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb)
+      const res = await app.request('/v1/revocations/did:fides:agent')
+
+      expect(res.status).toBe(200)
+      const json = await res.json()
+      expect(json.revoked).toBe(true)
+      expect(json.record.did).toBe('did:fides:agent')
+    })
+
+    it('GET /v1/revocations/:did should return not revoked when absent', async () => {
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            orderBy: vi.fn(() => ({
+              limit: vi.fn(() => Promise.resolve([])),
+            })),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb)
+      const res = await app.request('/v1/revocations/did:fides:agent')
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({
+        did: 'did:fides:agent',
+        revoked: false,
+      })
+    })
+
     it('POST /v1/incidents should record signed incidents', async () => {
       const app = createTrustRoutes(mockDb)
       const record = await signedIncidentRecord()

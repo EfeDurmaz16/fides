@@ -94,6 +94,21 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
     }
   })
 
+  // Get latest authority revocation for a DID
+  app.get('/v1/revocations/:did', async (c) => {
+    try {
+      const did = c.req.param('did')
+      const record = await trustService.getRevocation(db, did)
+      if (!record) {
+        return c.json({ did, revoked: false })
+      }
+      c.header('Cache-Control', 'no-store')
+      return c.json({ did, revoked: true, record })
+    } catch (error) {
+      return c.json({ error: 'Internal server error' }, 500)
+    }
+  })
+
   // Get incidents for a DID
   app.get('/v1/incidents/:did', async (c) => {
     try {

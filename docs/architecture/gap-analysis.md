@@ -48,7 +48,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 | 28 | Capability invocation | Prototype | Guard/policy decision path exists in `packages/guard/src/index.ts`; `services/agentd/src/index.ts` exposes `/v1/authorize`; actual remote invocation transport is adapter-ready. |
 | 29 | Evidence ledger | Implemented | `packages/evidence/src/index.ts`, `services/agentd/src/index.ts`, tests in `packages/evidence/test/evidence.test.ts`. |
 | 30 | Hash-chained evidence events | Implemented | `appendEvidenceEvent` and `verifyEvidenceChain` in `packages/evidence/src/index.ts`. |
-| 31 | Revocation records | Implemented | `packages/core/src/revocation.ts`, core tests, and `agentd` revocation API routes. |
+| 31 | Revocation records | Implemented | `packages/core/src/revocation.ts`, core tests, `agentd` revocation API routes, propagation outbox, and trust-graph record/read routes. |
 | 32 | Incident records | Implemented | `IncidentRecord` and impact aggregation in `packages/core/src/revocation.ts`; `agentd` incident API routes feed authorization context. |
 | 33 | Runtime attestation | Prototype | `packages/runtime/src/index.ts`, `services/agentd/src/index.ts`, runtime tests. |
 | 34 | TEE-ready attestation | Adapter-ready | `TEEAdapter` interface in `packages/runtime/src/index.ts`; production vendor adapters are not implemented. |
@@ -116,14 +116,14 @@ This document classifies the current status of every required FIDES v2 / Agent T
 
 1. Durable trust-fabric state: registry, evidence, revocation, and incidents need real storage contracts; sessions now have a file-backed local store but not a production database adapter.
 2. Production attestation providers: the TEE/build/package/passkey providers are interfaces or missing; domain verification still depends on DNS/discovery availability and is not a broader organization proof.
-3. Federation semantics: registry peering, revocation propagation, conflict handling, and trust-anchor governance need implementation.
+3. Federation semantics: registry peering, cross-node revocation conflict handling, and trust-anchor governance need implementation.
 4. Authority separation hardening: identity, trust score, and policy are separated conceptually, but remote invocation execution remains adapter-ready rather than implemented.
 5. Service packaging: platform-api and policy-engine now have standalone service packages, Dockerfiles, compose wiring, and CI image builds; they still need production persistence/auth/metrics beyond health and topology/evaluation routes.
 
 ## Next Implementation Slice
 
 1. Add production storage adapters for registry, evidence, revocation, incidents, and session state.
-2. Promote revocation/incidents into trust-graph APIs and propagation semantics.
-3. Add production attestation providers for Nitro, SGX, SEV, container image, reproducible build, GitHub, email, package registry, and passkeys.
-4. Add organization-level verification and trust-anchor governance around verified publishers.
-5. Extend the authority path demo into a multi-process demo that starts discovery, trust-graph, registry, relay, policy-engine, agentd, and platform-api.
+2. Add production attestation providers for Nitro, SGX, SEV, container image, reproducible build, GitHub, email, package registry, and passkeys.
+3. Add organization-level verification and trust-anchor governance around verified publishers.
+4. Extend the authority path demo into a multi-process demo that starts discovery, trust-graph, registry, relay, policy-engine, agentd, and platform-api.
+5. Add federation peering and cross-node revocation conflict semantics.

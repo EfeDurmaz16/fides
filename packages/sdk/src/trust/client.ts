@@ -1,5 +1,12 @@
 import type { TrustScore, TrustPath } from '@fides/shared'
 import { TrustError } from '@fides/shared'
+import type { RevocationRecord } from '@fides/core'
+
+export interface TrustGraphRevocationState {
+  did: string
+  revoked: boolean
+  record?: RevocationRecord
+}
 
 export class TrustClient {
   constructor(private options: { baseUrl: string }) {}
@@ -95,6 +102,33 @@ export class TrustClient {
       }
       throw new TrustError(
         `Failed to get trust path: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+  }
+
+  /**
+   * Get latest trust-graph authority revocation state for a DID.
+   */
+  async getRevocation(did: string): Promise<TrustGraphRevocationState> {
+    try {
+      const response = await fetch(
+        `${this.options.baseUrl}/v1/revocations/${encodeURIComponent(did)}`
+      )
+
+      if (!response.ok) {
+        const text = await response.text()
+        throw new TrustError(
+          `Failed to get revocation state: ${response.status} ${text}`
+        )
+      }
+
+      return await response.json()
+    } catch (error) {
+      if (error instanceof TrustError) {
+        throw error
+      }
+      throw new TrustError(
+        `Failed to get revocation state: ${error instanceof Error ? error.message : String(error)}`
       )
     }
   }

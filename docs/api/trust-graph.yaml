@@ -50,7 +50,13 @@ paths:
       description: |
         Establishes a directed trust relationship from an issuer to a subject.
         Trust level is 0–100. Optional capability ID scopes the trust to a
-        specific capability.
+        specific capability. Requires API key authentication with the
+        `X-API-Key` header. In production, the endpoint returns `503` when
+        neither `SERVICE_API_KEY` nor `TRUST_GRAPH_API_KEYS` is configured.
+        When `TRUST_GRAPH_API_KEYS` is configured, the key must include
+        `trust:edges:write` or `*`.
+      security:
+        - ApiKeyAuth: []
       requestBody:
         required: true
         content:
@@ -149,7 +155,13 @@ paths:
       operationId: recordCapabilityInvocation
       tags: [Trust]
       summary: Record a capability invocation
-      description: Increments the invocation counter for capability-scoring purposes.
+      description: |
+        Increments the invocation counter for capability-scoring purposes.
+        Requires API key authentication with the `X-API-Key` header. When
+        `TRUST_GRAPH_API_KEYS` is configured, the key must include
+        `trust:capability:invoke` or `*`.
+      security:
+        - ApiKeyAuth: []
       parameters:
         - $ref: "#/components/parameters/DidParam"
         - name: capabilityId
@@ -176,6 +188,12 @@ paths:
       operationId: recordIncident
       tags: [Incidents]
       summary: Record a trust incident
+      description: |
+        Requires API key authentication with the `X-API-Key` header. When
+        `TRUST_GRAPH_API_KEYS` is configured, the key must include
+        `trust:incidents:write` or `*`.
+      security:
+        - ApiKeyAuth: []
       requestBody:
         required: true
         content:
@@ -225,7 +243,11 @@ paths:
       summary: Record an authority revocation
       description: |
         Records a signed authority revocation propagated from agentd and marks
-        active trust edges touching the revoked DID as revoked.
+        active trust edges touching the revoked DID as revoked. Requires API key
+        authentication with the `X-API-Key` header. When `TRUST_GRAPH_API_KEYS`
+        is configured, the key must include `trust:revocations:write` or `*`.
+      security:
+        - ApiKeyAuth: []
       requestBody:
         required: true
         content:
@@ -298,6 +320,17 @@ paths:
                 type: string
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Use `SERVICE_API_KEY` for a shared service key or `TRUST_GRAPH_API_KEYS`
+        for least-privilege JSON-scoped keys. Trust-graph write scopes are
+        `trust:edges:write`, `trust:capability:invoke`,
+        `trust:incidents:write`, `trust:revocations:write`, and `*`.
+
   parameters:
     DidParam:
       name: did

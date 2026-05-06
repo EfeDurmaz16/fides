@@ -574,5 +574,50 @@ describe('CLI Commands', () => {
       const [, init] = mockFetch.mock.calls[0];
       expect(JSON.parse(init.body as string)).toEqual({ limit: 3 });
     });
+
+    it('authorize check should call agentd authorization endpoint', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        decision: 'allow',
+        explanation: 'allowed',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createAuthorizeCommand } = await import('../src/commands/authorize.js');
+      const cmd = createAuthorizeCommand();
+
+      await cmd.parseAsync([
+        'check',
+        '--agentd-url',
+        'http://agentd.test',
+        '--agent-did',
+        'did:fides:agent',
+        '--capability',
+        'payments.execute',
+        '--session-id',
+        'sess-1',
+        '--audience',
+        'agentd',
+        '--context-json',
+        '{"amount":"12.00"}',
+        '--requires-approval',
+        '--approval-granted',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/v1/authorize',
+        expect.objectContaining({ method: 'POST' })
+      );
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body as string)).toMatchObject({
+        agentDid: 'did:fides:agent',
+        capabilityId: 'payments.execute',
+        sessionId: 'sess-1',
+        audience: 'agentd',
+        context: { amount: '12.00' },
+        requiresApproval: true,
+        approvalGranted: true,
+      });
+    });
   });
 });

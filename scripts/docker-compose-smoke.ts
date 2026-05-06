@@ -30,6 +30,8 @@ async function main() {
   }
 
   await assertAgentdUsesPostgres()
+  await assertRegistryUsesPostgres()
+  await runRegistryPersistenceFlow()
   await assertPlatformTopology()
   await runAuthorityFlow()
 
@@ -150,6 +152,52 @@ async function assertAgentdUsesPostgres() {
     throw new Error(`agentd authority store is not ready postgres: ${JSON.stringify(body)}`)
   }
   console.log('ok agentd authority store is postgres')
+}
+
+async function assertRegistryUsesPostgres() {
+  const response = await fetch(`${services.registry}/health`)
+  await expectStatus(response, 200, 'registry health')
+  const body = await response.json() as { checks?: { store?: { kind?: string, ok?: boolean } } }
+  if (body.checks?.store?.kind !== 'postgres' || body.checks.store.ok !== true) {
+    throw new Error(`registry store is not ready postgres: ${JSON.stringify(body)}`)
+  }
+  console.log('ok registry store is postgres')
+}
+
+async function runRegistryPersistenceFlow() {
+  const runId = crypto.randomUUID().slice(0, 8)
+  const did = `did:fides:docker-registry-${runId}`
+
+  await expectStatus(await postJson(`${services.registry}/v1/cards`, {
+    id: did,
+    name: `Docker Registry ${runId}`,
+    version: '1.0.0',
+    capabilities: [{ id: 'registry.persist', name: 'Registry Persistence' }],
+    protocols: ['mcp'],
+    endpoints: [],
+    security: { authentication: ['api-key'], encryption: ['tls1.3'] },
+    metadata: { smoke: true },
+  }), 201, 'registered registry card')
+
+  await expectStatus(await fetch(`${services.registry}/v1/cards/${encodeURIComponent(did)}`), 200, 'read registry card before restart')
+
+  console.log('restarting registry to verify Postgres card persistence')
+  await execFileAsync('docker', ['compose', 'restart', 'registry'], {
+    env: { ...process.env, POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD || 'fides' },
+  })
+  await waitForHealth('registry', services.registry)
+  await assertRegistryUsesPostgres()
+
+  const persistedCard = await fetch(`${services.registry}/v1/cards/${encodeURIComponent(did)}`)
+  await expectStatus(persistedCard, 200, 'read registry card after restart')
+
+  const searchResponse = await fetch(`${services.registry}/v1/search?q=${encodeURIComponent(runId)}`)
+  await expectStatus(searchResponse, 200, 'search registry card after restart')
+  const body = await searchResponse.json() as { results?: Array<{ did?: string }> }
+  if (!body.results?.some(result => result.did === did)) {
+    throw new Error(`registry search did not return persisted card: ${JSON.stringify(body)}`)
+  }
+  console.log('ok registry card persisted through restart')
 }
 
 async function waitForHealth(name: string, url: string): Promise<void> {

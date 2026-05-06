@@ -8,6 +8,10 @@ export const identities = pgTable('identities', {
   domainVerified: boolean('domain_verified').notNull().default(false),
   domainVerifiedAt: timestamp('domain_verified_at'),
   verificationMethod: varchar('verification_method', { length: 32 }),
+  organizationDomain: text('organization_domain'),
+  organizationDomainVerified: boolean('organization_domain_verified').notNull().default(false),
+  organizationDomainVerifiedAt: timestamp('organization_domain_verified_at'),
+  organizationVerificationMethod: varchar('organization_verification_method', { length: 32 }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })

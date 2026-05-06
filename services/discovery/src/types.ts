@@ -6,6 +6,10 @@ export interface Identity {
   domainVerified: boolean
   domainVerifiedAt?: Date | null
   verificationMethod?: 'dns' | null
+  organizationDomain?: string | null
+  organizationDomainVerified: boolean
+  organizationDomainVerifiedAt?: Date | null
+  organizationVerificationMethod?: 'dns' | null
   createdAt: Date
   updatedAt: Date
 }
@@ -15,9 +19,14 @@ export interface RegisterIdentityRequest {
   publicKey: string // hex-encoded
   metadata?: Record<string, unknown>
   domain?: string
+  organizationDomain?: string
 }
 
 export interface VerifyIdentityDomainRequest {
+  domain?: string
+}
+
+export interface VerifyOrganizationDomainRequest {
   domain?: string
 }
 
@@ -29,6 +38,10 @@ export interface IdentityResponse {
   domainVerified: boolean
   domainVerifiedAt?: string | null
   verificationMethod?: 'dns' | null
+  organizationDomain?: string | null
+  organizationDomainVerified: boolean
+  organizationDomainVerifiedAt?: string | null
+  organizationVerificationMethod?: 'dns' | null
   createdAt: string
   updatedAt: string
 }

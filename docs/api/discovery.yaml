@@ -133,6 +133,42 @@ paths:
               schema:
                 $ref: "#/components/schemas/DomainVerificationFailureResponse"
 
+  /identities/{did}/organization-domain/verify:
+    post:
+      operationId: verifyOrganizationDomain
+      tags: [Identities]
+      summary: Verify and persist organization domain ownership
+      description: |
+        Resolves `_fides-org.<domain>` TXT records and persists organization DNS
+        verification only when the TXT record contains the exact
+        `fides-org-did=<did>` token. If no request domain is supplied, the
+        identity's stored organization domain is used.
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyOrganizationDomainRequest"
+      responses:
+        "200":
+          description: Organization domain verified and persisted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationDomainVerificationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: DNS binding was not verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainVerificationFailureResponse"
+
   /identities/by-domain:
     get:
       operationId: lookupIdentityByDomain
@@ -416,6 +452,9 @@ components:
         domain:
           type: string
           example: "agent.example.com"
+        organizationDomain:
+          type: string
+          example: "example.com"
 
     IdentityResponse:
       type: object
@@ -439,6 +478,19 @@ components:
           type: string
           nullable: true
           enum: [dns]
+        organizationDomain:
+          type: string
+          nullable: true
+        organizationDomainVerified:
+          type: boolean
+        organizationDomainVerifiedAt:
+          type: string
+          nullable: true
+          format: date-time
+        organizationVerificationMethod:
+          type: string
+          nullable: true
+          enum: [dns]
         createdAt:
           type: string
           format: date-time
@@ -453,6 +505,14 @@ components:
           type: string
           description: Domain to verify. Defaults to the identity's stored domain when omitted.
           example: "agent.example.com"
+
+    VerifyOrganizationDomainRequest:
+      type: object
+      properties:
+        domain:
+          type: string
+          description: Organization domain to verify. Defaults to the identity's stored organization domain when omitted.
+          example: "example.com"
 
     DomainVerificationResult:
       type: object
@@ -471,6 +531,15 @@ components:
           enum: [invalid-domain, invalid-did, record-not-found, resolver-error]
 
     IdentityDomainVerificationResponse:
+      allOf:
+        - $ref: "#/components/schemas/IdentityResponse"
+        - type: object
+          required: [verification]
+          properties:
+            verification:
+              $ref: "#/components/schemas/DomainVerificationResult"
+
+    OrganizationDomainVerificationResponse:
       allOf:
         - $ref: "#/components/schemas/IdentityResponse"
         - type: object

@@ -12,6 +12,10 @@ export interface AgentIdentity {
   domainVerified?: boolean
   domainVerifiedAt?: string | null
   verificationMethod?: 'dns' | null
+  organizationDomain?: string | null
+  organizationDomainVerified?: boolean
+  organizationDomainVerifiedAt?: string | null
+  organizationVerificationMethod?: 'dns' | null
   createdAt: string
   endpoints?: {
     discovery?: string

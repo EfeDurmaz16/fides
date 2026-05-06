@@ -84,6 +84,46 @@ describe('DiscoveryClient', () => {
     })
   })
 
+  it('should verify and persist an organization domain', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        did: 'did:fides:abc123',
+        publicKey: 'deadbeef',
+        algorithm: 'ed25519',
+        metadata: {},
+        organizationDomain: 'example.com',
+        organizationDomainVerified: true,
+        organizationDomainVerifiedAt: '2024-01-02T00:00:00.000Z',
+        organizationVerificationMethod: 'dns',
+        createdAt: '2024-01-01T00:00:00Z',
+        verification: {
+          domain: 'example.com',
+          did: 'did:fides:abc123',
+          recordName: '_fides-org.example.com',
+          verified: true,
+        },
+      }),
+    })
+
+    const result = await client.verifyOrganizationDomain('did:fides:abc123', 'example.com')
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:3100/identities/did%3Afides%3Aabc123/organization-domain/verify',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'example.com' }),
+      }
+    )
+    expect(result).toMatchObject({
+      did: 'did:fides:abc123',
+      organizationDomain: 'example.com',
+      organizationDomainVerified: true,
+      organizationVerificationMethod: 'dns',
+    })
+  })
+
   it('should throw error on registration failure', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,

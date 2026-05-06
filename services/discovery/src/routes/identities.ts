@@ -4,11 +4,31 @@ import { eq } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { identities } from '../db/schema.js'
 import { DiscoveryError, DID_PREFIX, ED25519_PUBLIC_KEY_LENGTH } from '@fides/shared'
-import { verifyDomainDid } from '@fides/core'
-import type { RegisterIdentityRequest, IdentityResponse, VerifyIdentityDomainRequest } from '../types.js'
+import { verifyDomainDid, verifyOrganizationDomainDid } from '@fides/core'
+import type { RegisterIdentityRequest, IdentityResponse, VerifyIdentityDomainRequest, VerifyOrganizationDomainRequest } from '../types.js'
 import bs58 from 'bs58'
 
 const identitiesRouter = new Hono()
+
+type IdentityRow = typeof identities.$inferSelect
+
+function toIdentityResponse(identity: IdentityRow): IdentityResponse {
+  return {
+    did: identity.did,
+    publicKey: identity.publicKey,
+    metadata: identity.metadata as Record<string, unknown>,
+    domain: identity.domain,
+    domainVerified: identity.domainVerified,
+    domainVerifiedAt: identity.domainVerifiedAt?.toISOString() ?? null,
+    verificationMethod: identity.verificationMethod as 'dns' | null,
+    organizationDomain: identity.organizationDomain,
+    organizationDomainVerified: identity.organizationDomainVerified,
+    organizationDomainVerifiedAt: identity.organizationDomainVerifiedAt?.toISOString() ?? null,
+    organizationVerificationMethod: identity.organizationVerificationMethod as 'dns' | null,
+    createdAt: identity.createdAt.toISOString(),
+    updatedAt: identity.updatedAt.toISOString(),
+  }
+}
 
 // POST /identities - Register a new identity
 identitiesRouter.post('/', async (c) => {
@@ -58,21 +78,12 @@ identitiesRouter.post('/', async (c) => {
       publicKey: body.publicKey,
       metadata: body.metadata || {},
       domain: body.domain || null,
+      organizationDomain: body.organizationDomain || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     }).returning()
 
-    const response: IdentityResponse = {
-      did: identity.did,
-      publicKey: identity.publicKey,
-      metadata: identity.metadata as Record<string, unknown>,
-      domain: identity.domain,
-      domainVerified: identity.domainVerified,
-      domainVerifiedAt: identity.domainVerifiedAt?.toISOString() ?? null,
-      verificationMethod: identity.verificationMethod as 'dns' | null,
-      createdAt: identity.createdAt.toISOString(),
-      updatedAt: identity.updatedAt.toISOString(),
-    }
+    const response = toIdentityResponse(identity)
 
     c.header('Cache-Control', 'no-store')
     return c.json(response, 201)
@@ -99,17 +110,7 @@ identitiesRouter.get('/:did', async (c) => {
       return c.json({ error: 'Identity not found' }, 404)
     }
 
-    const response: IdentityResponse = {
-      did: identity.did,
-      publicKey: identity.publicKey,
-      metadata: identity.metadata as Record<string, unknown>,
-      domain: identity.domain,
-      domainVerified: identity.domainVerified,
-      domainVerifiedAt: identity.domainVerifiedAt?.toISOString() ?? null,
-      verificationMethod: identity.verificationMethod as 'dns' | null,
-      createdAt: identity.createdAt.toISOString(),
-      updatedAt: identity.updatedAt.toISOString(),
-    }
+    const response = toIdentityResponse(identity)
 
     c.header('Cache-Control', 'public, max-age=600')
     return c.json(response)
@@ -129,17 +130,7 @@ identitiesRouter.get('/', async (c) => {
 
     const results = await db.select().from(identities).where(eq(identities.domain, domain))
 
-    const response: IdentityResponse[] = results.map(identity => ({
-      did: identity.did,
-      publicKey: identity.publicKey,
-      metadata: identity.metadata as Record<string, unknown>,
-      domain: identity.domain,
-      domainVerified: identity.domainVerified,
-      domainVerifiedAt: identity.domainVerifiedAt?.toISOString() ?? null,
-      verificationMethod: identity.verificationMethod as 'dns' | null,
-      createdAt: identity.createdAt.toISOString(),
-      updatedAt: identity.updatedAt.toISOString(),
-    }))
+    const response = results.map(toIdentityResponse)
 
     return c.json(response)
   } catch (error) {
@@ -183,15 +174,54 @@ identitiesRouter.post('/:did/domain/verify', async (c) => {
     }).where(eq(identities.did, did)).returning()
 
     const response: IdentityResponse & { verification: typeof verification } = {
-      did: identity.did,
-      publicKey: identity.publicKey,
-      metadata: identity.metadata as Record<string, unknown>,
-      domain: identity.domain,
-      domainVerified: identity.domainVerified,
-      domainVerifiedAt: identity.domainVerifiedAt?.toISOString() ?? null,
-      verificationMethod: identity.verificationMethod as 'dns' | null,
-      createdAt: identity.createdAt.toISOString(),
-      updatedAt: identity.updatedAt.toISOString(),
+      ...toIdentityResponse(identity),
+      verification,
+    }
+
+    c.header('Cache-Control', 'no-store')
+    return c.json(response)
+  } catch (error) {
+    return c.json({ error: 'Internal server error' }, 500)
+  }
+})
+
+// POST /identities/:did/organization-domain/verify - Verify and persist DNS organization ownership
+identitiesRouter.post('/:did/organization-domain/verify', async (c) => {
+  try {
+    const did = c.req.param('did')
+    const body: VerifyOrganizationDomainRequest = await c.req.json<VerifyOrganizationDomainRequest>().catch(() => ({}))
+
+    const [existing] = await db.select().from(identities).where(eq(identities.did, did))
+    if (!existing) {
+      return c.json({ error: 'Identity not found' }, 404)
+    }
+
+    const domain = body.domain || existing.organizationDomain
+    if (!domain) {
+      return c.json({ error: 'Domain is required because this identity has no stored organization domain' }, 400)
+    }
+
+    const verification = await verifyOrganizationDomainDid({
+      domain,
+      did,
+      resolver: resolveTxt,
+    })
+
+    if (!verification.verified) {
+      return c.json({ ...verification, persisted: false }, 422)
+    }
+
+    const verifiedAt = new Date()
+    const [identity] = await db.update(identities).set({
+      organizationDomain: verification.domain,
+      organizationDomainVerified: true,
+      organizationDomainVerifiedAt: verifiedAt,
+      organizationVerificationMethod: 'dns',
+      updatedAt: verifiedAt,
+    }).where(eq(identities.did, did)).returning()
+
+    const response: IdentityResponse & { verification: typeof verification } = {
+      ...toIdentityResponse(identity),
       verification,
     }
 

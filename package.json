@@ -10,7 +10,7 @@
   },
   "keywords": ["fides", "trust", "authentication", "ai-agents", "did", "decentralized-identity"],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "build": "turbo run build",

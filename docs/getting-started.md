@@ -6,7 +6,7 @@ This guide will walk you through setting up FIDES, creating your first agent ide
 
 Before you begin, ensure you have the following installed:
 
-- **Node.js 18+** (recommend Node.js 22 for best compatibility)
+- **Node.js 22+**
 - **pnpm** (package manager): `npm install -g pnpm`
 - **Docker** (for PostgreSQL): [Install Docker](https://docs.docker.com/get-docker/)
 - **Git** (for cloning the repository)
@@ -21,7 +21,7 @@ Before you begin, ensure you have the following installed:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/fides.git
+git clone https://github.com/EfeDurmaz16/fides.git
 cd fides
 ```
 

@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { parseList, postJson, printResult } from './authority-utils.js'
+import { derivePublicKeyHex, parseList, postJson, printResult } from './authority-utils.js'
 import { createIncidentRecord, signIncidentRecord } from '@fides/core'
 
 export function createIncidentCommand(): Command {
@@ -19,6 +19,7 @@ export function createIncidentCommand(): Command {
     .option('--json', 'Print JSON only')
     .action(async (options) => {
       try {
+        const privateKey = Buffer.from(options.privateKeyHex, 'hex')
         const record = await signIncidentRecord(createIncidentRecord({
           actor: options.actor,
           reportedBy: options.reporter,
@@ -26,9 +27,10 @@ export function createIncidentCommand(): Command {
           severity: options.severity,
           description: options.description,
           evidenceRefs: parseList(options.evidenceRefs),
-        }), Buffer.from(options.privateKeyHex, 'hex'))
+        }), privateKey)
         const result = await postJson(`${options.agentdUrl.replace(/\/$/, '')}/v1/incidents`, {
           record,
+          reporterPublicKey: await derivePublicKeyHex(options.privateKeyHex),
         })
         printResult('Incident recorded:', result, options)
       } catch (error) {

@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { postJson, printResult } from './authority-utils.js'
+import { derivePublicKeyHex, postJson, printResult } from './authority-utils.js'
 import { createRevocationRecord, signRevocationRecord } from '@fides/core'
 
 export function createRevokeCommand(): Command {
@@ -16,13 +16,15 @@ export function createRevokeCommand(): Command {
     .option('--json', 'Print JSON only')
     .action(async (did, options) => {
       try {
+        const privateKey = Buffer.from(options.privateKeyHex, 'hex')
         const record = await signRevocationRecord(createRevocationRecord({
           did,
           reason: options.reason,
           revokedBy: options.revokedBy,
-        }), Buffer.from(options.privateKeyHex, 'hex'))
+        }), privateKey)
         const result = await postJson(`${options.agentdUrl.replace(/\/$/, '')}/v1/revocations`, {
           record,
+          revokerPublicKey: await derivePublicKeyHex(options.privateKeyHex),
         })
         printResult('Revocation recorded:', result, options)
       } catch (error) {

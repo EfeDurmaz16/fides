@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs'
+import * as ed from '@noble/ed25519'
+import { bytesToHex } from '@noble/hashes/utils'
 
 export interface JsonOptions {
   json?: boolean
@@ -35,6 +37,12 @@ export function parseTokenInput(options: { tokenFile?: string; tokenJson?: strin
     return JSON.parse(options.tokenJson)
   }
   throw new Error('Either --token-file or --token-json is required')
+}
+
+export async function derivePublicKeyHex(privateKeyHex: string): Promise<string> {
+  const privateKey = Uint8Array.from(Buffer.from(privateKeyHex, 'hex'))
+  const publicKey = await ed.getPublicKeyAsync(privateKey)
+  return bytesToHex(publicKey)
 }
 
 export async function postJson(url: string, body: unknown): Promise<unknown> {

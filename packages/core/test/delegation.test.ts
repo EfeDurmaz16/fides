@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   createSessionGrant,
   validateSessionGrant,
+  deriveEd25519PublicKeyHex,
   deriveSessionPublicKey,
   revokeSession,
   createDelegationToken,
@@ -115,6 +116,14 @@ describe('SessionGrant', () => {
       const derivedPublicKey = await deriveSessionPublicKey(sessionKeyHex)
 
       expect(derivedPublicKey).toBe(expectedHex)
+    })
+
+    it('exposes a generic Ed25519 public key derivation helper', async () => {
+      const privateKey = ed.utils.randomPrivateKey()
+      const expectedPublicKey = await ed.getPublicKeyAsync(privateKey)
+
+      await expect(deriveEd25519PublicKeyHex(Buffer.from(privateKey).toString('hex')))
+        .resolves.toBe(Buffer.from(expectedPublicKey).toString('hex'))
     })
   })
 

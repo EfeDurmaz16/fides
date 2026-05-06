@@ -217,9 +217,12 @@ For production agentd mutations through the CLI, export the same API key used by
 ```bash
 export FIDES_API_KEY="$SERVICE_API_KEY"
 pnpm --filter @fides/cli fides session create --agentd-url https://agentd.example.com --capability payments.execute --token-file token.json --delegator-public-key "$DELEGATOR_PUBLIC_KEY_HEX"
+pnpm --filter @fides/cli fides revoke agent did:fides:agent --agentd-url https://agentd.example.com --revoked-by did:fides:principal --reason "disabled" --private-key-hex "$REVOCATION_PRIVATE_KEY_HEX"
+pnpm --filter @fides/cli fides incident report --agentd-url https://agentd.example.com --actor did:fides:agent --type policy_violation --severity high --description "merchant policy bypass" --reporter did:fides:principal --private-key-hex "$REPORTER_PRIVATE_KEY_HEX"
 ```
 
 When `--delegator-public-key` is provided, `agentd` verifies the DelegationToken signature before creating the session.
+For revocation and incident writes, the CLI derives the signer public key from `--private-key-hex` and sends it as `revokerPublicKey` or `reporterPublicKey`.
 Set `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true` to make this verification fail-closed for session, revocation, and incident writes.
 
 ---

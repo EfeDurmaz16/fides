@@ -151,10 +151,14 @@ export function validateSessionGrant(session: SessionGrant): { valid: boolean; e
   return { valid: errors.length === 0, errors }
 }
 
-export async function deriveSessionPublicKey(sessionKeyHex: string): Promise<string> {
-  const privateKeyBytes = Uint8Array.from(Buffer.from(sessionKeyHex, 'hex'))
+export async function deriveEd25519PublicKeyHex(privateKeyHex: string): Promise<string> {
+  const privateKeyBytes = Uint8Array.from(Buffer.from(privateKeyHex, 'hex'))
   const publicKey = await ed.getPublicKeyAsync(privateKeyBytes)
   return bytesToHex(publicKey)
+}
+
+export async function deriveSessionPublicKey(sessionKeyHex: string): Promise<string> {
+  return deriveEd25519PublicKeyHex(sessionKeyHex)
 }
 
 export function revokeSession(session: SessionGrant): RevokedSession {

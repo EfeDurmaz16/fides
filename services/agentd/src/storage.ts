@@ -322,11 +322,7 @@ export class PostgresAuthorityStore implements AuthorityStore {
   private initialized: Promise<void>
 
   constructor(connectionString = requiredDatabaseUrl()) {
-    this.sql = postgres(connectionString, {
-      max: parseInt(process.env.AGENTD_DB_POOL_MAX || process.env.DB_POOL_MAX || '10', 10),
-      idle_timeout: 20,
-      connect_timeout: 10,
-    })
+    this.sql = createAuthorityClient(connectionString)
     this.initialized = this.init()
   }
 
@@ -497,6 +493,7 @@ export async function runAuthorityMigrations(sql: postgres.Sql): Promise<void> {
   await sql`SELECT pg_advisory_lock(hashtext('agentd_authority_migrations'))`
 
   try {
+    await ensureConfiguredAuthoritySchema(sql)
     await ensureAuthorityMigrationLedger(sql)
     for (const migration of AUTHORITY_MIGRATIONS) {
       const checksum = authorityMigrationChecksum(migration)
@@ -530,6 +527,14 @@ export async function runAuthorityMigrations(sql: postgres.Sql): Promise<void> {
   } finally {
     await sql`SELECT pg_advisory_unlock(hashtext('agentd_authority_migrations'))`
   }
+}
+
+async function ensureConfiguredAuthoritySchema(sql: postgres.Sql): Promise<void> {
+  const schemaName = process.env.AGENTD_DB_SCHEMA
+  if (!schemaName) return
+
+  assertValidAuthoritySchemaName(schemaName)
+  await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`)
 }
 
 async function ensureAuthorityMigrationLedger(sql: postgres.Sql): Promise<void> {
@@ -628,4 +633,28 @@ function requiredDatabaseUrl(): string {
     throw new Error('AGENTD_DATABASE_URL or DATABASE_URL is required for AGENTD_AUTHORITY_STORE=postgres')
   }
   return url
+}
+
+export function createAuthorityClient(connectionString = requiredDatabaseUrl()): postgres.Sql {
+  return postgres(withAuthoritySearchPath(connectionString, process.env.AGENTD_DB_SCHEMA), {
+    max: parseInt(process.env.AGENTD_DB_POOL_MAX || process.env.DB_POOL_MAX || '10', 10),
+    idle_timeout: 20,
+    connect_timeout: 10,
+  })
+}
+
+function withAuthoritySearchPath(connectionString: string, schemaName?: string): string {
+  if (!schemaName) return connectionString
+
+  assertValidAuthoritySchemaName(schemaName)
+
+  const url = new URL(connectionString)
+  url.searchParams.set('options', `-c search_path=${schemaName},public`)
+  return url.toString()
+}
+
+function assertValidAuthoritySchemaName(schemaName: string): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(schemaName)) {
+    throw new Error('AGENTD_DB_SCHEMA must be a simple Postgres identifier')
+  }
 }

@@ -45,6 +45,12 @@ export interface PrincipalIdentity {
   type: 'individual' | 'organization' | 'platform'
   /** Human-readable display name */
   displayName: string
+  /** Verified domain for organization or platform principals */
+  domain?: string
+  /** Whether the principal identity has been verified */
+  verified?: boolean
+  /** Method used to verify the principal */
+  verificationMethod?: 'dns' | 'github' | 'email' | 'manual'
 }
 
 export interface TrustAnchor {

@@ -24,6 +24,18 @@ describe('Identity v2', () => {
       expect(identityDisplayName(principal)).toBe('Alice')
     })
 
+    it('should support verified organization principals', () => {
+      const principal: PrincipalIdentity = {
+        did: 'did:fides:org1',
+        type: 'organization',
+        displayName: 'Example Inc',
+        domain: 'example.com',
+        verified: true,
+        verificationMethod: 'dns',
+      }
+      expect(identityDisplayName(principal)).toBe('Example Inc')
+    })
+
     it('should return name for publisher', () => {
       const publisher: PublisherIdentity = {
         did: 'did:fides:pub1',

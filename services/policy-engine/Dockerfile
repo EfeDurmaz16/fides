@@ -4,6 +4,7 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/policy/package.json ./packages/policy/
+COPY packages/shared/package.json ./packages/shared/
 COPY services/policy-engine/package.json ./services/policy-engine/
 RUN pnpm install --frozen-lockfile
 
@@ -13,10 +14,13 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/policy/node_modules ./packages/policy/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=deps /app/services/policy-engine/node_modules ./services/policy-engine/node_modules
 COPY packages/policy/ ./packages/policy/
+COPY packages/shared/ ./packages/shared/
 COPY services/policy-engine/ ./services/policy-engine/
 COPY tsconfig.base.json ./
+RUN cd packages/shared && pnpm build
 RUN cd packages/policy && pnpm build
 RUN cd services/policy-engine && pnpm build
 
@@ -26,10 +30,13 @@ RUN addgroup -g 1001 -S fides && adduser -S fides -u 1001
 WORKDIR /app
 COPY --from=build /app/packages/policy/dist ./packages/policy/dist
 COPY --from=build /app/packages/policy/package.json ./packages/policy/
+COPY --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --from=build /app/packages/shared/package.json ./packages/shared/
 COPY --from=build /app/services/policy-engine/dist ./services/policy-engine/dist
 COPY --from=build /app/services/policy-engine/package.json ./services/policy-engine/
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages/policy/node_modules ./packages/policy/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=deps /app/services/policy-engine/node_modules ./services/policy-engine/node_modules
 
 USER fides

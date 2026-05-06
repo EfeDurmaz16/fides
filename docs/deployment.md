@@ -174,7 +174,7 @@ pnpm --filter @fides/agentd db:migrate
 export AGENTD_DB_AUTO_MIGRATE=false
 ```
 
-`pnpm --filter @fides/agentd db:migrate` creates the authority tables and records `001_authority_store` in `agentd_schema_migrations`. When `AGENTD_DB_AUTO_MIGRATE=false`, startup validates both the tables and the migration ledger instead of silently creating missing schema.
+`pnpm --filter @fides/agentd db:migrate` creates the authority tables and records `001_authority_store` plus its statement checksum in `agentd_schema_migrations`. When `AGENTD_DB_AUTO_MIGRATE=false`, startup validates both the tables and the migration ledger instead of silently creating missing schema or accepting a drifted migration body.
 
 ### 2. Run Each Service
 

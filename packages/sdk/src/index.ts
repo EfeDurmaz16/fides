@@ -26,6 +26,19 @@ export { DiscoveryClient } from './discovery/client.js'
 export { IdentityResolver } from './discovery/resolver.js'
 export { AgentDiscoveryClient, type RegisterAgentParams } from './discovery/agent-client.js'
 export { toA2AAgentCard, fromA2AAgentCard } from './discovery/a2a.js'
+export {
+  RegistryClient,
+  RegistryError,
+  type AgentCard,
+  type RegistryClientOptions,
+  type RegistryMode,
+  type RegistryModeResponse,
+  type RegistryMutationResponse,
+  type RegistryRegisterResponse,
+  type RegistrySearchResponse,
+  type RegistrySearchResult,
+  type RegistryStatsResponse,
+} from './registry/client.js'
 
 // Trust module exports
 export { TrustLevel } from './trust/types.js'

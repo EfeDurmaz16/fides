@@ -113,6 +113,27 @@ await registry.setMode('did:fides:agent', 'private')
 await registry.updateMetadata('did:fides:agent', { owner: 'ops' })
 ```
 
+## Relay Client
+
+```typescript
+import { RelayClient } from '@fides/sdk'
+
+const relay = new RelayClient({
+  baseUrl: 'http://localhost:7347',
+  apiKey: process.env.FIDES_API_KEY,
+})
+
+const accepted = await relay.send({
+  to: 'did:fides:agent',
+  from: 'did:fides:principal',
+  payload: { type: 'fides.agent_card', card },
+})
+
+const pending = await relay.poll('did:fides:agent')
+const status = await relay.getMessage(accepted.relayId)
+await relay.deleteMessage(accepted.relayId)
+```
+
 ## API
 
 | Function | Description |
@@ -138,6 +159,11 @@ await registry.updateMetadata('did:fides:agent', { owner: 'ops' })
 | `RegistryClient.search(query)` | Search public registry cards |
 | `RegistryClient.setMode(did, mode)` | Switch a registry card between `public` and `private` |
 | `RegistryClient.updateMetadata(did, metadata)` | Merge operator metadata into a registry card |
+| `RelayClient.send(message)` | Enqueue a relay message for a target DID |
+| `RelayClient.poll(did)` | Poll and deliver pending relay messages for a DID |
+| `RelayClient.getMessage(relayId)` | Read relay message status by ID |
+| `RelayClient.deleteMessage(relayId)` | Delete a relay message by ID |
+| `RelayClient.stats()` | Read relay service queue statistics |
 
 ### Trust Levels
 

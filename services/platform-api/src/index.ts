@@ -5,11 +5,12 @@ import { cors } from 'hono/cors'
 import type { MiddlewareHandler } from 'hono'
 import { isValidFidesDid, type PasskeyCredentialBinding } from '@fides/core'
 import { evaluateApiKeyAuth, MetricsCollector, metricsMiddleware } from '@fides/shared'
+import { createPlatformStore } from './storage.js'
 
 const app = new Hono()
 const startTime = Date.now()
 const collector = new MetricsCollector()
-const passkeyBindings = new Map<string, PasskeyCredentialBinding>()
+const store = createPlatformStore()
 
 const SERVICE_PORTS = {
   discovery: 3100,
@@ -24,12 +25,19 @@ app.use('*', metricsMiddleware(collector))
 app.use('*', cors({ origin: getCorsOrigin() }))
 app.use('*', bodyLimit({ maxSize: 1024 * 1024 }))
 
-app.get('/health', (c) => c.json({
-  status: 'healthy',
-  service: 'platform-api',
-  uptime: Math.floor((Date.now() - startTime) / 1000),
-  timestamp: new Date().toISOString(),
-}))
+app.get('/health', async (c) => {
+  const persistence = await store.healthCheck()
+  return c.json({
+    status: persistence.ok ? 'healthy' : 'degraded',
+    service: 'platform-api',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    timestamp: new Date().toISOString(),
+    checks: {
+      persistence: persistence.ok ? 'ok' : 'fail',
+      store: persistence,
+    },
+  }, persistence.ok ? 200 : 503)
+})
 
 app.get('/v1/version', (c) => c.json({
   service: 'platform-api',
@@ -60,7 +68,7 @@ app.post('/v1/passkeys/bindings', apiKeyAuth(), async (c) => {
     return c.json({ error: binding.error }, 400)
   }
 
-  const existing = passkeyBindings.get(binding.value.credentialId)
+  const existing = await store.getPasskeyBinding(binding.value.credentialId)
   if (existing && existing.principalDid !== binding.value.principalDid) {
     return c.json({ error: 'credential is already bound to a different principal' }, 409)
   }
@@ -74,37 +82,34 @@ app.post('/v1/passkeys/bindings', apiKeyAuth(), async (c) => {
     createdAt: existing?.createdAt ?? binding.value.createdAt,
     lastVerifiedAt: now,
   }
-  passkeyBindings.set(stored.credentialId, stored)
+  await store.putPasskeyBinding(stored)
 
   return c.json({ binding: stored }, existing ? 200 : 201)
 })
 
-app.get('/v1/passkeys/principals/:did/credentials', apiKeyAuth(), (c) => {
+app.get('/v1/passkeys/principals/:did/credentials', apiKeyAuth(), async (c) => {
   const principalDid = c.req.param('did')
   if (!isValidFidesDid(principalDid)) {
     return c.json({ error: 'invalid principal DID' }, 400)
   }
 
-  const credentials = [...passkeyBindings.values()]
-    .filter(binding => binding.principalDid === principalDid)
-    .sort((a, b) => a.credentialId.localeCompare(b.credentialId))
-    .map(toCredentialDescriptor)
+  const credentials = (await store.listPasskeyBindings(principalDid)).map(toCredentialDescriptor)
 
   return c.json({ principalDid, credentials, count: credentials.length })
 })
 
-app.get('/v1/passkeys/credentials/:credentialId', apiKeyAuth(), (c) => {
+app.get('/v1/passkeys/credentials/:credentialId', apiKeyAuth(), async (c) => {
   const credentialId = c.req.param('credentialId')
-  const binding = passkeyBindings.get(credentialId)
+  const binding = await store.getPasskeyBinding(credentialId)
   if (!binding) {
     return c.json({ error: 'passkey credential binding not found' }, 404)
   }
   return c.json({ binding })
 })
 
-app.delete('/v1/passkeys/credentials/:credentialId', apiKeyAuth(), (c) => {
+app.delete('/v1/passkeys/credentials/:credentialId', apiKeyAuth(), async (c) => {
   const credentialId = c.req.param('credentialId')
-  const deleted = passkeyBindings.delete(credentialId)
+  const deleted = await store.deletePasskeyBinding(credentialId)
   if (!deleted) {
     return c.json({ error: 'passkey credential binding not found' }, 404)
   }

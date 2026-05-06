@@ -101,6 +101,19 @@ await registry.register({
   id: 'did:fides:agent',
   name: 'Payment Agent',
   version: '1.0.0',
+  publisher: {
+    did: 'did:fides:publisher',
+    name: 'Example Publisher',
+    verified: false,
+    verificationMethod: 'manual',
+    organization: {
+      did: 'did:fides:org',
+      name: 'Example Org',
+      domain: 'example.com',
+      verified: true,
+      verificationMethod: 'dns',
+    },
+  },
   capabilities: [{ id: 'payments.execute', name: 'Payments' }],
   protocols: ['mcp'],
   endpoints: [],
@@ -113,6 +126,10 @@ const matches = await registry.search('Payment')
 await registry.setMode('did:fides:agent', 'private')
 await registry.updateMetadata('did:fides:agent', { owner: 'ops' })
 ```
+
+Cards that claim `publisher.verified: true` or `publisher.organization.verified: true`
+are accepted only when the registry can match those DNS-backed claims against
+discovery verification state.
 
 ## Relay Client
 

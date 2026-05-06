@@ -5,11 +5,29 @@ export interface RegistryClientOptions {
 
 export type RegistryMode = 'public' | 'private'
 
+export interface RegistryPublisherOrganization {
+  did: string
+  name: string
+  domain?: string
+  verified: boolean
+  verificationMethod: 'dns' | 'github' | 'email' | 'manual'
+}
+
+export interface RegistryPublisher {
+  did: string
+  name: string
+  domain?: string
+  verified: boolean
+  verificationMethod: 'dns' | 'github' | 'email' | 'manual'
+  organization?: RegistryPublisherOrganization
+}
+
 export interface AgentCard {
   id?: string
   payload?: { id?: string; [key: string]: unknown }
   name?: string
   version?: string
+  publisher?: RegistryPublisher
   capabilities?: unknown[]
   protocols?: string[]
   endpoints?: unknown[]

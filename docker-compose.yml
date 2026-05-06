@@ -84,6 +84,17 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
 
+  policy-engine:
+    build:
+      context: .
+      dockerfile: services/policy-engine/Dockerfile
+    ports:
+      - "3300:3300"
+    environment:
+      POLICY_ENGINE_PORT: "3300"
+      NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+
   agentd:
     build:
       context: .
@@ -112,6 +123,36 @@ services:
       trust-graph:
         condition: service_started
       registry:
+        condition: service_started
+
+  platform-api:
+    build:
+      context: .
+      dockerfile: services/platform-api/Dockerfile
+    ports:
+      - "3600:3600"
+    environment:
+      PLATFORM_API_PORT: "3600"
+      DISCOVERY_URL: http://discovery:3100
+      TRUST_GRAPH_URL: http://trust-graph:3200
+      POLICY_ENGINE_URL: http://policy-engine:3300
+      REGISTRY_URL: http://registry:7346
+      RELAY_URL: http://relay:7347
+      AGENTD_URL: http://agentd:7345
+      NODE_ENV: production
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+    depends_on:
+      discovery:
+        condition: service_started
+      trust-graph:
+        condition: service_started
+      policy-engine:
+        condition: service_started
+      registry:
+        condition: service_started
+      relay:
+        condition: service_started
+      agentd:
         condition: service_started
 
 volumes:

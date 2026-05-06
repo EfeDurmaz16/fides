@@ -13,9 +13,11 @@
 | ------------ | ----- | -------------- | ---------------------------------------- |
 | `discovery`  | 3100  | PostgreSQL     | DID resolution, identity registry        |
 | `trust-graph`| 3200  | PostgreSQL     | Web-of-trust scoring                     |
+| `policy-engine` | 3300 | None          | Deterministic policy evaluation          |
 | `registry`   | 7346  | File-based     | AgentCard registry (filesystem)          |
 | `relay`      | 7347  | In-memory      | Message relay for NAT/firewall traversal |
 | `agentd`     | 7345  | PostgreSQL or file | Local daemon unifying all services and durable authority state |
+| `platform-api` | 3600 | None          | Platform health, version, and topology metadata |
 
 ---
 
@@ -54,9 +56,11 @@ cp .env.example .env
 | ----------------- | ------- | ------------- |
 | `DISCOVERY_PORT`  | `3100`  | discovery     |
 | `TRUST_GRAPH_PORT`| `3200`  | trust-graph   |
+| `POLICY_ENGINE_PORT` | `3300` | policy-engine |
 | `REGISTRY_PORT`   | `7346`  | registry      |
 | `RELAY_PORT`      | `7347`  | relay         |
 | `AGENTD_PORT`     | `7345`  | agentd        |
+| `PLATFORM_API_PORT` | `3600` | platform-api |
 
 ### Service URLs (inter-service communication)
 
@@ -64,7 +68,10 @@ cp .env.example .env
 | ----------------- | ------------------------------ | ------------------ |
 | `DISCOVERY_URL`   | `http://localhost:3100`        | agentd             |
 | `TRUST_GRAPH_URL` | `http://localhost:3200`        | agentd             |
-| `REGISTRY_URL`    | `http://localhost:7346`        | agentd             |
+| `POLICY_ENGINE_URL` | `http://localhost:3300`      | platform-api       |
+| `REGISTRY_URL`    | `http://localhost:7346`        | agentd, platform-api |
+| `RELAY_URL`       | `http://localhost:7347`        | platform-api       |
+| `AGENTD_URL`      | `http://localhost:7345`        | platform-api       |
 
 ### Authentication
 
@@ -107,15 +114,17 @@ docker compose up -d
 docker compose ps
 curl http://localhost:3100/health
 curl http://localhost:3200/health
+curl http://localhost:3300/health
 curl http://localhost:7346/health
 curl http://localhost:7347/health
 curl http://localhost:7345/health
+curl http://localhost:3600/health
 
 # View logs
 docker compose logs -f
 ```
 
-This starts PostgreSQL, discovery, trust-graph, registry, relay, and agentd — all pre-configured for inter-service communication. In Docker Compose, `agentd` uses the same PostgreSQL container for durable authority state unless `AGENTD_DATABASE_URL` points at a dedicated database.
+This starts PostgreSQL, discovery, trust-graph, policy-engine, registry, relay, agentd, and platform-api — all pre-configured for inter-service communication. In Docker Compose, `agentd` uses the same PostgreSQL container for durable authority state unless `AGENTD_DATABASE_URL` points at a dedicated database.
 
 ### Development Mode
 
@@ -173,12 +182,17 @@ export REGISTRY_PORT=7346
 export NODE_ENV=production
 node services/registry/dist/index.js
 
-# Terminal 4 — Relay (no database needed)
+# Terminal 4 — Policy Engine (no database needed)
+export POLICY_ENGINE_PORT=3300
+export NODE_ENV=production
+node services/policy-engine/dist/index.js
+
+# Terminal 5 — Relay (no database needed)
 export RELAY_PORT=7347
 export NODE_ENV=production
 node services/relay/dist/index.js
 
-# Terminal 5 — Agent Daemon
+# Terminal 6 — Agent Daemon
 export AGENTD_PORT=7345
 export AGENTD_AUTHORITY_STORE=postgres
 export AGENTD_DATABASE_URL="postgresql://fides:CHANGEME@localhost:5432/fides"
@@ -188,6 +202,17 @@ export TRUST_GRAPH_URL="http://localhost:3200"
 export REGISTRY_URL="http://localhost:7346"
 export NODE_ENV=production
 node services/agentd/dist/index.js
+
+# Terminal 7 — Platform API
+export PLATFORM_API_PORT=3600
+export DISCOVERY_URL="http://localhost:3100"
+export TRUST_GRAPH_URL="http://localhost:3200"
+export POLICY_ENGINE_URL="http://localhost:3300"
+export REGISTRY_URL="http://localhost:7346"
+export RELAY_URL="http://localhost:7347"
+export AGENTD_URL="http://localhost:7345"
+export NODE_ENV=production
+node services/platform-api/dist/index.js
 ```
 
 ### 3. Systemd Unit Example
@@ -222,18 +247,22 @@ All services expose a `GET /health` endpoint returning JSON with a `status` fiel
 ```bash
 curl -s http://localhost:3100/health | jq .
 curl -s http://localhost:3200/health | jq .
+curl -s http://localhost:3300/health | jq .
 curl -s http://localhost:7346/health | jq .
 curl -s http://localhost:7347/health | jq .
 curl -s http://localhost:7345/health | jq .
+curl -s http://localhost:3600/health | jq .
 ```
 
 Expected responses:
 
 - `discovery`: `{"status":"healthy",...}` — depends on PostgreSQL connectivity
 - `trust-graph`: `{"status":"healthy",...}` — depends on PostgreSQL connectivity
+- `policy-engine`: `{"status":"healthy",...}` — deterministic evaluator is ready
 - `registry`: `{"status":"healthy",...}` — depends on filesystem write access
 - `relay`: `{"status":"healthy",...}` — always healthy (in-memory)
 - `agentd`: `{"status":"healthy",...}` — depends on upstream services and authority store readiness
+- `platform-api`: `{"status":"healthy",...}` — topology metadata endpoint is ready
 
 If a dependency is unavailable, the service returns HTTP 503 with `"status":"degraded"` and `checks` detailing which component failed. For `agentd`, inspect `checks.authorityStore` and `authorityStore.kind` to confirm whether the file or Postgres authority store is active.
 
@@ -287,9 +316,25 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # Policy Engine
+    location /policy-engine/ {
+        proxy_pass http://127.0.0.1:3300/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     # Agent Daemon
     location /agentd/ {
         proxy_pass http://127.0.0.1:7345/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Platform API
+    location /platform-api/ {
+        proxy_pass http://127.0.0.1:3600/;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -313,8 +358,14 @@ fides.example.com {
     handle_path /relay/* {
         reverse_proxy localhost:7347
     }
+    handle_path /policy-engine/* {
+        reverse_proxy localhost:3300
+    }
     handle_path /agentd/* {
         reverse_proxy localhost:7345
+    }
+    handle_path /platform-api/* {
+        reverse_proxy localhost:3600
     }
 }
 ```
@@ -387,7 +438,7 @@ The relay stores messages in memory only — no backup needed. Messages have a d
 
 ## Monitoring
 
-All services expose Prometheus metrics at `GET /metrics`:
+Services with the shared observability middleware expose Prometheus metrics at `GET /metrics`:
 
 | Service      | Metrics URL                  |
 | ------------ | ---------------------------- |
@@ -396,6 +447,8 @@ All services expose Prometheus metrics at `GET /metrics`:
 | registry     | `http://localhost:7346/metrics` |
 | relay        | `http://localhost:7347/metrics` |
 | agentd       | `http://localhost:7345/metrics` |
+
+`policy-engine` and `platform-api` currently expose structured health endpoints but not Prometheus metrics.
 
 ### Prometheus scrape config
 
@@ -466,13 +519,18 @@ registry ───────────────────────�
                                 │
 relay ──────────────────────────┘
   (standalone, in-memory)
+
+policy-engine ──────────────── platform-api
+  (standalone evaluator)        (metadata over service URLs)
 ```
 
 - `discovery` and `trust-graph` require PostgreSQL
 - `trust-graph` additionally requires `discovery` for identity resolution
+- `policy-engine` is standalone — deterministic policy evaluation
 - `registry` is standalone — stores AgentCards on the filesystem
 - `relay` is standalone — pure in-memory message queue
 - `agentd` is a local proxy that depends on discovery, trust-graph, and registry
+- `platform-api` is standalone metadata over configured service URLs
 
 ### Running a Minimal Setup
 
@@ -480,8 +538,10 @@ For development without PostgreSQL, you can run just registry, relay, and agentd
 
 ```bash
 node services/registry/dist/index.js &
+node services/policy-engine/dist/index.js &
 node services/relay/dist/index.js &
 AGENTD_PORT=7345 DISCOVERY_URL=http://localhost:3100 TRUST_GRAPH_URL=http://localhost:3200 REGISTRY_URL=http://localhost:7346 node services/agentd/dist/index.js &
+PLATFORM_API_PORT=3600 AGENTD_URL=http://localhost:7345 node services/platform-api/dist/index.js &
 ```
 
 Note: agentd health will show `degraded` when discovery or trust-graph are unreachable — this is expected in minimal mode.

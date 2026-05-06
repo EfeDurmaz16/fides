@@ -77,11 +77,21 @@ pnpm dev
 This starts:
 - **Discovery Service** on `http://localhost:3100`
 - **Trust Graph Service** on `http://localhost:3200`
+- **Policy Engine Service** on `http://localhost:3300`
+- **Registry Service** on `http://localhost:7346`
+- **Relay Service** on `http://localhost:7347`
+- **Agent Daemon** on `http://localhost:7345`
+- **Platform API** on `http://localhost:3600`
 
 **Verify services are running:**
 ```bash
 curl http://localhost:3100/.well-known/fides.json
-curl http://localhost:3200/trust
+curl http://localhost:3200/health
+curl http://localhost:3300/health
+curl http://localhost:7346/health
+curl http://localhost:7347/health
+curl http://localhost:7345/health
+curl http://localhost:3600/health
 ```
 
 ## Quick Start Tutorial
@@ -533,7 +543,7 @@ fides trust did:fides:targetAgent --level high
 Now that you have FIDES running, explore:
 
 1. **Architecture**: Read [docs/architecture.md](./architecture.md) to understand system design
-2. **Protocol Spec**: Review [docs/protocol-spec.md](./protocol-spec.md) for detailed protocol documentation
+2. **Protocol Spec**: Review [docs/protocol/fides-v2-spec.md](./protocol/fides-v2-spec.md) for detailed protocol documentation
 3. **Build an Agent**: Create an autonomous agent using the SDK
 4. **Trust Network**: Build a network of trusted agents
 5. **Integrate Services**: Use HTTP message signatures to authenticate service requests
@@ -558,6 +568,6 @@ Now that you have FIDES running, explore:
 ## What's Next?
 
 - Explore the [Architecture documentation](./architecture.md)
-- Dive into the [Protocol Specification](./protocol-spec.md)
+- Dive into the [Protocol Specification](./protocol/fides-v2-spec.md)
 - Build your first autonomous agent application
 - Join the FIDES community and contribute!

@@ -678,6 +678,30 @@ describe('Agentd Service Routes', () => {
       expect(evidence.events[0].action).toBe('authorization.allow')
     })
 
+    it('ignores caller-supplied approval grants in production authorization', async () => {
+      process.env.NODE_ENV = 'production'
+      process.env.SERVICE_API_KEY = 'agentd-key'
+      const did = `did:fides:production-approval-${Date.now()}`
+
+      const res = await app.request('/v1/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'agentd-key' },
+        body: JSON.stringify({
+          agentDid: did,
+          capabilityId: 'payments.execute',
+          requiresApproval: true,
+          approvalGranted: true,
+        }),
+      })
+
+      expect(res.status).toBe(200)
+      const data = await res.json()
+      expect(data.decision).toBe('approve-required')
+      expect(data.factors).toEqual(expect.arrayContaining([
+        expect.objectContaining({ source: 'approval', factor: 'approval-required' }),
+      ]))
+    })
+
     it('denies authorization after session revocation', async () => {
       const did = `did:fides:session-revoked-${Date.now()}`
       const sessionRes = await app.request('/v1/sessions', {

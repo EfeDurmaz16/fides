@@ -14,7 +14,7 @@ Current scope:
 - Prometheus metrics endpoint for request counters and latency summaries.
 - Version metadata for platform clients.
 - Topology endpoint that exposes configured service URLs.
-- Passkey credential binding persistence for platform-hosted principals.
+- File-backed passkey credential binding persistence for platform-hosted principals.
 
 Not included yet:
 
@@ -36,6 +36,8 @@ pnpm --filter @fides/platform-api lint
 ```
 
 The service listens on `PLATFORM_API_PORT`, then `PORT`, then `3600`.
+Passkey bindings persist to `PLATFORM_STORE_PATH` when set, otherwise
+`~/.fides/platform-api/platform-store.json`. Tests use an in-memory store.
 
 ## API
 

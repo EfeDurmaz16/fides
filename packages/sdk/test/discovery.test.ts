@@ -19,12 +19,14 @@ describe('DiscoveryClient', () => {
       did: 'did:fides:abc123',
       publicKey: 'deadbeef',
       metadata: { name: 'Test Agent' },
+      domain: 'example.com',
     }
 
     const response: AgentIdentity = {
       ...identity,
       algorithm: 'ed25519',
       createdAt: '2024-01-01T00:00:00Z',
+      domainVerified: false,
     }
 
     mockFetch.mockResolvedValueOnce({
@@ -40,6 +42,46 @@ describe('DiscoveryClient', () => {
       body: JSON.stringify(identity),
     })
     expect(result).toEqual(response)
+  })
+
+  it('should verify and persist an identity domain', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        did: 'did:fides:abc123',
+        publicKey: 'deadbeef',
+        algorithm: 'ed25519',
+        metadata: {},
+        domain: 'example.com',
+        domainVerified: true,
+        domainVerifiedAt: '2024-01-02T00:00:00.000Z',
+        verificationMethod: 'dns',
+        createdAt: '2024-01-01T00:00:00Z',
+        verification: {
+          domain: 'example.com',
+          did: 'did:fides:abc123',
+          recordName: '_fides.example.com',
+          verified: true,
+        },
+      }),
+    })
+
+    const result = await client.verifyDomain('did:fides:abc123', 'example.com')
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:3100/identities/did%3Afides%3Aabc123/domain/verify',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'example.com' }),
+      }
+    )
+    expect(result).toMatchObject({
+      did: 'did:fides:abc123',
+      domain: 'example.com',
+      domainVerified: true,
+      verificationMethod: 'dns',
+    })
   })
 
   it('should throw error on registration failure', async () => {

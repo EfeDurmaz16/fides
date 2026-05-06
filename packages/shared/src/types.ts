@@ -8,6 +8,10 @@ export interface AgentIdentity {
   publicKey: string // hex-encoded
   algorithm: string
   metadata?: Record<string, unknown>
+  domain?: string | null
+  domainVerified?: boolean
+  domainVerifiedAt?: string | null
+  verificationMethod?: 'dns' | null
   createdAt: string
   endpoints?: {
     discovery?: string

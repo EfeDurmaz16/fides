@@ -3,6 +3,9 @@ export interface Identity {
   publicKey: string // hex-encoded
   metadata?: Record<string, unknown>
   domain?: string | null
+  domainVerified: boolean
+  domainVerifiedAt?: Date | null
+  verificationMethod?: 'dns' | null
   createdAt: Date
   updatedAt: Date
 }
@@ -14,11 +17,18 @@ export interface RegisterIdentityRequest {
   domain?: string
 }
 
+export interface VerifyIdentityDomainRequest {
+  domain?: string
+}
+
 export interface IdentityResponse {
   did: string
   publicKey: string
   metadata: Record<string, unknown>
   domain?: string | null
+  domainVerified: boolean
+  domainVerifiedAt?: string | null
+  verificationMethod?: 'dns' | null
   createdAt: string
   updatedAt: string
 }

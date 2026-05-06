@@ -2,7 +2,7 @@
  * FIDES v2 Relay Service
  *
  * Message relay for agents behind NAT/firewalls or with dynamic addresses.
- * Supports in-memory message queue with TTL, delivery tracking, and status queries.
+ * Supports message queueing with TTL, delivery tracking, and status queries.
  */
 
 import { Hono } from 'hono'
@@ -14,34 +14,18 @@ import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
 import { apiKeyAuth, relayScopeForRequest } from './middleware/auth.js'
+import { createRelayStore, type RelayMessage } from './storage.js'
 
 const app = new Hono()
 const collector = new MetricsCollector()
 
-interface RelayMessage {
-  id: string
-  to: string
-  from: string
-  payload: unknown
-  status: 'pending' | 'delivered' | 'expired'
-  createdAt: string
-  expiresAt: string
-  deliveredAt?: string
-}
-
-const messages = new Map<string, RelayMessage>()
-const queues = new Map<string, string[]>()
+const relayStore = createRelayStore()
 const DEFAULT_TTL_MS = 5 * 60 * 1000
 
 const startTime = Date.now()
 
 setInterval(() => {
-  const now = Date.now()
-  for (const [id, msg] of messages) {
-    if (msg.status === 'pending' && new Date(msg.expiresAt).getTime() < now) {
-      msg.status = 'expired'
-    }
-  }
+  void relayStore.expirePending(Date.now())
 }, 60000)
 
 function getCorsOrigin(): string {
@@ -81,27 +65,20 @@ app.get('/metrics', (c) => {
 })
 
 // ─── Health ───────────────────────────────────────────────────────
-app.get('/health', (c) => {
-  let pending = 0
-  let delivered = 0
-  let expired = 0
-  for (const msg of messages.values()) {
-    if (msg.status === 'pending') pending++
-    else if (msg.status === 'delivered') delivered++
-    else if (msg.status === 'expired') expired++
-  }
-
+app.get('/health', async (c) => {
+  const stats = await relayStore.stats()
   return c.json({
     status: 'healthy',
     service: 'relay',
+    store: relayStore.kind,
     uptime: Math.floor((Date.now() - startTime) / 1000),
     timestamp: new Date().toISOString(),
     queues: {
-      total: messages.size,
-      pending,
-      delivered,
-      expired,
-      activeQueues: queues.size,
+      total: stats.total,
+      pending: stats.pending,
+      delivered: stats.delivered,
+      expired: stats.expired,
+      activeQueues: stats.queues,
     },
   })
 })
@@ -129,11 +106,7 @@ app.post('/v1/relay', async (c) => {
     expiresAt: new Date(now.getTime() + ttl).toISOString(),
   }
 
-  messages.set(id, message)
-
-  const queue = queues.get(body.to) || []
-  queue.push(id)
-  queues.set(body.to, queue)
+  await relayStore.put(message)
 
   return c.json({ accepted: true, relayId: id, expiresAt: message.expiresAt }, 201)
 })
@@ -141,39 +114,16 @@ app.post('/v1/relay', async (c) => {
 /**
  * Get queue stats (must be before :param routes to avoid being captured).
  */
-app.get('/v1/relay/stats', (c) => {
-  let pending = 0
-  let delivered = 0
-  let expired = 0
-  for (const msg of messages.values()) {
-    if (msg.status === 'pending') pending++
-    else if (msg.status === 'delivered') delivered++
-    else if (msg.status === 'expired') expired++
-  }
-  return c.json({ total: messages.size, pending, delivered, expired, queues: queues.size })
+app.get('/v1/relay/stats', async (c) => {
+  return c.json(await relayStore.stats())
 })
 
 /**
  * Poll for pending messages.
  */
-app.get('/v1/relay/:did/messages', (c) => {
+app.get('/v1/relay/:did/messages', async (c) => {
   const did = c.req.param('did')
-  const queue = queues.get(did) || []
-  const pending: RelayMessage[] = []
-
-  for (const id of queue) {
-    const msg = messages.get(id)
-    if (msg && msg.status === 'pending') {
-      msg.status = 'delivered'
-      msg.deliveredAt = new Date().toISOString()
-      pending.push(msg)
-    }
-  }
-
-  queues.set(did, queue.filter(id => {
-    const msg = messages.get(id)
-    return msg && msg.status === 'pending'
-  }))
+  const pending = await relayStore.pollPending(did, new Date().toISOString())
 
   return c.json({ messages: pending, count: pending.length })
 })
@@ -181,9 +131,9 @@ app.get('/v1/relay/:did/messages', (c) => {
 /**
  * Get status of a specific relay message.
  */
-app.get('/v1/relay/:id', (c) => {
+app.get('/v1/relay/:id', async (c) => {
   const id = c.req.param('id')
-  const msg = messages.get(id)
+  const msg = await relayStore.get(id)
   if (!msg) {
     return c.json({ error: 'Not found' }, 404)
   }
@@ -193,13 +143,12 @@ app.get('/v1/relay/:id', (c) => {
 /**
  * Delete a relay message.
  */
-app.delete('/v1/relay/:id', (c) => {
+app.delete('/v1/relay/:id', async (c) => {
   const id = c.req.param('id')
-  const msg = messages.get(id)
-  if (!msg) {
+  const deleted = await relayStore.delete(id)
+  if (!deleted) {
     return c.json({ error: 'Not found' }, 404)
   }
-  messages.delete(id)
   return c.json({ deleted: true })
 })
 
@@ -228,7 +177,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   }
 
-  console.log(`FIDES Relay starting on port ${port}`)
+  console.log(`FIDES Relay starting on port ${port} with ${relayStore.kind} store`)
 
   const server = serve({
     fetch: wrappedFetch,

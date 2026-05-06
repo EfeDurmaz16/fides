@@ -4,8 +4,8 @@ info:
   version: "2.0.0"
   description: |
     Message relay for agents behind NAT/firewalls or with dynamic addresses.
-    Supports in-memory message queuing with TTL, delivery tracking, and
-    polling-based retrieval.
+    Supports memory or file-backed message queuing with TTL, delivery tracking,
+    and polling-based retrieval.
   contact:
     name: FIDES Protocol
     url: https://github.com/EfeDurmaz16/fides

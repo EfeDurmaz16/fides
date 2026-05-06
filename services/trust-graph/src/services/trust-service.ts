@@ -206,6 +206,8 @@ export class TrustService {
     transitiveTrusters: number
     lastComputed: string
   }> {
+    await this.ensureIdentity(db, did)
+
     // Check cache first
     const cached = await db
       .select()
@@ -294,7 +296,7 @@ export class TrustService {
 
       const circuitOpen = Date.now() < this.circuitBreaker.openUntil
       if (circuitOpen) {
-        throw new TrustError(`Identity not found: ${did}. Discovery service circuit breaker open.`)
+        throw new TrustError(`Discovery service unavailable while resolving identity: ${did}`)
       }
 
       try {
@@ -311,13 +313,17 @@ export class TrustService {
           identity = await response.json()
           // Reset circuit breaker on success
           this.circuitBreaker.failureCount = 0
+        } else if (response.status >= 500) {
+          throw new TrustError(`Discovery service unavailable while resolving identity: ${did}`)
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof TrustError) throw error
         // Discovery service unavailable — increment circuit breaker
         this.circuitBreaker.failureCount++
         if (this.circuitBreaker.failureCount >= CIRCUIT_BREAKER_THRESHOLD) {
           this.circuitBreaker.openUntil = Date.now() + CIRCUIT_BREAKER_RESET_MS
         }
+        throw new TrustError(`Discovery service unavailable while resolving identity: ${did}`)
       }
 
       if (!identity || !identity.publicKey) {
@@ -345,6 +351,7 @@ export class TrustService {
    * Get capability-specific score for a DID.
    */
   async getCapabilityScore(db: DbClient, did: string, capabilityId: string): Promise<CapabilityScoreResult> {
+    await this.ensureIdentity(db, did)
     return computeCapabilityScore(db, did, capabilityId)
   }
 

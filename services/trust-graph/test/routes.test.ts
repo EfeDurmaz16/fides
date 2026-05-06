@@ -50,6 +50,7 @@ describe('HTTP Routes', () => {
     restoreEnv('SERVICE_API_KEY', ORIGINAL_SERVICE_API_KEY)
     restoreEnv('TRUST_GRAPH_API_KEYS', ORIGINAL_TRUST_GRAPH_API_KEYS)
     restoreEnv('NODE_ENV', ORIGINAL_NODE_ENV)
+    vi.unstubAllGlobals()
   })
 
   function mockIdentity(publicKey: Uint8Array) {
@@ -260,12 +261,18 @@ describe('HTTP Routes', () => {
           where: vi.fn(() => {
             selectCallCount++
             if (selectCallCount === 1) {
-              // First call: cache check (empty = cache miss)
+              // First call: identity lookup
+              return {
+                limit: vi.fn(() => Promise.resolve([{ publicKey: Buffer.from('01'.repeat(32), 'hex') }])),
+              }
+            }
+            if (selectCallCount === 2) {
+              // Second call: cache check (empty = cache miss)
               return {
                 limit: vi.fn(() => Promise.resolve([])),
               }
             }
-            // Second call: edges query (no limit, returns array directly)
+            // Third call: edges query (no limit, returns array directly)
             return Promise.resolve([])
           }),
         })),
@@ -286,6 +293,60 @@ describe('HTTP Routes', () => {
       expect(json.score).toBeDefined()
       expect(json.directTrusters).toBeDefined()
       expect(json.transitiveTrusters).toBeDefined()
+    })
+
+    it('GET /v1/trust/:did/score should return 404 when identity is absent from discovery', async () => {
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('not found', { status: 404 }))))
+
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb, 'http://discovery.test')
+      const res = await app.request('/v1/trust/did:fides:missing/score')
+
+      expect(res.status).toBe(404)
+      expect((await res.json()).error).toContain('Identity not found: did:fides:missing')
+    })
+
+    it('GET /v1/trust/:did/score should return 503 when discovery is unavailable', async () => {
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('unavailable', { status: 503 }))))
+
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb, 'http://discovery.test')
+      const res = await app.request('/v1/trust/did:fides:missing/score')
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('Discovery service unavailable')
+    })
+
+    it('GET /v1/trust/:did/capability/:capabilityId should return 404 when identity is absent from discovery', async () => {
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('not found', { status: 404 }))))
+
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb, 'http://discovery.test')
+      const res = await app.request('/v1/trust/did:fides:missing/capability/payments.execute')
+
+      expect(res.status).toBe(404)
+      expect((await res.json()).error).toContain('Identity not found: did:fides:missing')
     })
 
     it('GET /v1/trust/:from/:to should return trust path', async () => {

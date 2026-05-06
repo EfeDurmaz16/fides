@@ -59,9 +59,11 @@ jobs:
         service:
           - discovery
           - trust-graph
+          - policy-engine
           - registry
           - relay
           - agentd
+          - platform-api
 
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +109,7 @@ jobs:
         run: docker compose build
 
       - name: Start compose services
-        run: docker compose up -d postgres discovery trust-graph registry relay agentd
+        run: docker compose up -d postgres discovery trust-graph policy-engine registry relay agentd platform-api
 
       - name: Run docker smoke
         run: pnpm smoke:docker

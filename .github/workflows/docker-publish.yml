@@ -12,9 +12,11 @@ jobs:
         service:
           - discovery
           - trust-graph
+          - policy-engine
           - registry
           - relay
           - agentd
+          - platform-api
     permissions:
       contents: read
       packages: write

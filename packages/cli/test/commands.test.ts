@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import * as sdk from '@fides/sdk';
 
 const ORIGINAL_FIDES_API_KEY = process.env.FIDES_API_KEY;
+const ORIGINAL_SERVICE_API_KEY = process.env.SERVICE_API_KEY;
 
 // Mock the SDK
 vi.mock('@fides/sdk', () => ({
@@ -79,6 +80,7 @@ describe('CLI Commands', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.FIDES_API_KEY;
+    delete process.env.SERVICE_API_KEY;
     process.exitCode = undefined;
     // Suppress console output in tests
     vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -90,6 +92,11 @@ describe('CLI Commands', () => {
       process.env.FIDES_API_KEY = ORIGINAL_FIDES_API_KEY;
     } else {
       delete process.env.FIDES_API_KEY;
+    }
+    if (ORIGINAL_SERVICE_API_KEY) {
+      process.env.SERVICE_API_KEY = ORIGINAL_SERVICE_API_KEY;
+    } else {
+      delete process.env.SERVICE_API_KEY;
     }
     process.exitCode = undefined;
     vi.restoreAllMocks();
@@ -831,6 +838,104 @@ describe('CLI Commands', () => {
         requiresApproval: true,
         approvalGranted: true,
       });
+    });
+
+    it('relay send should submit messages with API key auth', async () => {
+      process.env.FIDES_API_KEY = 'relay-key';
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        accepted: true,
+        relayId: 'relay-1',
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRelayCommand } = await import('../src/commands/relay.js');
+      const cmd = createRelayCommand();
+
+      await cmd.parseAsync([
+        'send',
+        '--relay-url',
+        'http://relay.test/',
+        '--to',
+        'did:fides:receiver',
+        '--from',
+        'did:fides:sender',
+        '--payload-json',
+        '{"hello":"world"}',
+        '--ttl-ms',
+        '60000',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://relay.test/v1/relay',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'X-API-Key': 'relay-key',
+          }),
+        })
+      );
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body as string)).toEqual({
+        to: 'did:fides:receiver',
+        from: 'did:fides:sender',
+        payload: { hello: 'world' },
+        ttlMs: 60000,
+      });
+    });
+
+    it('relay poll should read queued messages for a DID', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        count: 1,
+        messages: [{ id: 'relay-1', payload: { hello: 'world' } }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRelayCommand } = await import('../src/commands/relay.js');
+      const cmd = createRelayCommand();
+
+      await cmd.parseAsync([
+        'poll',
+        'did:fides:receiver',
+        '--relay-url',
+        'http://relay.test',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://relay.test/v1/relay/did%3Afides%3Areceiver/messages',
+        expect.objectContaining({ method: 'GET' })
+      );
+    });
+
+    it('relay delete should remove messages by relay ID', async () => {
+      process.env.SERVICE_API_KEY = 'relay-service-key';
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        deleted: true,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRelayCommand } = await import('../src/commands/relay.js');
+      const cmd = createRelayCommand();
+
+      await cmd.parseAsync([
+        'delete',
+        'relay-1',
+        '--relay-url',
+        'http://relay.test',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://relay.test/v1/relay/relay-1',
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({
+            'X-API-Key': 'relay-service-key',
+          }),
+        })
+      );
     });
   });
 });

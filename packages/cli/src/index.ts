@@ -18,6 +18,7 @@ import { createRevokeCommand } from './commands/revoke.js';
 import { createIncidentCommand } from './commands/incident.js';
 import { createPropagationCommand } from './commands/propagation.js';
 import { createAuthorizeCommand } from './commands/authorize.js';
+import { createRelayCommand } from './commands/relay.js';
 
 const program = new Command();
 
@@ -44,5 +45,6 @@ program.addCommand(createRevokeCommand());
 program.addCommand(createIncidentCommand());
 program.addCommand(createPropagationCommand());
 program.addCommand(createAuthorizeCommand());
+program.addCommand(createRelayCommand());
 
 program.parse();

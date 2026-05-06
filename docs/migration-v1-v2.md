@@ -306,7 +306,7 @@ CREATE TABLE incidents (
 
 ### Registry Service
 
-No database — uses file-based persistence at `~/.fides/registry/registry.json`.
+Uses PostgreSQL for durable hosted registry state in production. Local development can still use file-based persistence at `~/.fides/registry/registry.json`.
 
 ### Relay Service
 
@@ -321,7 +321,9 @@ No database — in-memory only.
 | `fides identity create` | `fides identity register` | New `--type` flag |
 | `fides trust create` | `fides trust edge create` | New `--capability` flag |
 | `fides trust score` | `fides trust score` | Output format changed |
-| *(none)* | `fides card register` | New: register AgentCard |
+| *(none)* | `fides card publish <file>` | New: publish AgentCard JSON to the hosted registry |
+| *(none)* | `fides card get <did>` | New: read a public registry AgentCard |
+| *(none)* | `fides card search [query]` | New: search public registry AgentCards |
 | *(none)* | `fides relay send` | New: send relay message |
 | *(none)* | `fides relay poll` | New: poll relay messages |
 | *(none)* | `fides evidence submit` | New: submit evidence |

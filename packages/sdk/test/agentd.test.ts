@@ -4,6 +4,7 @@ import { AgentdClient, AgentdError } from '../src/agentd/client.js'
 describe('AgentdClient', () => {
   const mockFetch = vi.fn()
   let client: AgentdClient
+  const privateKeyHex = '01'.repeat(32)
   const token = {
     id: 'tok-1',
     delegator: 'did:fides:principal',
@@ -103,6 +104,36 @@ describe('AgentdClient', () => {
     )
   })
 
+  it('creates signed sessions from authority inputs', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => JSON.stringify({ authorized: true, session: { id: 'sess-1', token, sessionKey: 'redacted', expiresAt: token.expiresAt } }),
+    })
+
+    await expect(client.createSignedSession({
+      delegator: 'did:fides:principal',
+      delegatee: 'did:fides:agent',
+      capabilities: ['payments.execute'],
+      privateKey: privateKeyHex,
+      capabilityId: 'payments.execute',
+      tokenExpiresAt: '2026-01-01T01:00:00.000Z',
+    })).resolves.toMatchObject({ authorized: true })
+
+    const [, init] = mockFetch.mock.calls[0]
+    const body = JSON.parse(init.body as string)
+    expect(body.capabilityId).toBe('payments.execute')
+    expect(body.audience).toBe('agentd')
+    expect(body.delegatorPublicKey).toMatch(/^[0-9a-f]{64}$/)
+    expect(body.token).toMatchObject({
+      delegator: 'did:fides:principal',
+      delegatee: 'did:fides:agent',
+      capabilities: ['payments.execute'],
+      expiresAt: '2026-01-01T01:00:00.000Z',
+      audience: ['agentd'],
+    })
+    expect(body.token.signature).toMatch(/^[0-9a-f]{128}$/)
+  })
+
   it('records and reads authority revocations', async () => {
     mockFetch
       .mockResolvedValueOnce({
@@ -135,6 +166,31 @@ describe('AgentdClient', () => {
     )
   })
 
+  it('records signed authority revocations from revocation inputs', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => JSON.stringify({ revoked: true, record: revocation }),
+    })
+
+    await expect(client.recordSignedRevocation({
+      did: 'did:fides:agent',
+      reason: 'disabled',
+      revokedBy: 'did:fides:principal',
+      privateKey: privateKeyHex,
+    })).resolves.toMatchObject({ revoked: true })
+
+    const [, init] = mockFetch.mock.calls[0]
+    const body = JSON.parse(init.body as string)
+    expect(body.revokerPublicKey).toMatch(/^[0-9a-f]{64}$/)
+    expect(body.record).toMatchObject({
+      did: 'did:fides:agent',
+      reason: 'disabled',
+      revokedBy: 'did:fides:principal',
+      propagatedTo: [],
+    })
+    expect(body.record.signature).toMatch(/^[0-9a-f]{128}$/)
+  })
+
   it('records and lists authority incidents', async () => {
     mockFetch
       .mockResolvedValueOnce({
@@ -165,6 +221,40 @@ describe('AgentdClient', () => {
       'http://localhost:7345/v1/incidents/did%3Afides%3Aagent',
       expect.objectContaining({ method: 'GET' })
     )
+  })
+
+  it('records signed authority incidents from incident inputs', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => JSON.stringify({ recorded: true, record: incident, impact: { incidentCount: 1 } }),
+    })
+
+    await expect(client.recordSignedIncident({
+      actor: 'did:fides:agent',
+      reportedBy: 'did:fides:principal',
+      type: 'policy_violation',
+      severity: 'high',
+      description: 'policy bypass',
+      evidenceRefs: ['ev-1'],
+      capabilitiesRevoked: ['payments.execute'],
+      privateKey: privateKeyHex,
+    })).resolves.toMatchObject({ recorded: true })
+
+    const [, init] = mockFetch.mock.calls[0]
+    const body = JSON.parse(init.body as string)
+    expect(body.reporterPublicKey).toMatch(/^[0-9a-f]{64}$/)
+    expect(body.record).toMatchObject({
+      actor: 'did:fides:agent',
+      reportedBy: 'did:fides:principal',
+      type: 'policy_violation',
+      severity: 'high',
+      description: 'policy bypass',
+      evidenceRefs: ['ev-1'],
+      impact: expect.objectContaining({
+        capabilitiesRevoked: ['payments.execute'],
+      }),
+    })
+    expect(body.record.signature).toMatch(/^[0-9a-f]{128}$/)
   })
 
   it('posts authorization checks with API key auth', async () => {

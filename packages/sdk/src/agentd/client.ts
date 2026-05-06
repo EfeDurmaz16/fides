@@ -1,3 +1,16 @@
+import {
+  createDelegationToken,
+  createIncidentRecord,
+  createRevocationRecord,
+  deriveEd25519PublicKeyHex,
+  signDelegationToken,
+  signIncidentRecord,
+  signRevocationRecord,
+  type DelegationToken as CoreDelegationToken,
+  type IncidentRecord as CoreIncidentRecord,
+  type RevocationRecord as CoreRevocationRecord,
+} from '@fides/core'
+
 export interface AgentdClientOptions {
   baseUrl: string
   apiKey?: string
@@ -19,18 +32,7 @@ export interface AuthorizationRequest {
   approvalGranted?: boolean
 }
 
-export interface DelegationToken {
-  id: string
-  delegator: string
-  delegatee: string
-  capabilities: string[]
-  constraints: Record<string, unknown>
-  issuedAt: string
-  expiresAt: string
-  nonce: string
-  signature: string
-  audience?: string[]
-}
+export type DelegationToken = CoreDelegationToken
 
 export interface SessionGrant {
   id: string
@@ -68,15 +70,7 @@ export interface SessionRevokeResponse {
   session: SessionGrant
 }
 
-export interface RevocationRecord {
-  id: string
-  did: string
-  reason: string
-  revokedAt: string
-  revokedBy: string
-  signature: string
-  propagatedTo: string[]
-}
+export type RevocationRecord = CoreRevocationRecord
 
 export interface RevocationSubmitRequest {
   record: RevocationRecord
@@ -95,22 +89,41 @@ export interface RevocationStatusResponse {
   record?: RevocationRecord
 }
 
-export interface IncidentRecord {
-  id: string
-  type: 'compromise' | 'misbehavior' | 'policy_violation' | 'runtime_failure' | 'sybil'
-  severity: 'low' | 'medium' | 'high' | 'critical'
+export type IncidentRecord = CoreIncidentRecord
+
+export interface CreateSignedSessionOptions {
+  delegator: string
+  delegatee: string
+  capabilities: string[]
+  privateKey: Uint8Array | string
+  constraints?: DelegationToken['constraints']
+  audience?: string[]
+  capabilityId?: string
+  boundTo?: string
+  tokenExpiresAt?: string
+  tokenTtlMs?: number
+  sessionTtlMs?: number
+  sessionAudience?: string
+}
+
+export interface RecordSignedRevocationOptions {
+  did: string
+  reason: string
+  revokedBy: string
+  privateKey: Uint8Array | string
+}
+
+export interface RecordSignedIncidentOptions {
   actor: string
   reportedBy: string
+  type: IncidentRecord['type']
+  severity: IncidentRecord['severity']
   description: string
-  evidenceRefs: string[]
-  reportedAt: string
-  impact: {
-    trustPenalty: number
-    reputationPenalty: number
-    capabilitiesRevoked: string[]
-  }
-  signature: string
-  resolvedAt?: string
+  privateKey: Uint8Array | string
+  evidenceRefs?: string[]
+  trustPenalty?: number
+  reputationPenalty?: number
+  capabilitiesRevoked?: string[]
 }
 
 export interface IncidentSubmitRequest {
@@ -208,6 +221,29 @@ export class AgentdClient {
     return this.post<SessionCreateResponse>('/v1/sessions', request)
   }
 
+  async createSignedSession(options: CreateSignedSessionOptions): Promise<SessionCreateResponse> {
+    const privateKey = this.privateKeyBytes(options.privateKey)
+    const audience = options.audience ?? ['agentd']
+    const token = createDelegationToken({
+      delegator: options.delegator,
+      delegatee: options.delegatee,
+      capabilities: options.capabilities,
+      constraints: options.constraints ?? {},
+      expiresAt: options.tokenExpiresAt ?? this.expiresAt(options.tokenTtlMs ?? 3600_000),
+      audience,
+    })
+    const signedToken = await signDelegationToken(token, privateKey)
+
+    return this.createSession({
+      token: signedToken,
+      capabilityId: options.capabilityId,
+      audience: options.sessionAudience ?? audience[0] ?? 'agentd',
+      boundTo: options.boundTo,
+      ttlMs: options.sessionTtlMs,
+      delegatorPublicKey: await this.publicKeyHex(options.privateKey),
+    })
+  }
+
   async getSession(id: string): Promise<SessionLookupResponse> {
     return this.get<SessionLookupResponse>(`/v1/sessions/${encodeURIComponent(id)}`)
   }
@@ -220,12 +256,48 @@ export class AgentdClient {
     return this.post<RevocationSubmitResponse>('/v1/revocations', request)
   }
 
+  async recordSignedRevocation(options: RecordSignedRevocationOptions): Promise<RevocationSubmitResponse> {
+    const privateKey = this.privateKeyBytes(options.privateKey)
+    const record = createRevocationRecord({
+      did: options.did,
+      reason: options.reason,
+      revokedBy: options.revokedBy,
+    })
+    const signedRecord = await signRevocationRecord(record, privateKey)
+
+    return this.recordRevocation({
+      record: signedRecord,
+      revokerPublicKey: await this.publicKeyHex(options.privateKey),
+    })
+  }
+
   async getRevocation(did: string): Promise<RevocationStatusResponse> {
     return this.get<RevocationStatusResponse>(`/v1/revocations/${encodeURIComponent(did)}`)
   }
 
   async recordIncident(request: IncidentSubmitRequest): Promise<IncidentSubmitResponse> {
     return this.post<IncidentSubmitResponse>('/v1/incidents', request)
+  }
+
+  async recordSignedIncident(options: RecordSignedIncidentOptions): Promise<IncidentSubmitResponse> {
+    const privateKey = this.privateKeyBytes(options.privateKey)
+    const record = createIncidentRecord({
+      actor: options.actor,
+      reportedBy: options.reportedBy,
+      type: options.type,
+      severity: options.severity,
+      description: options.description,
+      evidenceRefs: options.evidenceRefs,
+      trustPenalty: options.trustPenalty,
+      reputationPenalty: options.reputationPenalty,
+      capabilitiesRevoked: options.capabilitiesRevoked,
+    })
+    const signedRecord = await signIncidentRecord(record, privateKey)
+
+    return this.recordIncident({
+      record: signedRecord,
+      reporterPublicKey: await this.publicKeyHex(options.privateKey),
+    })
   }
 
   async listIncidents(did: string): Promise<IncidentListResponse> {
@@ -256,6 +328,23 @@ export class AgentdClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
+  }
+
+  private privateKeyBytes(key: Uint8Array | string): Uint8Array {
+    const bytes = typeof key === 'string' ? Uint8Array.from(Buffer.from(key, 'hex')) : key
+    if (bytes.length !== 32) {
+      throw new AgentdError('Ed25519 private key must be 32 bytes')
+    }
+    return bytes
+  }
+
+  private async publicKeyHex(key: Uint8Array | string): Promise<string> {
+    const hex = typeof key === 'string' ? key : Buffer.from(key).toString('hex')
+    return deriveEd25519PublicKeyHex(hex)
+  }
+
+  private expiresAt(ttlMs: number): string {
+    return new Date(Date.now() + ttlMs).toISOString()
   }
 
   private async request<T>(url: string, init: RequestInit): Promise<T> {

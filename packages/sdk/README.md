@@ -56,21 +56,28 @@ const decision = await agentd.authorize({
   audience: 'agentd',
 })
 
-const session = await agentd.createSession({
-  token: signedDelegationToken,
+const session = await agentd.createSignedSession({
+  delegator: 'did:fides:principal',
+  delegatee: 'did:fides:agent',
+  capabilities: ['payments.execute'],
   capabilityId: 'payments.execute',
-  audience: 'agentd',
-  delegatorPublicKey: process.env.DELEGATOR_PUBLIC_KEY_HEX,
+  privateKey: process.env.DELEGATOR_PRIVATE_KEY_HEX!,
 })
 
-await agentd.recordRevocation({
-  record: signedRevocationRecord,
-  revokerPublicKey: process.env.REVOKER_PUBLIC_KEY_HEX,
+await agentd.recordSignedRevocation({
+  did: 'did:fides:agent',
+  reason: 'operator disabled',
+  revokedBy: 'did:fides:principal',
+  privateKey: process.env.REVOKER_PRIVATE_KEY_HEX!,
 })
 
-await agentd.recordIncident({
-  record: signedIncidentRecord,
-  reporterPublicKey: process.env.REPORTER_PUBLIC_KEY_HEX,
+await agentd.recordSignedIncident({
+  actor: 'did:fides:agent',
+  reportedBy: 'did:fides:principal',
+  type: 'policy_violation',
+  severity: 'high',
+  description: 'attempted payment outside approved policy',
+  privateKey: process.env.REPORTER_PRIVATE_KEY_HEX!,
 })
 
 const pending = await agentd.listPendingPropagations(25)
@@ -89,8 +96,11 @@ const retry = await agentd.retryPropagations(25)
 | `verifyAttestation(attestation, publicKey)` | Verify attestation signature |
 | `AgentdClient.authorize(request)` | Check local agentd authorization decisions |
 | `AgentdClient.createSession(request)` | Create delegated agentd sessions |
+| `AgentdClient.createSignedSession(options)` | Create and sign a delegation token before opening a session |
 | `AgentdClient.recordRevocation(request)` | Submit signed authority revocations |
+| `AgentdClient.recordSignedRevocation(options)` | Create and sign an authority revocation before submission |
 | `AgentdClient.recordIncident(request)` | Submit signed authority incidents |
+| `AgentdClient.recordSignedIncident(options)` | Create and sign an authority incident before submission |
 | `AgentdClient.listPendingPropagations(limit)` | Inspect due authority propagation retries |
 | `AgentdClient.retryPropagations(limit)` | Replay due authority propagation records |
 

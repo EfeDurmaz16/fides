@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const ORIGINAL_SERVICE_API_KEY = process.env.SERVICE_API_KEY
+const ORIGINAL_AGENTD_API_KEYS = process.env.AGENTD_API_KEYS
 const ORIGINAL_NODE_ENV = process.env.NODE_ENV
 const ORIGINAL_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION = process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION
 
 beforeEach(() => {
   delete process.env.SERVICE_API_KEY
+  delete process.env.AGENTD_API_KEYS
   delete process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION
   process.env.NODE_ENV = 'test'
   vi.restoreAllMocks()
@@ -16,6 +18,11 @@ afterEach(() => {
     process.env.SERVICE_API_KEY = ORIGINAL_SERVICE_API_KEY
   } else {
     delete process.env.SERVICE_API_KEY
+  }
+  if (ORIGINAL_AGENTD_API_KEYS) {
+    process.env.AGENTD_API_KEYS = ORIGINAL_AGENTD_API_KEYS
+  } else {
+    delete process.env.AGENTD_API_KEYS
   }
   if (ORIGINAL_NODE_ENV) {
     process.env.NODE_ENV = ORIGINAL_NODE_ENV
@@ -132,6 +139,50 @@ describe('Agentd Service Routes', () => {
       expect(res.status).toBe(503)
       const data = await res.json()
       expect(data.error).toContain('SERVICE_API_KEY is required in production')
+    })
+
+    it('enforces scoped agentd API keys when configured', async () => {
+      process.env.AGENTD_API_KEYS = JSON.stringify([
+        { key: 'evidence-key', scopes: ['agentd:evidence:write'] },
+        { key: 'kill-key', scopes: ['agentd:killswitch:write'] },
+      ])
+
+      const accepted = await app.request('/v1/evidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'evidence-key' },
+        body: JSON.stringify({
+          actor: TEST_DID,
+          action: 'scoped-write',
+          payload: {},
+        }),
+      })
+      expect(accepted.status).toBe(201)
+
+      const forbidden = await app.request('/v1/killswitch/engage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'evidence-key' },
+        body: JSON.stringify({ global: true }),
+      })
+      expect(forbidden.status).toBe(403)
+      expect((await forbidden.json()).error).toContain('agentd:killswitch:write')
+    })
+
+    it('fails closed when scoped agentd API keys are malformed', async () => {
+      delete process.env.SERVICE_API_KEY
+      process.env.AGENTD_API_KEYS = '{bad-json'
+
+      const res = await app.request('/v1/evidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'evidence-key' },
+        body: JSON.stringify({
+          actor: TEST_DID,
+          action: 'test',
+          payload: {},
+        }),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('AGENTD_API_KEYS must be a JSON array')
     })
   })
 

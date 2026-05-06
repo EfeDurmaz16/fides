@@ -10,7 +10,7 @@ import {
   type PasskeyCredentialBinding,
   type TrustAnchorStatus,
 } from '@fides/core'
-import { evaluateApiKeyAuth, MetricsCollector, metricsMiddleware, type ScopedApiKey } from '@fides/shared'
+import { evaluateApiKeyAuth, MetricsCollector, metricsMiddleware, parseScopedApiKeys } from '@fides/shared'
 import { createPlatformStore, type PlatformTrustAnchorRecord } from './storage.js'
 
 const app = new Hono()
@@ -245,7 +245,7 @@ function getCorsOrigin(): string {
 
 function apiKeyAuth(productionRequirement: string, requiredScope: string): MiddlewareHandler {
   return async (c, next) => {
-    const scopedKeys = parsePlatformApiKeys(process.env.PLATFORM_API_KEYS)
+    const scopedKeys = parseScopedApiKeys(process.env.PLATFORM_API_KEYS, 'PLATFORM_API_KEYS')
     if (!scopedKeys.ok) {
       return c.json({ error: scopedKeys.error }, 503)
     }
@@ -264,51 +264,6 @@ function apiKeyAuth(productionRequirement: string, requiredScope: string): Middl
 
     return next()
   }
-}
-
-function parsePlatformApiKeys(raw: string | undefined): { ok: true; value?: ScopedApiKey[] } | { ok: false; error: string } {
-  if (raw === undefined || raw.trim().length === 0) {
-    return { ok: true, value: undefined }
-  }
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return { ok: false, error: 'PLATFORM_API_KEYS must be a JSON array of scoped API keys' }
-  }
-
-  if (!Array.isArray(parsed)) {
-    return { ok: false, error: 'PLATFORM_API_KEYS must be a JSON array of scoped API keys' }
-  }
-
-  const keys: ScopedApiKey[] = []
-  for (const entry of parsed) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-      return { ok: false, error: 'PLATFORM_API_KEYS entries must include a non-empty key and scopes array' }
-    }
-    const candidate = entry as { key?: unknown; scopes?: unknown }
-    if (typeof candidate.key !== 'string' || candidate.key.trim().length === 0) {
-      return { ok: false, error: 'PLATFORM_API_KEYS entries must include a non-empty key and scopes array' }
-    }
-    if (!Array.isArray(candidate.scopes) || candidate.scopes.length === 0) {
-      return { ok: false, error: 'PLATFORM_API_KEYS entries must include a non-empty key and scopes array' }
-    }
-    if (candidate.scopes.some(scope => typeof scope !== 'string' || scope.trim().length === 0)) {
-      return { ok: false, error: 'PLATFORM_API_KEYS scopes must be non-empty strings' }
-    }
-
-    keys.push({
-      key: candidate.key.trim(),
-      scopes: [...new Set(candidate.scopes.map(scope => scope.trim()))].sort(),
-    })
-  }
-
-  if (keys.length === 0) {
-    return { ok: false, error: 'PLATFORM_API_KEYS must contain at least one scoped API key' }
-  }
-
-  return { ok: true, value: keys }
 }
 
 function parsePasskeyBinding(body: unknown): { ok: true; value: PasskeyCredentialBinding } | { ok: false; error: string } {

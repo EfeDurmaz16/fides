@@ -36,7 +36,7 @@ import type {
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
-import { apiKeyAuth } from './middleware/auth.js'
+import { agentdScopeForRequest, apiKeyAuth } from './middleware/auth.js'
 
 const app = new Hono()
 const collector = new MetricsCollector()
@@ -75,7 +75,7 @@ app.use('*', cors({
 // Auth on mutating endpoints (skip GET /health)
 app.use('/v1/*', async (c, next) => {
   if (c.req.method === 'GET') return next()
-  const auth = apiKeyAuth()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
 })
 app.post('*', rateLimitMiddleware({ maxRequests: 100, windowMs: 60_000 }))

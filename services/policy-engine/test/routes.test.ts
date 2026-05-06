@@ -96,4 +96,70 @@ describe('policy-engine service', () => {
     expect(data.error).toBe('invalid policy bundle')
     expect(data.details).toContain('policy.rules must be an array')
   })
+
+  it('requires an API key for policy evaluation in production', async () => {
+    const previousNodeEnv = process.env.NODE_ENV
+    const previousApiKey = process.env.SERVICE_API_KEY
+    process.env.NODE_ENV = 'production'
+    delete process.env.SERVICE_API_KEY
+
+    try {
+      const res = await app.request('/v1/policies/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ policy, context: {} }),
+      })
+
+      expect(res.status).toBe(503)
+      const data = await res.json()
+      expect(data.error).toContain('SERVICE_API_KEY is required')
+    } finally {
+      restoreEnv('NODE_ENV', previousNodeEnv)
+      restoreEnv('SERVICE_API_KEY', previousApiKey)
+    }
+  })
+
+  it('rejects invalid API keys when policy auth is configured', async () => {
+    const previousApiKey = process.env.SERVICE_API_KEY
+    process.env.SERVICE_API_KEY = 'expected-key'
+
+    try {
+      const res = await app.request('/v1/policies/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'wrong-key' },
+        body: JSON.stringify({ policy, context: {} }),
+      })
+
+      expect(res.status).toBe(401)
+    } finally {
+      restoreEnv('SERVICE_API_KEY', previousApiKey)
+    }
+  })
+
+  it('accepts valid API keys when policy auth is configured', async () => {
+    const previousApiKey = process.env.SERVICE_API_KEY
+    process.env.SERVICE_API_KEY = 'expected-key'
+
+    try {
+      const res = await app.request('/v1/policies/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'expected-key' },
+        body: JSON.stringify({ policy, context: { amount: 20 } }),
+      })
+
+      expect(res.status).toBe(200)
+      const data = await res.json()
+      expect(data.decision).toBe('allow')
+    } finally {
+      restoreEnv('SERVICE_API_KEY', previousApiKey)
+    }
+  })
 })
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name]
+  } else {
+    process.env[name] = value
+  }
+}

@@ -2,6 +2,8 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
+import type { MiddlewareHandler } from 'hono'
+import { timingSafeEqual } from 'node:crypto'
 
 const app = new Hono()
 const startTime = Date.now()
@@ -10,8 +12,8 @@ const SERVICE_PORTS = {
   discovery: 3100,
   trustGraph: 3200,
   policyEngine: 3300,
-  registry: 3400,
-  relay: 3500,
+  registry: 7346,
+  relay: 7347,
   agentd: 7345,
 } as const
 
@@ -31,7 +33,7 @@ app.get('/v1/version', (c) => c.json({
   protocol: 'fides-v2',
 }))
 
-app.get('/v1/topology', (c) => c.json({
+app.get('/v1/topology', apiKeyAuth(), (c) => c.json({
   service: 'platform-api',
   components: {
     discovery: serviceUrl('DISCOVERY_URL', SERVICE_PORTS.discovery),
@@ -60,4 +62,30 @@ function getCorsOrigin(): string {
     return process.env.CORS_ORIGIN || 'https://localhost'
   }
   return process.env.CORS_ORIGIN || '*'
+}
+
+function apiKeyAuth(): MiddlewareHandler {
+  return async (c, next) => {
+    const apiKey = process.env.SERVICE_API_KEY
+    if (!apiKey) {
+      if (process.env.NODE_ENV === 'production') {
+        return c.json({ error: 'SERVICE_API_KEY is required in production for topology metadata' }, 503)
+      }
+      return next()
+    }
+
+    const providedKey = c.req.header('X-API-Key')
+    if (!providedKey || !timingSafeStringEqual(providedKey, apiKey)) {
+      return c.json({ error: 'Unauthorized - invalid or missing API key' }, 401)
+    }
+
+    return next()
+  }
+}
+
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const aBuffer = Buffer.from(a)
+  const bBuffer = Buffer.from(b)
+  if (aBuffer.length !== bBuffer.length) return false
+  return timingSafeEqual(aBuffer, bBuffer)
 }

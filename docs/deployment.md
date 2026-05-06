@@ -77,7 +77,7 @@ cp .env.example .env
 
 | Variable          | Default | Required | Description                                   |
 | ----------------- | ------- | -------- | --------------------------------------------- |
-| `SERVICE_API_KEY` | _(empty)_ | production | Shared API key for mutating endpoints. In production, mutating endpoints return `503` when this is unset. Outside production, leaving it unset disables write auth for local development. |
+| `SERVICE_API_KEY` | _(empty)_ | production | Shared API key for protected service routes. In production, protected routes return `503` when this is unset. Outside production, leaving it unset disables local auth. |
 
 ### Logging
 
@@ -373,7 +373,7 @@ fides.example.com {
 ### Production Checklist
 
 1. Set `NODE_ENV=production` on all services
-2. Set `SERVICE_API_KEY` to a strong random value (generated via `openssl rand -hex 32`); mutating endpoints fail closed with `503` in production when it is missing
+2. Set `SERVICE_API_KEY` to a strong random value (generated via `openssl rand -hex 32`); protected service routes fail closed with `503` in production when it is missing
 3. Set `CORS_ORIGIN` to your frontend origin (not `*`)
 4. Enable rate limiting via `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS`
 5. Set `LOG_LEVEL=warn` to reduce noise, use `LOG_FORMAT=json` for log aggregation
@@ -538,10 +538,10 @@ For development without PostgreSQL, you can run just registry, relay, and agentd
 
 ```bash
 node services/registry/dist/index.js &
-node services/policy-engine/dist/index.js &
+SERVICE_API_KEY=dev-key node services/policy-engine/dist/index.js &
 node services/relay/dist/index.js &
 AGENTD_PORT=7345 DISCOVERY_URL=http://localhost:3100 TRUST_GRAPH_URL=http://localhost:3200 REGISTRY_URL=http://localhost:7346 node services/agentd/dist/index.js &
-PLATFORM_API_PORT=3600 AGENTD_URL=http://localhost:7345 node services/platform-api/dist/index.js &
+SERVICE_API_KEY=dev-key PLATFORM_API_PORT=3600 AGENTD_URL=http://localhost:7345 node services/platform-api/dist/index.js &
 ```
 
 Note: agentd health will show `degraded` when discovery or trust-graph are unreachable — this is expected in minimal mode.

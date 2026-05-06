@@ -2,7 +2,9 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
+import type { MiddlewareHandler } from 'hono'
 import { evaluatePolicy, type PolicyBundle, type PolicyContext } from '@fides/policy'
+import { timingSafeEqual } from 'node:crypto'
 
 const app = new Hono()
 const startTime = Date.now()
@@ -17,7 +19,7 @@ app.get('/health', (c) => c.json({
   timestamp: new Date().toISOString(),
 }))
 
-app.post('/v1/policies/evaluate', async (c) => {
+app.post('/v1/policies/evaluate', apiKeyAuth(), async (c) => {
   const body = await c.req.json().catch(() => null)
   if (!body || typeof body !== 'object') {
     return c.json({ error: 'JSON body is required' }, 400)
@@ -37,7 +39,7 @@ app.post('/v1/policies/evaluate', async (c) => {
   return c.json(evaluatePolicy(body.policy as PolicyBundle, context))
 })
 
-app.post('/v1/evaluate', async (c) => {
+app.post('/v1/evaluate', apiKeyAuth(), async (c) => {
   const body = await c.req.json().catch(() => null)
   if (!body || typeof body !== 'object') {
     return c.json({ error: 'JSON body is required' }, 400)
@@ -106,4 +108,30 @@ function getCorsOrigin(): string {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null
+}
+
+function apiKeyAuth(): MiddlewareHandler {
+  return async (c, next) => {
+    const apiKey = process.env.SERVICE_API_KEY
+    if (!apiKey) {
+      if (process.env.NODE_ENV === 'production') {
+        return c.json({ error: 'SERVICE_API_KEY is required in production for policy evaluation' }, 503)
+      }
+      return next()
+    }
+
+    const providedKey = c.req.header('X-API-Key')
+    if (!providedKey || !timingSafeStringEqual(providedKey, apiKey)) {
+      return c.json({ error: 'Unauthorized - invalid or missing API key' }, 401)
+    }
+
+    return next()
+  }
+}
+
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const aBuffer = Buffer.from(a)
+  const bBuffer = Buffer.from(b)
+  if (aBuffer.length !== bBuffer.length) return false
+  return timingSafeEqual(aBuffer, bBuffer)
 }

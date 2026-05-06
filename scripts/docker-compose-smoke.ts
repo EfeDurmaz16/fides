@@ -37,7 +37,7 @@ async function main() {
 }
 
 async function assertPlatformTopology() {
-  const response = await fetch(`${services.platformApi}/v1/topology`)
+  const response = await get(`${services.platformApi}/v1/topology`)
   await expectStatus(response, 200, 'read platform topology')
   const body = await response.json() as { components?: Record<string, string> }
   if (body.components?.agentd !== 'http://agentd:7345') {
@@ -184,6 +184,15 @@ async function postJson(url: string, body: unknown): Promise<Response> {
     headers,
     body: JSON.stringify(body),
   })
+}
+
+async function get(url: string): Promise<Response> {
+  const headers = new Headers()
+  if (serviceApiKey) {
+    headers.set('X-API-Key', serviceApiKey)
+  }
+
+  return fetch(url, { headers })
 }
 
 async function expectStatus(response: Response, expected: number, label: string): Promise<void> {

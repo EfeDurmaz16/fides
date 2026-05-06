@@ -94,6 +94,7 @@ services:
       POLICY_ENGINE_PORT: "3300"
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-}
 
   agentd:
     build:
@@ -141,6 +142,7 @@ services:
       AGENTD_URL: http://agentd:7345
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-}
     depends_on:
       discovery:
         condition: service_started

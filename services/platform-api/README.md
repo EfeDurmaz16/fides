@@ -53,3 +53,5 @@ Returns configured service URLs. Defaults are local development ports and can be
 - `REGISTRY_URL`
 - `RELAY_URL`
 - `AGENTD_URL`
+
+When `SERVICE_API_KEY` is set, callers must include `X-API-Key`. In `NODE_ENV=production`, this endpoint fails closed with `503` if `SERVICE_API_KEY` is unset.

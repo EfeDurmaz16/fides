@@ -32,6 +32,8 @@ pnpm --filter @fides/policy-engine lint
 
 The service listens on `POLICY_ENGINE_PORT`, then `PORT`, then `3300`.
 
+Policy evaluation routes are protected with `X-API-Key` when `SERVICE_API_KEY` is set. In `NODE_ENV=production`, evaluation routes fail closed with `503` if `SERVICE_API_KEY` is unset.
+
 ## API
 
 ### `GET /health`

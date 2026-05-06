@@ -533,6 +533,13 @@ paths:
                 type: string
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Required for mutating `/v1/*` endpoints when `SERVICE_API_KEY` is configured.
+
   parameters:
     DidParam:
       name: did

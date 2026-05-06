@@ -396,7 +396,7 @@ app.post('/v1/authorize', async (c) => {
     capabilityHighRisk: body.capabilityHighRisk ?? impact.allRevokedCapabilities.includes(body.capabilityId),
     requiresRuntimeAttestation: body.requiresRuntimeAttestation ?? false,
     requiresApproval: body.requiresApproval ?? false,
-    approvalGranted: body.approvalGranted ?? false,
+    approvalGranted: requestApprovalGranted(body),
   })
 
   const decision = await evaluateGuard({
@@ -742,6 +742,13 @@ function authoritySignatureVerificationRequired(): boolean {
     return process.env.NODE_ENV === 'production'
   }
   return parseBooleanEnv(configured)
+}
+
+function requestApprovalGranted(body: { approvalGranted?: unknown }): boolean {
+  if (process.env.NODE_ENV === 'production') {
+    return false
+  }
+  return body.approvalGranted === true
 }
 
 function parseBooleanEnv(value: string | undefined): boolean {

@@ -1177,6 +1177,7 @@ components:
           type: boolean
         approvalGranted:
           type: boolean
+          description: Ignored in production until an authoritative approval store is configured.
 
     AuthorizationResponse:
       type: object

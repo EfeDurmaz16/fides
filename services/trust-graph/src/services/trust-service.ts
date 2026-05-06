@@ -314,16 +314,11 @@ export class TrustService {
           // Reset circuit breaker on success
           this.circuitBreaker.failureCount = 0
         } else if (response.status >= 500) {
-          throw new TrustError(`Discovery service unavailable while resolving identity: ${did}`)
+          this.recordDiscoveryFailure(did)
         }
       } catch (error) {
         if (error instanceof TrustError) throw error
-        // Discovery service unavailable — increment circuit breaker
-        this.circuitBreaker.failureCount++
-        if (this.circuitBreaker.failureCount >= CIRCUIT_BREAKER_THRESHOLD) {
-          this.circuitBreaker.openUntil = Date.now() + CIRCUIT_BREAKER_RESET_MS
-        }
-        throw new TrustError(`Discovery service unavailable while resolving identity: ${did}`)
+        this.recordDiscoveryFailure(did)
       }
 
       if (!identity || !identity.publicKey) {
@@ -516,6 +511,14 @@ export class TrustService {
     }
 
     return new Uint8Array(publicKey)
+  }
+
+  private recordDiscoveryFailure(did: string): never {
+    this.circuitBreaker.failureCount++
+    if (this.circuitBreaker.failureCount >= CIRCUIT_BREAKER_THRESHOLD) {
+      this.circuitBreaker.openUntil = Date.now() + CIRCUIT_BREAKER_RESET_MS
+    }
+    throw new TrustError(`Discovery service unavailable while resolving identity: ${did}`)
   }
 }
 

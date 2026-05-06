@@ -52,6 +52,46 @@ describe.skipIf(!postgresUrl)('discovery migrations', () => {
     }
   }, 30_000)
 
+  it('creates and uses the configured discovery schema', async () => {
+    const schema = `discovery_configured_${crypto.randomUUID().replaceAll('-', '')}`
+    const schemaIdentifier = quoteIdentifier(schema)
+    const adminSql = postgres(postgresUrl, { max: 1 })
+    const scopedSql = postgres(postgresUrlWithSearchPath(postgresUrl, schema), { max: 1 })
+    const previousSchema = process.env.DISCOVERY_DB_SCHEMA
+
+    try {
+      process.env.DISCOVERY_DB_SCHEMA = schema
+      await runDiscoveryMigrations(scopedSql)
+
+      const schemaRows = await adminSql`
+        SELECT schema_name
+        FROM information_schema.schemata
+        WHERE schema_name = ${schema}
+      `
+      expect(schemaRows).toHaveLength(1)
+
+      const tableRows = await adminSql`
+        SELECT table_schema, table_name
+        FROM information_schema.tables
+        WHERE table_schema = ${schema}
+          AND table_name IN ('identities', 'agents', 'discovery_schema_migrations')
+      `
+      expect(tableRows).toHaveLength(3)
+
+      const currentSchema = await scopedSql`SELECT current_schema() AS schema`
+      expect(currentSchema[0]?.schema).toBe(schema)
+    } finally {
+      if (previousSchema === undefined) {
+        delete process.env.DISCOVERY_DB_SCHEMA
+      } else {
+        process.env.DISCOVERY_DB_SCHEMA = previousSchema
+      }
+      await scopedSql.end()
+      await adminSql.unsafe(`DROP SCHEMA IF EXISTS ${schemaIdentifier} CASCADE`)
+      await adminSql.end()
+    }
+  }, 30_000)
+
   it('fails closed when an applied discovery migration checksum drifts', async () => {
     const schema = `discovery_checksum_${crypto.randomUUID().replaceAll('-', '')}`
     const schemaIdentifier = quoteIdentifier(schema)

@@ -7,14 +7,31 @@ const DEV_FALLBACK = 'postgresql://fides:fides@localhost:5432/fides'
 
 function getConnectionString(): string {
   const url = process.env.DATABASE_URL
-  if (url) return url
+  const schemaName = process.env.DISCOVERY_DB_SCHEMA
+  if (url) return withSearchPath(url, schemaName)
 
   if (process.env.NODE_ENV === 'production') {
     throw new Error('DATABASE_URL must be set in production')
   }
 
   console.warn('DATABASE_URL not set — using development fallback')
-  return DEV_FALLBACK
+  return withSearchPath(DEV_FALLBACK, schemaName)
+}
+
+function withSearchPath(connectionString: string, schemaName?: string): string {
+  if (!schemaName) return connectionString
+
+  assertValidSchemaName(schemaName)
+
+  const url = new URL(connectionString)
+  url.searchParams.set('options', `-c search_path=${schemaName},public`)
+  return url.toString()
+}
+
+function assertValidSchemaName(schemaName: string): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(schemaName)) {
+    throw new Error('DISCOVERY_DB_SCHEMA must be a simple Postgres identifier')
+  }
 }
 
 const poolConfig = {
@@ -27,6 +44,10 @@ const connectionString = getConnectionString()
 
 export const sql = postgres(connectionString, poolConfig)
 export const db = drizzle(sql, { schema })
+
+export function createRawClient(): postgres.Sql {
+  return postgres(getConnectionString(), poolConfig)
+}
 
 export const DISCOVERY_MIGRATIONS = [
   {
@@ -108,6 +129,7 @@ export async function runDiscoveryMigrations(client: postgres.Sql): Promise<void
   await client`SELECT pg_advisory_lock(hashtext('discovery_migrations'))`
 
   try {
+    await ensureConfiguredSchema(client)
     await ensureDiscoveryMigrationLedger(client)
     for (const migration of DISCOVERY_MIGRATIONS) {
       const checksum = discoveryMigrationChecksum(migration)
@@ -141,6 +163,14 @@ export async function runDiscoveryMigrations(client: postgres.Sql): Promise<void
   } finally {
     await client`SELECT pg_advisory_unlock(hashtext('discovery_migrations'))`
   }
+}
+
+async function ensureConfiguredSchema(client: postgres.Sql): Promise<void> {
+  const schemaName = process.env.DISCOVERY_DB_SCHEMA
+  if (!schemaName) return
+
+  assertValidSchemaName(schemaName)
+  await client.unsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`)
 }
 
 async function ensureDiscoveryMigrationLedger(client: postgres.Sql): Promise<void> {

@@ -44,12 +44,14 @@ cp .env.example .env
 | Variable                    | Default | Required | Description |
 | --------------------------- | ------- | -------- | ----------- |
 | `DISCOVERY_DB_AUTO_MIGRATE` | `true`  | no | Runs idempotent discovery migrations on startup and records applied ids plus checksums in `discovery_schema_migrations`. Set `false` when migrations are managed externally. |
+| `DISCOVERY_DB_SCHEMA`       | _(empty)_ | no | Optional Postgres schema name for discovery tables when multiple services share one database. Must be a simple identifier. |
 
 ### Trust Graph Store
 
 | Variable                      | Default | Required | Description |
 | ----------------------------- | ------- | -------- | ----------- |
 | `TRUST_GRAPH_DB_AUTO_MIGRATE` | `true`  | no | Runs idempotent trust graph migrations on startup and records applied ids plus checksums in `trust_graph_schema_migrations`. Set `false` when migrations are managed externally. |
+| `TRUST_GRAPH_DB_SCHEMA`       | `trust_graph` in Docker Compose, otherwise _(empty)_ | no | Optional Postgres schema name for trust graph tables when multiple services share one database. Must be a simple identifier. |
 
 ### Agentd Authority Store
 

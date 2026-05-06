@@ -1,6 +1,7 @@
-import { runDiscoveryMigrations, sql } from './db/client.js'
+import { createRawClient, runDiscoveryMigrations } from './db/client.js'
 
 async function main() {
+  const sql = createRawClient()
   try {
     await runDiscoveryMigrations(sql)
     console.log('discovery migrations applied')

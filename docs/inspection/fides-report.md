@@ -1,5 +1,7 @@
 # FIDES Repository Inspection Report
 
+> Historical baseline note: this report started as an early repository inspection. The sections below are preserved as audit context, but the implementation has moved since the original snapshot. Current evidence-based status is maintained in `docs/architecture/gap-analysis.md`; stale stub claims in this report have been corrected where they conflicted with landed code.
+
 ## 1. Repo Purpose
 
 **FIDES** (Latin: trust, faith, confidence) is a decentralized trust and authentication protocol for autonomous AI agents. It provides:
@@ -30,8 +32,8 @@
 |---------|------|---------|
 | `discovery` | `services/discovery/` | Identity registration & resolution service (Hono + PostgreSQL) |
 | `trust-graph` | `services/trust-graph/` | Trust relationship management & reputation scoring service |
-| `platform-api` | `services/platform-api/` | Stub — only README.md |
-| `policy-engine` | `services/policy-engine/` | Stub — README.md + `stub/policies.json` |
+| `platform-api` | `services/platform-api/` | Platform metadata API with health, version, and topology routes |
+| `policy-engine` | `services/policy-engine/` | Standalone policy evaluation service backed by `@fides/policy` |
 
 ### Apps (`/Users/efebarandurmaz/fides/apps/`)
 
@@ -151,24 +153,24 @@
 | **reputation** | FOUND | Reputation scoring with direct + transitive trust |
 | **graph** | FOUND | BFS traversal on trust edges with decay |
 | **discovery** | FOUND | Discovery service + well-known fallback |
-| **registry** | NOT FOUND | Only mentioned in docs as future "on-chain revocation registry" |
+| **registry** | FOUND | Hosted AgentCard registry service in `services/registry`; federation/peering remains missing |
 | **capability** | FOUND | Agent skills/capabilities in discovery (A2A-compatible) |
-| **policy** | PARTIAL | Stubbed policy-engine service exists; no runtime policy enforcement |
-| **delegation** | NOT FOUND | Only mentioned in docs as future feature |
-| **session** | NOT FOUND | Only `.omc/sessions/` metadata files (unrelated) |
-| **grant** | NOT FOUND | Only appears in MIT license text |
-| **evidence** | NOT FOUND | No occurrences |
-| **event** | NOT FOUND | No event system |
-| **ledger** | NOT FOUND | No occurrences |
+| **policy** | FOUND | `packages/policy` evaluator, `services/policy-engine` HTTP routes, and `agentd` `/v1/policy/evaluate` |
+| **delegation** | FOUND | `packages/core/src/delegation.ts` plus tests |
+| **session** | FOUND | Session grants and stores in `packages/core/src/session-store.ts`; `agentd` route coverage |
+| **grant** | FOUND | Session grants in `packages/core/src/delegation.ts` and `packages/core/src/session-store.ts` |
+| **evidence** | FOUND | `packages/evidence/src/index.ts` plus `agentd` evidence routes |
+| **event** | FOUND | Evidence events exist; no generic event bus |
+| **ledger** | FOUND | Hash-chained evidence ledger primitives in `packages/evidence` |
 | **hash** | FOUND | SHA-256 for Content-Digest and agit state hashing |
 | **merkle** | NOT FOUND | Only mentioned in `.omc/plans/` as future consideration |
-| **revocation** | PARTIAL | `createRevocation` exists in rotation.ts but no active revocation mechanism |
-| **incident** | NOT FOUND | No occurrences |
-| **runtime** | FOUND | Docker build stages labeled "runtime" |
-| **tee** | NOT FOUND | No trusted execution environment support |
-| **dht** | NOT FOUND | No distributed hash table |
-| **relay** | NOT FOUND | No relay infrastructure |
-| **federation** | NOT FOUND | No federation logic |
+| **revocation** | FOUND | Core revocation records plus `agentd` revocation routes |
+| **incident** | FOUND | Core incident records plus `agentd` incident routes feeding authorization context |
+| **runtime** | FOUND | Runtime attestation package and `agentd` runtime endpoints |
+| **tee** | PARTIAL | `MockTEEProvider` and TEE adapter boundary; no production vendor adapters |
+| **dht** | PARTIAL | Mock/in-memory DHT discovery provider; no production libp2p network |
+| **relay** | FOUND | Relay service and relay discovery provider exist; service remains prototype/in-memory |
+| **federation** | PARTIAL | Architecture/spec level only; registry peering runtime remains missing |
 | **well-known** | FOUND | `/.well-known/fides.json` and `/.well-known/agent.json` supported |
 
 ---
@@ -222,8 +224,8 @@
 
 ### Service Gaps
 
-- **Policy Engine**: Stubbed only (`services/policy-engine/README.md` describes future LLM-backed engine; `services/policy-engine/stub/policies.json` is a static JSON example).
-- **Platform API**: Stubbed only.
+- **Policy Engine**: Implemented as a deterministic HTTP evaluation service over `@fides/policy`; production persistence, approval workflows, and external pipeline adapters remain future hardening work.
+- **Platform API**: Implemented as a metadata/topology service; it does not yet host identity issuance, tenant management, production auth, or metrics.
 - **Web Dashboard**: Stubbed only (`apps/web/README.md` describes future UI).
 - **Rust SDK**: Only README exists.
 
@@ -261,13 +263,14 @@
    - However, `packages/sdk/src/signing/http-signature.ts` generates a nonce, and `packages/sdk/src/signing/verify.ts` checks it against a `NonceStore`.
    - **Conflict**: Docs say it's missing, but client SDK partially implements it. Server services do not appear to enforce nonce checking.
 
-5. **Package Name Inconsistency**
+5. **Package Name Consistency**
    - Root `package.json`: `"name": "fides"`
    - SDK `package.json`: `"name": "@fides/sdk"`
    - CLI `package.json`: `"name": "@fides/cli"`
-   - Discovery service `package.json`: `"name": "discovery"` (not `@fides/discovery`)
-   - Trust-graph service `package.json`: `"name": "trust-graph"` (not `@fides/trust-graph`)
-   - **Conflict**: Services are not namespaced under `@fides/`, making them prone to naming collisions if published.
+   - Discovery service `package.json`: `"name": "@fides/discovery-service"`
+   - Trust-graph service `package.json`: `"name": "@fides/trust-graph"`
+   - Registry/relay/platform/policy services are also namespaced under `@fides/*`.
+   - **Current status**: The earlier unscoped service-name conflict has been corrected.
 
 6. **Key Rotation DID Change**
    - `rotateKey` in `packages/sdk/src/identity/rotation.ts` generates a **new keypair and therefore a new DID**.
@@ -281,6 +284,6 @@
 1. **Keep FIDES as the main repo** — it has the most complete runtime (services, SDK, CLI, tests, CI).
 2. **Preserve identity and signing primitives** — they are solid foundations.
 3. **Fix spec/implementation discrepancies** before building on top (trust decay formula, nonce protection, DID rotation).
-4. **Add missing layers**: delegation, session, evidence, policy, runtime attestation, DHT/relay, federation.
-5. **Evolve service names** to `@fides/discovery`, `@fides/trust-graph`, etc. for consistency.
+4. **Harden landed layers**: delegation, session, evidence, policy, runtime attestation, DHT/relay, and federation now have a mix of implemented/prototype/spec surfaces; the next work is production persistence, auth, adapter conformance, and propagation semantics.
+5. **Keep service naming consistent** under `@fides/*` and avoid reintroducing unscoped workspace package names.
 6. **Normalize DID rotation** to use the same DID with a new key, or document why FIDES uses DID-changing replacement.

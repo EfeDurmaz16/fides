@@ -4,10 +4,13 @@ import { homedir } from 'node:os'
 import type { PasskeyCredentialBinding } from '@fides/core'
 import type { SignedObject, TrustAnchorStatus } from '@fides/core'
 
+export const PLATFORM_STORE_SCHEMA_VERSION = 1
+
 export interface PlatformStoreHealth {
   ok: boolean
   kind: PlatformStore['kind']
   detail?: string
+  schemaVersion?: number
 }
 
 export interface PlatformStore {
@@ -40,12 +43,17 @@ export interface PlatformTrustAnchorRecord {
 }
 
 interface PlatformSnapshot {
+  schemaVersion: typeof PLATFORM_STORE_SCHEMA_VERSION
   passkeyBindings: Record<string, PasskeyCredentialBinding>
   trustAnchors: Record<string, PlatformTrustAnchorRecord>
 }
 
 function emptySnapshot(): PlatformSnapshot {
-  return { passkeyBindings: {}, trustAnchors: {} }
+  return {
+    schemaVersion: PLATFORM_STORE_SCHEMA_VERSION,
+    passkeyBindings: {},
+    trustAnchors: {},
+  }
 }
 
 export class InMemoryPlatformStore implements PlatformStore {
@@ -91,7 +99,7 @@ export class InMemoryPlatformStore implements PlatformStore {
   }
 
   async healthCheck(): Promise<PlatformStoreHealth> {
-    return { ok: true, kind: this.kind }
+    return { ok: true, kind: this.kind, schemaVersion: PLATFORM_STORE_SCHEMA_VERSION }
   }
 }
 
@@ -162,8 +170,8 @@ export class FilePlatformStore implements PlatformStore {
   async healthCheck(): Promise<PlatformStoreHealth> {
     try {
       await mkdir(dirname(this.path), { recursive: true })
-      await this.read()
-      return { ok: true, kind: this.kind, detail: this.path }
+      const snapshot = await this.read()
+      return { ok: true, kind: this.kind, detail: this.path, schemaVersion: snapshot.schemaVersion }
     } catch (error) {
       return { ok: false, kind: this.kind, detail: error instanceof Error ? error.message : String(error) }
     }
@@ -172,7 +180,7 @@ export class FilePlatformStore implements PlatformStore {
   private async read(): Promise<PlatformSnapshot> {
     try {
       const raw = await readFile(this.path, 'utf8')
-      return { ...emptySnapshot(), ...JSON.parse(raw) as Partial<PlatformSnapshot> }
+      return migrateSnapshot(JSON.parse(raw))
     } catch (error) {
       if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
         return emptySnapshot()
@@ -187,6 +195,27 @@ export class FilePlatformStore implements PlatformStore {
     await writeFile(tempPath, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8')
     await rename(tempPath, this.path)
   }
+}
+
+function migrateSnapshot(raw: unknown): PlatformSnapshot {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('Invalid platform store snapshot')
+  }
+
+  const snapshot = raw as Partial<PlatformSnapshot>
+  if (snapshot.schemaVersion !== undefined && snapshot.schemaVersion !== PLATFORM_STORE_SCHEMA_VERSION) {
+    throw new Error(`Unsupported platform store schemaVersion ${snapshot.schemaVersion}`)
+  }
+
+  return {
+    ...emptySnapshot(),
+    passkeyBindings: isRecord(snapshot.passkeyBindings) ? snapshot.passkeyBindings as Record<string, PasskeyCredentialBinding> : {},
+    trustAnchors: isRecord(snapshot.trustAnchors) ? snapshot.trustAnchors as Record<string, PlatformTrustAnchorRecord> : {},
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
 export function createPlatformStore(): PlatformStore {

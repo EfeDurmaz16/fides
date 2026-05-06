@@ -221,11 +221,13 @@ pnpm --filter @fides/cli fides revoke agent did:fides:agent --agentd-url https:/
 pnpm --filter @fides/cli fides incident report --agentd-url https://agentd.example.com --actor did:fides:agent --type policy_violation --severity high --description "merchant policy bypass" --reporter did:fides:principal --private-key-hex "$REPORTER_PRIVATE_KEY_HEX"
 pnpm --filter @fides/cli fides propagation pending --agentd-url https://agentd.example.com --limit 25
 pnpm --filter @fides/cli fides propagation retry --agentd-url https://agentd.example.com --limit 25
+pnpm --filter @fides/cli fides authorize check --agentd-url https://agentd.example.com --agent-did did:fides:agent --capability payments.execute --session-id "$SESSION_ID" --audience agentd
 ```
 
 When `--delegator-public-key` is provided, `agentd` verifies the DelegationToken signature before creating the session.
 For revocation and incident writes, the CLI derives the signer public key from `--private-key-hex` and sends it as `revokerPublicKey` or `reporterPublicKey`.
 Use `fides propagation pending` and `fides propagation retry` to inspect and replay failed authority propagation outbox records.
+Use `fides authorize check` to smoke-test the same local guard decision path used before agent execution.
 Set `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true` to make this verification fail-closed for session, revocation, and incident writes.
 
 ---

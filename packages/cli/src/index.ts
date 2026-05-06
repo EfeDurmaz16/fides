@@ -17,6 +17,7 @@ import { createSessionCommand } from './commands/session.js';
 import { createRevokeCommand } from './commands/revoke.js';
 import { createIncidentCommand } from './commands/incident.js';
 import { createPropagationCommand } from './commands/propagation.js';
+import { createAuthorizeCommand } from './commands/authorize.js';
 
 const program = new Command();
 
@@ -42,5 +43,6 @@ program.addCommand(createSessionCommand());
 program.addCommand(createRevokeCommand());
 program.addCommand(createIncidentCommand());
 program.addCommand(createPropagationCommand());
+program.addCommand(createAuthorizeCommand());
 
 program.parse();

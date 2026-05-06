@@ -516,7 +516,7 @@ async function assertAuthoritySchema(sql: postgres.Sql): Promise<void> {
   const rows = await sql`
     SELECT table_name
     FROM information_schema.tables
-    WHERE table_schema = 'public'
+    WHERE table_schema = current_schema()
       AND table_name IN (
         'agentd_delegation_nonces',
         'agentd_sessions',

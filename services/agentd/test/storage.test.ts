@@ -43,6 +43,16 @@ function session() {
   return toStoredSession(createSessionGrant({ token }))
 }
 
+function postgresUrlWithSearchPath(connectionString: string, schema: string): string {
+  const url = new URL(connectionString)
+  url.searchParams.set('options', `-c search_path=${schema}`)
+  return url.toString()
+}
+
+function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`
+}
+
 describe('agentd authority stores', () => {
   it('persists sessions, evidence, revocations, and incidents to a file', async () => {
     const store = await tempStore()
@@ -202,6 +212,52 @@ describe('agentd authority stores', () => {
         expect((await store.healthCheck()).ok).toBe(true)
       } finally {
         await store.close()
+      }
+    }, 30_000)
+
+    it('fails closed without manual migrations when auto-migrate is disabled', async () => {
+      const schema = `agentd_manual_migration_${crypto.randomUUID().replaceAll('-', '')}`
+      const schemaIdentifier = quoteIdentifier(schema)
+      const adminSql = postgres(postgresUrl, { max: 1 })
+      const scopedUrl = postgresUrlWithSearchPath(postgresUrl, schema)
+      const scopedSql = postgres(scopedUrl, { max: 1 })
+      const previousAutoMigrate = process.env.AGENTD_DB_AUTO_MIGRATE
+
+      try {
+        await adminSql.unsafe(`CREATE SCHEMA ${schemaIdentifier}`)
+        process.env.AGENTD_DB_AUTO_MIGRATE = 'false'
+
+        const unmigratedStore = new PostgresAuthorityStore(scopedUrl)
+        try {
+          const health = await unmigratedStore.healthCheck()
+          expect(health.ok).toBe(false)
+          expect(health.detail).toContain('agentd authority store schema is not migrated')
+        } finally {
+          await unmigratedStore.close()
+        }
+
+        await runAuthorityMigrations(scopedSql)
+
+        const migratedStore = new PostgresAuthorityStore(scopedUrl)
+        try {
+          await migratedStore.markNonceUsed({
+            nonce: crypto.randomUUID(),
+            tokenId: crypto.randomUUID(),
+            usedAt: new Date().toISOString(),
+          })
+          expect((await migratedStore.healthCheck()).ok).toBe(true)
+        } finally {
+          await migratedStore.close()
+        }
+      } finally {
+        if (previousAutoMigrate === undefined) {
+          delete process.env.AGENTD_DB_AUTO_MIGRATE
+        } else {
+          process.env.AGENTD_DB_AUTO_MIGRATE = previousAutoMigrate
+        }
+        await scopedSql.end()
+        await adminSql.unsafe(`DROP SCHEMA IF EXISTS ${schemaIdentifier} CASCADE`)
+        await adminSql.end()
       }
     }, 30_000)
   })

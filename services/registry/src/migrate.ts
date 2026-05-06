@@ -1,5 +1,4 @@
-import postgres from 'postgres'
-import { runRegistryMigrations } from './storage.js'
+import { createRegistryClient, runRegistryMigrations } from './storage.js'
 
 async function main(): Promise<void> {
   const connectionString = process.env.REGISTRY_DATABASE_URL || process.env.DATABASE_URL
@@ -7,11 +6,7 @@ async function main(): Promise<void> {
     throw new Error('REGISTRY_DATABASE_URL or DATABASE_URL is required')
   }
 
-  const sql = postgres(connectionString, {
-    max: 1,
-    idle_timeout: 5,
-    connect_timeout: 10,
-  })
+  const sql = createRegistryClient(connectionString)
 
   try {
     await runRegistryMigrations(sql)

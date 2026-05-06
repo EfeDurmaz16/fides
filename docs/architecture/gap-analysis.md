@@ -23,7 +23,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 | 3 | Publisher identity | Prototype | `PublisherIdentity` in `packages/core/src/identity.ts`; verification providers are not production-backed. |
 | 4 | Principal identity | Prototype | `PrincipalIdentity` in `packages/core/src/identity.ts`; session/principal binding is basic. |
 | 5 | Domainless individual identity | Prototype | DID-based identity exists in SDK/core; individual proofing is not production-backed. |
-| 6 | Platform-hosted identity | Spec-complete | Architecture describes it, but `services/platform-api` is metadata/topology only and does not host identity issuance or verification. |
+| 6 | Platform-hosted identity | Prototype | Architecture describes hosted identity. `services/platform-api` now exposes topology metadata and passkey credential binding persistence for platform-hosted principals, but does not issue identities or perform live verifier-backed proofing. |
 | 7 | Domain-verified identity | Prototype | `PublisherIdentity.verificationMethod = "dns"`, `packages/core/src/domain-verifier.ts`, `fides identity domain verify`, `GET /v1/identities/domain/verify`, discovery `POST /identities/{did}/domain/verify`, and registry rejection of unbacked `publisher.verified` claims. |
 | 8 | Organization-verified identity | Prototype | Org identity is modeled through `PrincipalIdentity.type = "organization"` with optional domain verification fields; `verifyOrganizationDomainDid` checks `_fides-org.<domain>` DNS TXT ownership, discovery persists organization-domain verification state, the SDK exposes `verifyOrganizationDomain`, and registry rejects unbacked `publisher.organization.verified` claims. |
 | 9 | Trust anchors | Prototype | `TrustAnchor` exists in `packages/core/src/identity.ts`; `GovernedTrustAnchor`, status/scope/issuer validation, and deterministic distribution bundles exist in `packages/core/src/trust-anchor.ts`; no networked anchor governance service yet. |
@@ -60,7 +60,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 | 40 | Domain attestation | Prototype | DNS TXT verifier helper exists in `packages/core/src/domain-verifier.ts`; CLI, agentd, and discovery have Node DNS verification, with discovery persistence for verified identity domains. |
 | 41 | Package registry attestation | Prototype | `PackageAttestationInput`, `PackageAttestationAdapter`, and `PackageRegistryAttestationProvider` validate structured package integrity claims; live npm/PyPI/crates metadata verification is not implemented. |
 | 42 | Wallet attestation | Missing | Deliberately left out of FIDES core; Sardis should own payment/wallet-specific proofing. |
-| 43 | Passkey identity interface | Adapter-ready | `packages/core/src/passkey.ts` defines WebAuthn/passkey challenge, credential binding, verification result, and verifier adapter boundaries with local RP/origin/expiry/credential policy checks; live WebAuthn cryptographic verification is external. |
+| 43 | Passkey identity interface | Adapter-ready | `packages/core/src/passkey.ts` defines WebAuthn/passkey challenge, credential binding, verification result, and verifier adapter boundaries with local RP/origin/expiry/credential policy checks; `services/platform-api` persists verified credential bindings; live WebAuthn cryptographic verification is external. |
 | 44 | CLI | Prototype | `packages/cli/src/index.ts` plus v2 commands for cards, policy, runtime, killswitch; daemon control is thin. |
 | 45 | Local HTTP API | Prototype | `services/agentd/src/index.ts`; local API tests in `services/agentd/test/routes.test.ts`. |
 | 46 | TypeScript SDK | Implemented | `packages/sdk/src/*`, SDK tests. |
@@ -118,7 +118,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 2. Production attestation providers: the TEE/build/container/package/GitHub/passkey providers now have adapter boundaries or local structured verification, but live vendor/API-backed verification is still missing; domain and organization verification still depend on DNS/discovery availability.
 3. Federation semantics: registry peering, cross-node revocation conflict handling, and networked trust-anchor governance need implementation.
 4. Authority separation hardening: identity, trust score, and policy are separated conceptually, but remote invocation execution remains adapter-ready rather than implemented.
-5. Service packaging: platform-api and policy-engine now have standalone service packages, Dockerfiles, compose wiring, and CI image builds; they still need production persistence/auth/metrics beyond health and topology/evaluation routes.
+5. Service packaging: platform-api and policy-engine now have standalone service packages, Dockerfiles, compose wiring, CI image builds, platform passkey binding routes, and policy evaluation routes; they still need durable storage adapters and production-grade auth beyond shared API keys.
 
 ## Next Implementation Slice
 

@@ -14,6 +14,7 @@ Current scope:
 - Prometheus metrics endpoint for request counters and latency summaries.
 - Version metadata for platform clients.
 - Topology endpoint that exposes configured service URLs.
+- Passkey credential binding persistence for platform-hosted principals.
 
 Not included yet:
 
@@ -21,6 +22,8 @@ Not included yet:
 - Trust relationship CRUD APIs.
 - Policy management APIs.
 - Analytics and API key management.
+- Live WebAuthn cryptographic verification. The platform API stores bindings
+  after a verifier adapter has accepted registration or authentication.
 
 Those higher-level workflows should be added only once their backing service contracts are stable.
 
@@ -60,3 +63,33 @@ Returns configured service URLs. Defaults are local development ports and can be
 - `AGENTD_URL`
 
 When `SERVICE_API_KEY` is set, callers must include `X-API-Key`. In `NODE_ENV=production`, this endpoint fails closed with `503` if `SERVICE_API_KEY` is unset.
+
+### `POST /v1/passkeys/bindings`
+
+Stores or updates a verified passkey credential binding:
+
+```json
+{
+  "principalDid": "did:fides:principal",
+  "credentialId": "credential-id",
+  "publicKey": "base64url-or-provider-public-key",
+  "relyingPartyId": "example.com",
+  "signCount": 1,
+  "createdAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+The endpoint rejects credential takeover across principals and sign-count
+rollback.
+
+### `GET /v1/passkeys/principals/:did/credentials`
+
+Lists credential descriptors for a principal DID.
+
+### `GET /v1/passkeys/credentials/:credentialId`
+
+Returns a stored passkey credential binding.
+
+### `DELETE /v1/passkeys/credentials/:credentialId`
+
+Deletes a stored passkey credential binding.

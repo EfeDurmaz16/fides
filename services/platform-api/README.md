@@ -1,23 +1,55 @@
 # FIDES Platform API
 
-Type-safe API layer for the FIDES developer platform.
+Minimal API layer for FIDES developer platform metadata and service discovery.
+
+The platform API is intentionally small today. It provides a stable place for dashboard and operator clients to discover FIDES service metadata without coupling directly to every internal service.
 
 ## Status
 
-Not yet implemented — placeholder for future development.
+Implemented as a TypeScript Hono service.
 
-## Planned Tech Stack
+Current scope:
 
-- TypeScript
-- tRPC
-- Next.js API routes
-- Prisma or Drizzle ORM
-- PostgreSQL
+- Health endpoint for readiness checks.
+- Version metadata for platform clients.
+- Topology endpoint that exposes configured service URLs.
 
-## Planned Features
+Not included yet:
 
-- Agent registration and management API
-- Trust relationship CRUD operations
-- Policy management endpoints
-- Analytics and metrics queries
-- API key management for dashboard access
+- Authenticated agent management.
+- Trust relationship CRUD APIs.
+- Policy management APIs.
+- Analytics and API key management.
+
+Those higher-level workflows should be added only once their backing service contracts are stable.
+
+## Development
+
+```bash
+pnpm --filter @fides/platform-api dev
+pnpm --filter @fides/platform-api test
+pnpm --filter @fides/platform-api lint
+```
+
+The service listens on `PLATFORM_API_PORT`, then `PORT`, then `3600`.
+
+## API
+
+### `GET /health`
+
+Returns service readiness metadata.
+
+### `GET /v1/version`
+
+Returns the platform API version and protocol family.
+
+### `GET /v1/topology`
+
+Returns configured service URLs. Defaults are local development ports and can be overridden with:
+
+- `DISCOVERY_URL`
+- `TRUST_GRAPH_URL`
+- `POLICY_ENGINE_URL`
+- `REGISTRY_URL`
+- `RELAY_URL`
+- `AGENTD_URL`

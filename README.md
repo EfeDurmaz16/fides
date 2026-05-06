@@ -187,7 +187,7 @@ const decision = await evaluateGuard({
 | `@fides/registry-service` | Central agent registration and capability publishing |
 | `@fides/relay-service` | Message relay for agents behind NAT/firewalls |
 | `@fides/agentd` | Agent daemon for lifecycle management and local policy enforcement |
-| `@fides/platform-api` | Platform REST/gRPC API (stub) |
+| `@fides/platform-api` | Platform metadata API for health, version, and service topology |
 | `@fides/policy-engine` | Standalone policy evaluation service |
 
 ### agentd production authority store
@@ -264,7 +264,7 @@ fides/
 │   ├── registry/          # Agent registration service
 │   ├── relay/             # Message relay service
 │   ├── agentd/            # Agent daemon
-│   ├── platform-api/      # Platform API (stub)
+│   ├── platform-api/      # Platform metadata API
 │   └── policy-engine/     # Policy evaluation service
 ├── apps/
 │   └── web/               # Web dashboard

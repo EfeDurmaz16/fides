@@ -12,6 +12,7 @@
  */
 
 export * from './identity.js'
+export * from './trust-anchor.js'
 export * from './domain-verifier.js'
 export * from './passkey.js'
 export * from './canonical-signer.js'

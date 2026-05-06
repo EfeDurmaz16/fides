@@ -24,8 +24,8 @@ COPY packages/sdk/ ./packages/sdk/
 COPY services/registry/ ./services/registry/
 COPY tsconfig.base.json ./
 RUN cd packages/shared && pnpm build
-RUN cd packages/sdk && pnpm build
 RUN cd packages/core && pnpm build
+RUN cd packages/sdk && pnpm build
 RUN cd services/registry && pnpm build
 
 # Stage 3: Runtime

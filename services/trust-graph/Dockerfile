@@ -23,8 +23,8 @@ COPY packages/shared/ ./packages/shared/
 COPY packages/sdk/ ./packages/sdk/
 COPY services/trust-graph/ ./services/trust-graph/
 COPY tsconfig.base.json ./
-RUN cd packages/core && pnpm build
 RUN cd packages/shared && pnpm build
+RUN cd packages/core && pnpm build
 RUN cd packages/sdk && pnpm build
 RUN cd services/trust-graph && pnpm build
 

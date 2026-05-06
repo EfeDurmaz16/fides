@@ -8,13 +8,16 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         service:
           - discovery
           - trust-graph
+          - policy-engine
           - registry
           - relay
           - agentd
+          - platform-api
     permissions:
       contents: read
       packages: write

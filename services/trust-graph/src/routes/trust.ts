@@ -30,7 +30,7 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
       c.header('Cache-Control', 'public, max-age=300')
       return c.json(score)
     } catch (error) {
-      const mapped = mapScoreLookupError(error)
+      const mapped = mapTrustLookupError(error)
       return c.json({ error: mapped.message }, mapped.status)
     }
   })
@@ -57,7 +57,7 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
       c.header('Cache-Control', 'public, max-age=300')
       return c.json(score)
     } catch (error) {
-      const mapped = mapScoreLookupError(error)
+      const mapped = mapTrustLookupError(error)
       return c.json({ error: mapped.message }, mapped.status)
     }
   })
@@ -70,7 +70,8 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
       await trustService.recordCapabilityInvocation(db, did, decodeURIComponent(capabilityId))
       return c.json({ ok: true }, 201)
     } catch (error) {
-      return c.json({ error: 'Internal server error' }, 500)
+      const mapped = mapTrustLookupError(error)
+      return c.json({ error: mapped.message }, mapped.status)
     }
   })
 
@@ -127,7 +128,7 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
   return app
 }
 
-function mapScoreLookupError(error: unknown): { status: 404 | 500 | 503; message: string } {
+function mapTrustLookupError(error: unknown): { status: 404 | 500 | 503; message: string } {
   if (error instanceof TrustError) {
     if (error.message.startsWith('Discovery service unavailable')) {
       return { status: 503, message: error.message }

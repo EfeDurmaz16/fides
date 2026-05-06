@@ -152,6 +152,32 @@ const status = await relay.getMessage(accepted.relayId)
 await relay.deleteMessage(accepted.relayId)
 ```
 
+## Platform Client
+
+```typescript
+import { PlatformClient } from '@fides/sdk'
+
+const platform = new PlatformClient({
+  baseUrl: 'http://localhost:3600',
+  apiKey: process.env.FIDES_API_KEY,
+})
+
+const topology = await platform.topology()
+
+await platform.storePasskeyBinding({
+  principalDid: 'did:fides:principal',
+  credentialId: 'credential-id',
+  publicKey: 'provider-public-key',
+  relyingPartyId: 'example.com',
+  signCount: 1,
+  createdAt: new Date().toISOString(),
+})
+
+const credentials = await platform.listPasskeyCredentials('did:fides:principal')
+const binding = await platform.getPasskeyBinding('credential-id')
+await platform.deletePasskeyBinding('credential-id')
+```
+
 ## API
 
 | Function | Description |
@@ -186,6 +212,11 @@ await relay.deleteMessage(accepted.relayId)
 | `RelayClient.getMessage(relayId)` | Read relay message status by ID |
 | `RelayClient.deleteMessage(relayId)` | Delete a relay message by ID |
 | `RelayClient.stats()` | Read relay service queue statistics |
+| `PlatformClient.topology()` | Read configured platform service URLs |
+| `PlatformClient.storePasskeyBinding(binding)` | Store or update a verified passkey credential binding |
+| `PlatformClient.listPasskeyCredentials(principalDid)` | List a principal's passkey credential descriptors |
+| `PlatformClient.getPasskeyBinding(credentialId)` | Read a stored passkey credential binding, returning `null` when missing |
+| `PlatformClient.deletePasskeyBinding(credentialId)` | Delete a stored passkey credential binding |
 
 ### Trust Levels
 

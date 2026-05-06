@@ -55,6 +55,17 @@ export {
   type RelayPollResponse,
   type RelayStatsResponse,
 } from './relay/client.js'
+export {
+  PlatformClient,
+  PlatformError,
+  type PlatformClientOptions,
+  type PlatformMutationResponse,
+  type PlatformPasskeyBindingResponse,
+  type PlatformPasskeyCredentialBinding,
+  type PlatformPasskeyCredentialDescriptor,
+  type PlatformPasskeyCredentialsResponse,
+  type PlatformTopologyResponse,
+} from './platform/client.js'
 
 // Trust module exports
 export { TrustLevel } from './trust/types.js'

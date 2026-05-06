@@ -16,6 +16,7 @@ import { Fides, TrustLevel } from '@fides/sdk'
 const fides = new Fides({
   discoveryUrl: 'http://localhost:3100',
   trustUrl: 'http://localhost:3200',
+  apiKey: process.env.FIDES_API_KEY,
 })
 
 // Create identity
@@ -85,6 +86,41 @@ await agentd.recordSignedIncident({
 
 const pending = await agentd.listPendingPropagations(25)
 const retry = await agentd.retryPropagations(25)
+```
+
+## Discovery Clients
+
+```typescript
+import { AgentDiscoveryClient, DiscoveryClient } from '@fides/sdk'
+
+const identities = new DiscoveryClient({
+  baseUrl: 'http://localhost:3100',
+  apiKey: process.env.FIDES_API_KEY,
+})
+
+await identities.register({
+  did: 'did:fides:agent',
+  name: 'Payment Agent',
+  publicKey: '00'.repeat(32),
+})
+
+await identities.verifyDomain('did:fides:agent', 'agent.example.com')
+
+const agents = new AgentDiscoveryClient({
+  baseUrl: 'http://localhost:3100',
+  apiKey: process.env.FIDES_API_KEY,
+})
+
+await agents.registerAgent({
+  did: 'did:fides:agent',
+  name: 'Payment Agent',
+  description: 'Executes approved payment workflows',
+  capabilities: ['payments.execute'],
+  endpoints: [{ type: 'mcp', url: 'https://agent.example.com/mcp' }],
+  trustLevel: 'high',
+})
+
+await agents.heartbeat('did:fides:agent')
 ```
 
 ## Registry Client

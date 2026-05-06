@@ -48,7 +48,8 @@ async function initIdentity(options: { name?: string; passphrase?: string }): Pr
   // Register with discovery service
   spinner.start('Registering with discovery service...');
   try {
-    const discoveryClient = new DiscoveryClient({ baseUrl: config.discoveryUrl });
+    const apiKey = process.env.FIDES_API_KEY || process.env.SERVICE_API_KEY;
+    const discoveryClient = new DiscoveryClient({ baseUrl: config.discoveryUrl, apiKey });
     const metadata = options.name ? { name: options.name } : undefined;
     await discoveryClient.register({
       did,

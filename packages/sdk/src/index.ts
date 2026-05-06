@@ -24,12 +24,13 @@ export { NonceStore } from './signing/nonce-store.js'
 // Discovery module exports
 export {
   DiscoveryClient,
+  type DiscoveryClientOptions,
   type RegisterIdentityParams,
   type VerifyIdentityDomainResponse,
   type VerifyOrganizationDomainResponse,
 } from './discovery/client.js'
 export { IdentityResolver } from './discovery/resolver.js'
-export { AgentDiscoveryClient, type RegisterAgentParams } from './discovery/agent-client.js'
+export { AgentDiscoveryClient, type AgentDiscoveryClientOptions, type RegisterAgentParams } from './discovery/agent-client.js'
 export { toA2AAgentCard, fromA2AAgentCard } from './discovery/a2a.js'
 export {
   RegistryClient,

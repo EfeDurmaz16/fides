@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { DiscoveryClient } from '../src/discovery/client.js'
+import { AgentDiscoveryClient } from '../src/discovery/agent-client.js'
 import { IdentityResolver } from '../src/discovery/resolver.js'
 import type { AgentIdentity, DiscoveryDocument } from '@fides/shared'
 import { DiscoveryError } from '@fides/shared'
@@ -42,6 +43,31 @@ describe('DiscoveryClient', () => {
       body: JSON.stringify(identity),
     })
     expect(result).toEqual(response)
+  })
+
+  it('should send API key on identity writes when configured', async () => {
+    client = new DiscoveryClient({ baseUrl: 'http://localhost:3100', apiKey: 'discovery-key' })
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        did: 'did:fides:abc123',
+        publicKey: 'deadbeef',
+        algorithm: 'ed25519',
+        createdAt: '2024-01-01T00:00:00Z',
+      }),
+    })
+
+    await client.register({ did: 'did:fides:abc123', publicKey: 'deadbeef' })
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:3100/identities',
+      expect.objectContaining({
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': 'discovery-key',
+        },
+      })
+    )
   })
 
   it('should verify and persist an identity domain', async () => {
@@ -214,6 +240,77 @@ describe('DiscoveryClient', () => {
 
     const result = await client.resolveFromWellKnown('example.com')
     expect(result).toBeNull()
+  })
+})
+
+describe('AgentDiscoveryClient', () => {
+  const mockFetch = vi.fn()
+  let client: AgentDiscoveryClient
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', mockFetch)
+    mockFetch.mockReset()
+    client = new AgentDiscoveryClient({ baseUrl: 'http://localhost:3100', apiKey: 'agent-discovery-key' })
+  })
+
+  it('should send API key on agent writes when configured', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'did:fides:agent',
+        name: 'Agent',
+        version: '1.0.0',
+      }),
+      text: async () => '{}',
+    })
+
+    await client.registerAgent({
+      did: 'did:fides:agent',
+      name: 'Agent',
+      url: 'https://agent.example.com',
+    })
+    await client.updateAgent('did:fides:agent', { name: 'Agent v2' })
+    await client.heartbeat('did:fides:agent')
+    await client.deregisterAgent('did:fides:agent')
+
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:3100/agents',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': 'agent-discovery-key',
+        },
+      })
+    )
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:3100/agents/did%3Afides%3Aagent',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': 'agent-discovery-key',
+        },
+      })
+    )
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      'http://localhost:3100/agents/did%3Afides%3Aagent/heartbeat',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: { 'X-API-Key': 'agent-discovery-key' },
+      })
+    )
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      4,
+      'http://localhost:3100/agents/did%3Afides%3Aagent',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: { 'X-API-Key': 'agent-discovery-key' },
+      })
+    )
   })
 })
 

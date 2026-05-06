@@ -214,6 +214,9 @@ importers:
 
   packages/sdk:
     dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../core
       '@fides/shared':
         specifier: workspace:*
         version: link:../shared

@@ -13,6 +13,7 @@
 
 export * from './identity.js'
 export * from './domain-verifier.js'
+export * from './passkey.js'
 export * from './canonical-signer.js'
 export * from './agent-card.js'
 export * from './capability.js'

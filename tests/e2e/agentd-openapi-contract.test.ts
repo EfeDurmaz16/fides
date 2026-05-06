@@ -66,6 +66,7 @@ describe('Agentd OpenAPI contract', () => {
     fetchMock.mockResolvedValueOnce({ ok: true, status: 201, text: async () => JSON.stringify({ authorized: true, session }) })
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, text: async () => JSON.stringify({ session }) })
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, text: async () => JSON.stringify({ did: token.delegatee, card: { id: token.delegatee } }) })
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, text: async () => JSON.stringify({ domain: 'example.com', did: token.delegatee, recordName: '_fides.example.com', verified: true }) })
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, text: async () => JSON.stringify({ revoked: true, session: { ...session, revoked: true } }) })
     fetchMock.mockResolvedValueOnce({ ok: true, status: 201, text: async () => JSON.stringify({ revoked: true, record: revocation }) })
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, text: async () => JSON.stringify({ did: revocation.did, revoked: true, record: revocation }) })
@@ -78,6 +79,7 @@ describe('Agentd OpenAPI contract', () => {
     await client.createSession({ token, capabilityId: 'payments.execute', audience: 'agentd' })
     await client.getSession(session.id)
     await client.getCard(token.delegatee)
+    await client.verifyDomain('example.com', token.delegatee)
     await client.revokeSession(session.id, 'operator disabled')
     await client.recordRevocation({ record: revocation })
     await client.getRevocation(revocation.did)
@@ -99,6 +101,7 @@ describe('Agentd OpenAPI contract', () => {
 
   it('keeps authority and card schemas documented', () => {
     expect(openApi).toContain('CardResponse:')
+    expect(openApi).toContain('DomainVerificationResponse:')
     expect(openApi).toContain('SessionCreateResponse:')
     expect(openApi).toContain('RevocationSubmitResponse:')
     expect(openApi).toContain('IncidentSubmitResponse:')

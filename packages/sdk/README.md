@@ -57,6 +57,7 @@ const decision = await agentd.authorize({
 })
 
 const card = await agentd.getCard('did:fides:agent')
+const domain = await agentd.verifyDomain('example.com', 'did:fides:agent')
 
 const session = await agentd.createSignedSession({
   delegator: 'did:fides:principal',
@@ -146,6 +147,7 @@ await relay.deleteMessage(accepted.relayId)
 | `verifyAttestation(attestation, publicKey)` | Verify attestation signature |
 | `AgentdClient.authorize(request)` | Check local agentd authorization decisions |
 | `AgentdClient.getCard(did)` | Read an AgentCard through agentd, preserving private versus missing card errors |
+| `AgentdClient.verifyDomain(domain, did)` | Verify a domain-to-DID DNS TXT binding through agentd |
 | `AgentdClient.createSession(request)` | Create delegated agentd sessions |
 | `AgentdClient.createSignedSession(options)` | Create and sign a delegation token before opening a session |
 | `AgentdClient.recordRevocation(request)` | Submit signed authority revocations |

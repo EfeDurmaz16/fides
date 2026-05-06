@@ -9,6 +9,7 @@ import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { cors } from 'hono/cors'
 import { bodyLimit } from 'hono/body-limit'
+import { resolveTxt } from 'node:dns/promises'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
 import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
@@ -19,6 +20,7 @@ import {
   authorizeDelegation,
   authorizeSessionInvocation,
   verifyDelegationTokenSignature,
+  verifyDomainDid,
   verifyIncidentRecord,
   verifyRevocationRecord,
   type IncidentRecord,
@@ -131,6 +133,23 @@ app.get('/health', async (c) => {
 })
 
 // ─── Identity Resolution (proxy to discovery) ─────────────────────
+app.get('/v1/identities/domain/verify', async (c) => {
+  const domain = c.req.query('domain')
+  const did = c.req.query('did')
+
+  if (!domain || !did) {
+    return c.json({ error: 'domain and did query parameters are required' }, 400)
+  }
+
+  const result = await verifyDomainDid({
+    domain,
+    did,
+    resolver: resolveTxt,
+  })
+
+  return c.json(result, result.verified ? 200 : 422)
+})
+
 app.get('/v1/identities/:did', async (c) => {
   const did = c.req.param('did')
   try {

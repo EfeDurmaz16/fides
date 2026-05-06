@@ -77,6 +77,14 @@ export interface AgentdCardResponse {
   error?: string
 }
 
+export interface DomainVerificationResponse {
+  domain: string
+  did: string
+  recordName: string
+  verified: boolean
+  reason?: 'invalid-domain' | 'invalid-did' | 'record-not-found' | 'resolver-error'
+}
+
 export type RevocationRecord = CoreRevocationRecord
 
 export interface RevocationSubmitRequest {
@@ -257,6 +265,13 @@ export class AgentdClient {
 
   async getCard(did: string): Promise<AgentdCardResponse> {
     return this.get<AgentdCardResponse>(`/v1/cards/${encodeURIComponent(did)}`)
+  }
+
+  async verifyDomain(domain: string, did: string): Promise<DomainVerificationResponse> {
+    const url = new URL(`${this.baseUrl()}/v1/identities/domain/verify`)
+    url.searchParams.set('domain', domain)
+    url.searchParams.set('did', did)
+    return this.request<DomainVerificationResponse>(url.toString(), { method: 'GET' })
   }
 
   async revokeSession(id: string, reason?: string): Promise<SessionRevokeResponse> {

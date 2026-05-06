@@ -31,6 +31,10 @@ afterEach(() => {
 
 vi.stubGlobal('fetch', vi.fn())
 
+vi.mock('node:dns/promises', () => ({
+  resolveTxt: vi.fn(),
+}))
+
 import { app } from '../src/index.js'
 import {
   createDelegationToken,
@@ -208,6 +212,50 @@ describe('Agentd Service Routes', () => {
       expect(res.status).toBe(502)
       const data = await res.json()
       expect(data.status).toBe('unreachable')
+    })
+  })
+
+  describe('GET /v1/identities/domain/verify', () => {
+    it('verifies a domain DID binding through DNS TXT records', async () => {
+      const dns = await import('node:dns/promises')
+      vi.mocked(dns.resolveTxt).mockResolvedValue([['fides-did=', TEST_DID]])
+
+      const res = await app.request(`/v1/identities/domain/verify?domain=Example.COM.&did=${encodeURIComponent(TEST_DID)}`)
+      expect(res.status).toBe(200)
+
+      const data = await res.json()
+      expect(dns.resolveTxt).toHaveBeenCalledWith('_fides.example.com')
+      expect(data).toEqual({
+        domain: 'example.com',
+        did: TEST_DID,
+        recordName: '_fides.example.com',
+        verified: true,
+      })
+    })
+
+    it('returns 422 when the domain DID binding is not present', async () => {
+      const dns = await import('node:dns/promises')
+      vi.mocked(dns.resolveTxt).mockResolvedValue(['other=value'])
+
+      const res = await app.request(`/v1/identities/domain/verify?domain=example.com&did=${encodeURIComponent(TEST_DID)}`)
+      expect(res.status).toBe(422)
+
+      const data = await res.json()
+      expect(data).toEqual({
+        domain: 'example.com',
+        did: TEST_DID,
+        recordName: '_fides.example.com',
+        verified: false,
+        reason: 'record-not-found',
+      })
+    })
+
+    it('requires domain and did query parameters', async () => {
+      const res = await app.request('/v1/identities/domain/verify?domain=example.com')
+      expect(res.status).toBe(400)
+
+      const data = await res.json()
+      expect(data.error).toContain('domain and did')
     })
   })
 

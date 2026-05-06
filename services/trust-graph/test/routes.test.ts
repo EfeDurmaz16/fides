@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { Hono } from 'hono'
 import { createTrustRoutes } from '../src/routes/trust.js'
 import { createIdentitiesRoutes } from '../src/routes/identities.js'
@@ -11,10 +11,18 @@ import {
 } from '@fides/core'
 import * as ed from '@noble/ed25519'
 
+const ORIGINAL_SERVICE_API_KEY = process.env.SERVICE_API_KEY
+const ORIGINAL_TRUST_GRAPH_API_KEYS = process.env.TRUST_GRAPH_API_KEYS
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV
+
 describe('HTTP Routes', () => {
   let mockDb: any
 
   beforeEach(() => {
+    delete process.env.SERVICE_API_KEY
+    delete process.env.TRUST_GRAPH_API_KEYS
+    process.env.NODE_ENV = 'test'
+
     // Create mock database
     mockDb = {
       insert: vi.fn(() => ({
@@ -36,6 +44,12 @@ describe('HTTP Routes', () => {
         })),
       })),
     }
+  })
+
+  afterEach(() => {
+    restoreEnv('SERVICE_API_KEY', ORIGINAL_SERVICE_API_KEY)
+    restoreEnv('TRUST_GRAPH_API_KEYS', ORIGINAL_TRUST_GRAPH_API_KEYS)
+    restoreEnv('NODE_ENV', ORIGINAL_NODE_ENV)
   })
 
   function mockIdentity(publicKey: Uint8Array) {
@@ -103,6 +117,105 @@ describe('HTTP Routes', () => {
   })
 
   describe('Trust Routes', () => {
+    it('requires an API key for trust writes in production', async () => {
+      process.env.NODE_ENV = 'production'
+      delete process.env.SERVICE_API_KEY
+
+      const app = createTrustRoutes(mockDb)
+      const res = await app.request('/v1/trust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issuerDid: 'did:fides:alice',
+          subjectDid: 'did:fides:bob',
+          trustLevel: 80,
+          signature: 'deadbeef',
+          payload: '{}',
+        }),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('SERVICE_API_KEY is required in production')
+    })
+
+    it('enforces scoped trust-graph API keys when configured', async () => {
+      process.env.TRUST_GRAPH_API_KEYS = JSON.stringify([
+        { key: 'trust-key', scopes: ['trust:edges:write'] },
+        { key: 'incident-key', scopes: ['trust:incidents:write'] },
+      ])
+
+      const app = createTrustRoutes(mockDb)
+      const trustRes = await app.request('/v1/trust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'incident-key' },
+        body: JSON.stringify({
+          issuerDid: 'did:fides:alice',
+          subjectDid: 'did:fides:bob',
+          trustLevel: 80,
+          signature: 'deadbeef',
+          payload: '{}',
+        }),
+      })
+
+      expect(trustRes.status).toBe(403)
+      expect((await trustRes.json()).error).toContain('trust:edges:write')
+
+      const record = await signedIncidentRecord()
+      const incidentRes = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'incident-key' },
+        body: JSON.stringify({ actorDid: record.actor, record }),
+      })
+
+      expect(incidentRes.status).toBe(201)
+    })
+
+    it('fails closed when scoped trust-graph API keys are malformed', async () => {
+      process.env.TRUST_GRAPH_API_KEYS = '{bad-json'
+
+      const app = createTrustRoutes(mockDb)
+      const res = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'incident-key' },
+        body: JSON.stringify({ actorDid: 'did:fides:agent' }),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('TRUST_GRAPH_API_KEYS must be a JSON array')
+    })
+
+    it('allows capability invocation with the capability invoke scope', async () => {
+      process.env.TRUST_GRAPH_API_KEYS = JSON.stringify([
+        { key: 'invoke-key', scopes: ['trust:capability:invoke'] },
+      ])
+
+      const app = createTrustRoutes(mockDb)
+      const res = await app.request('/v1/trust/did:fides:agent/capability/payments.execute/invoke', {
+        method: 'POST',
+        headers: { 'X-API-Key': 'invoke-key' },
+      })
+
+      expect(res.status).toBe(201)
+      expect(await res.json()).toEqual({ ok: true })
+    })
+
+    it('allows revocation writes with the revocations write scope', async () => {
+      process.env.TRUST_GRAPH_API_KEYS = JSON.stringify([
+        { key: 'revocation-key', scopes: ['trust:revocations:write'] },
+      ])
+
+      const app = createTrustRoutes(mockDb)
+      const record = await signedRevocationRecord()
+      const res = await app.request('/v1/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'revocation-key' },
+        body: JSON.stringify({ record }),
+      })
+
+      expect(res.status).toBe(201)
+      expect(await res.json()).toEqual({ id: 'test-uuid-123', revokedEdges: 0 })
+    })
+
     it('POST /v1/trust should reject missing payload', async () => {
       const app = createTrustRoutes(mockDb)
       const res = await app.request('/v1/trust', {
@@ -383,3 +496,11 @@ describe('HTTP Routes', () => {
     })
   })
 })
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name]
+  } else {
+    process.env[name] = value
+  }
+}

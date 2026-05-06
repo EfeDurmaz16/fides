@@ -2,13 +2,14 @@ import { Hono } from 'hono'
 import type { DbClient } from '../db/client.js'
 import { TrustService } from '../services/trust-service.js'
 import type { CreateTrustRequest } from '../types.js'
+import { apiKeyAuth, TRUST_GRAPH_API_SCOPES } from '../middleware/auth.js'
 
 export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
   const app = new Hono()
   const trustService = new TrustService(discoveryUrl)
 
   // Create trust edge
-  app.post('/v1/trust', async (c) => {
+  app.post('/v1/trust', apiKeyAuth(TRUST_GRAPH_API_SCOPES.edgesWrite), async (c) => {
     try {
       const body = await c.req.json() as CreateTrustRequest
       const id = await trustService.createTrust(db, body)
@@ -59,7 +60,7 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
   })
 
   // Record capability invocation
-  app.post('/v1/trust/:did/capability/:capabilityId/invoke', async (c) => {
+  app.post('/v1/trust/:did/capability/:capabilityId/invoke', apiKeyAuth(TRUST_GRAPH_API_SCOPES.capabilityInvoke), async (c) => {
     try {
       const did = c.req.param('did')
       const capabilityId = c.req.param('capabilityId')
@@ -71,7 +72,7 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
   })
 
   // Record incident
-  app.post('/v1/incidents', async (c) => {
+  app.post('/v1/incidents', apiKeyAuth(TRUST_GRAPH_API_SCOPES.incidentsWrite), async (c) => {
     try {
       const body = await c.req.json()
       const id = await trustService.recordIncident(db, body)
@@ -83,7 +84,7 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
   })
 
   // Record authority revocation and mark active trust edges revoked
-  app.post('/v1/revocations', async (c) => {
+  app.post('/v1/revocations', apiKeyAuth(TRUST_GRAPH_API_SCOPES.revocationsWrite), async (c) => {
     try {
       const body = await c.req.json()
       const result = await trustService.recordRevocation(db, body)

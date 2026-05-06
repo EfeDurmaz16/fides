@@ -17,8 +17,8 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
       c.header('Cache-Control', 'no-store')
       return c.json({ id }, 201)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      return c.json({ error: message }, 400)
+      const mapped = mapTrustWriteError(error)
+      return c.json({ error: mapped.message }, mapped.status)
     }
   })
 

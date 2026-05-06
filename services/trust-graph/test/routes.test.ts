@@ -303,6 +303,60 @@ describe('HTTP Routes', () => {
       expect(json.error).toContain('Trust level')
     })
 
+    it('POST /v1/trust should return 404 when an edge identity is absent from discovery', async () => {
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('not found', { status: 404 }))))
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb, 'http://discovery.test')
+      const res = await app.request('/v1/trust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issuerDid: 'did:fides:alice',
+          subjectDid: 'did:fides:bob',
+          trustLevel: 80,
+          signature: 'deadbeef',
+          payload: '{}',
+        }),
+      })
+
+      expect(res.status).toBe(404)
+      expect((await res.json()).error).toContain('Identity not found')
+    })
+
+    it('POST /v1/trust should return 503 when discovery is unavailable for edge identities', async () => {
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('unavailable', { status: 503 }))))
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb, 'http://discovery.test')
+      const res = await app.request('/v1/trust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issuerDid: 'did:fides:alice',
+          subjectDid: 'did:fides:bob',
+          trustLevel: 80,
+          signature: 'deadbeef',
+          payload: '{}',
+        }),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('Discovery service unavailable')
+    })
+
     it('GET /v1/trust/:did/score should return reputation score', async () => {
       let selectCallCount = 0
       mockDb.select = vi.fn(() => ({

@@ -76,6 +76,10 @@ paths:
                     format: uuid
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "429":
           $ref: "#/components/responses/RateLimited"
 

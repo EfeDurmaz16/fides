@@ -444,11 +444,11 @@ Services with the shared observability middleware expose Prometheus metrics at `
 | ------------ | ---------------------------- |
 | discovery    | `http://localhost:3100/metrics` |
 | trust-graph  | `http://localhost:3200/metrics` |
+| policy-engine | `http://localhost:3300/metrics` |
 | registry     | `http://localhost:7346/metrics` |
 | relay        | `http://localhost:7347/metrics` |
 | agentd       | `http://localhost:7345/metrics` |
-
-`policy-engine` and `platform-api` currently expose structured health endpoints but not Prometheus metrics.
+| platform-api | `http://localhost:3600/metrics` |
 
 ### Prometheus scrape config
 
@@ -462,6 +462,11 @@ scrape_configs:
   - job_name: fides-trust-graph
     static_configs:
       - targets: ['localhost:3200']
+    metrics_path: /metrics
+
+  - job_name: fides-policy-engine
+    static_configs:
+      - targets: ['localhost:3300']
     metrics_path: /metrics
 
   - job_name: fides-registry
@@ -478,6 +483,11 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:7345']
     metrics_path: /metrics
+
+  - job_name: fides-platform-api
+    static_configs:
+      - targets: ['localhost:3600']
+    metrics_path: /metrics
 ```
 
 ### Key metrics
@@ -485,8 +495,8 @@ scrape_configs:
 Each service reports:
 
 - `http_requests_total` — total requests (labels: `method`, `path`, `status`)
-- `http_request_duration_seconds` — latency histogram
-- `http_requests_in_flight` — current in-flight requests
+- `http_response_duration_ms` — latency summary in milliseconds
+- `http_active_connections` — current active requests
 
 ### Health check alerts
 

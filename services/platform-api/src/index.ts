@@ -3,10 +3,11 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import type { MiddlewareHandler } from 'hono'
-import { evaluateApiKeyAuth } from '@fides/shared'
+import { evaluateApiKeyAuth, MetricsCollector, metricsMiddleware } from '@fides/shared'
 
 const app = new Hono()
 const startTime = Date.now()
+const collector = new MetricsCollector()
 
 const SERVICE_PORTS = {
   discovery: 3100,
@@ -17,6 +18,7 @@ const SERVICE_PORTS = {
   agentd: 7345,
 } as const
 
+app.use('*', metricsMiddleware(collector))
 app.use('*', cors({ origin: getCorsOrigin() }))
 app.use('*', bodyLimit({ maxSize: 1024 * 1024 }))
 
@@ -32,6 +34,10 @@ app.get('/v1/version', (c) => c.json({
   version: '0.1.0',
   protocol: 'fides-v2',
 }))
+
+app.get('/metrics', (c) => {
+  return c.text(collector.toPrometheus(), 200, { 'Content-Type': 'text/plain; version=0.0.4' })
+})
 
 app.get('/v1/topology', apiKeyAuth(), (c) => c.json({
   service: 'platform-api',

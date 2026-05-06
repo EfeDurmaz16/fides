@@ -11,6 +11,7 @@ Implemented as a TypeScript service.
 Current scope:
 
 - Health endpoint for service readiness checks.
+- Prometheus metrics endpoint for request counters and latency summaries.
 - Policy bundle validation before evaluation.
 - Deterministic rule evaluation through `@fides/policy`.
 - Context-aware inputs for `agentDid`, `capabilityId`, and arbitrary JSON context.
@@ -39,6 +40,10 @@ Policy evaluation routes are protected with `X-API-Key` when `SERVICE_API_KEY` i
 ### `GET /health`
 
 Returns service readiness metadata.
+
+### `GET /metrics`
+
+Returns Prometheus text metrics for HTTP request counts, response latency summaries, and active connections.
 
 ### `POST /v1/policies/evaluate`
 

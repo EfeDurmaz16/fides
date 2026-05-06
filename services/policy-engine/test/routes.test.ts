@@ -35,6 +35,18 @@ describe('policy-engine service', () => {
     expect(data.service).toBe('policy-engine')
   })
 
+  it('exposes Prometheus metrics', async () => {
+    await app.request('/health')
+
+    const res = await app.request('/metrics')
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toContain('text/plain')
+    const body = await res.text()
+    expect(body).toContain('http_requests_total')
+    expect(body).toContain('path="/health"')
+  })
+
   it('allows by default when no rules match', async () => {
     const res = await app.request('/v1/policies/evaluate', {
       method: 'POST',

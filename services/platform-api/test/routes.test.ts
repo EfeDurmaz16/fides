@@ -24,6 +24,18 @@ describe('platform-api service', () => {
     })
   })
 
+  it('exposes Prometheus metrics', async () => {
+    await app.request('/health')
+
+    const res = await app.request('/metrics')
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Type')).toContain('text/plain')
+    const body = await res.text()
+    expect(body).toContain('http_requests_total')
+    expect(body).toContain('path="/health"')
+  })
+
   it('returns default service topology', async () => {
     const res = await app.request('/v1/topology')
 

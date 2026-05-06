@@ -39,6 +39,17 @@ export {
   type RegistrySearchResult,
   type RegistryStatsResponse,
 } from './registry/client.js'
+export {
+  RelayClient,
+  RelayError,
+  type RelayAcceptResponse,
+  type RelayClientOptions,
+  type RelayDeleteResponse,
+  type RelayMessage,
+  type RelayMessageRequest,
+  type RelayPollResponse,
+  type RelayStatsResponse,
+} from './relay/client.js'
 
 // Trust module exports
 export { TrustLevel } from './trust/types.js'

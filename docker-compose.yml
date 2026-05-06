@@ -69,6 +69,7 @@ services:
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       SERVICE_API_KEY: ${SERVICE_API_KEY:-}
+      REGISTRY_API_KEYS: ${REGISTRY_API_KEYS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
     depends_on:
@@ -86,6 +87,7 @@ services:
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       SERVICE_API_KEY: ${SERVICE_API_KEY:-}
+      RELAY_API_KEYS: ${RELAY_API_KEYS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
 

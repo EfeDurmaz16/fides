@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const ORIGINAL_SERVICE_API_KEY = process.env.SERVICE_API_KEY
+const ORIGINAL_REGISTRY_API_KEYS = process.env.REGISTRY_API_KEYS
 const ORIGINAL_NODE_ENV = process.env.NODE_ENV
 const ORIGINAL_DISCOVERY_URL = process.env.DISCOVERY_URL
 
 beforeEach(() => {
   delete process.env.SERVICE_API_KEY
+  delete process.env.REGISTRY_API_KEYS
   delete process.env.DISCOVERY_URL
   process.env.NODE_ENV = 'test'
 })
@@ -16,6 +18,11 @@ afterEach(() => {
     process.env.SERVICE_API_KEY = ORIGINAL_SERVICE_API_KEY
   } else {
     delete process.env.SERVICE_API_KEY
+  }
+  if (ORIGINAL_REGISTRY_API_KEYS) {
+    process.env.REGISTRY_API_KEYS = ORIGINAL_REGISTRY_API_KEYS
+  } else {
+    delete process.env.REGISTRY_API_KEYS
   }
   if (ORIGINAL_NODE_ENV) {
     process.env.NODE_ENV = ORIGINAL_NODE_ENV
@@ -461,6 +468,40 @@ describe('Registry Service Routes', () => {
         body: JSON.stringify(TEST_CARD),
       })
       expect(res.status).toBe(201)
+    })
+
+    it('enforces scoped registry API keys when configured', async () => {
+      process.env.REGISTRY_API_KEYS = JSON.stringify([
+        { key: 'publish-key', scopes: ['registry:cards:publish'] },
+        { key: 'delete-key', scopes: ['registry:cards:delete'] },
+      ])
+
+      const publishRes = await app.request('/v1/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'publish-key' },
+        body: JSON.stringify(TEST_CARD),
+      })
+      expect(publishRes.status).toBe(201)
+
+      const deleteRes = await app.request(`/v1/cards/${encodeURIComponent(TEST_CARD.id)}`, {
+        method: 'DELETE',
+        headers: { 'X-API-Key': 'publish-key' },
+      })
+      expect(deleteRes.status).toBe(403)
+      expect((await deleteRes.json()).error).toContain('registry:cards:delete')
+    })
+
+    it('fails closed when scoped registry API keys are malformed', async () => {
+      process.env.REGISTRY_API_KEYS = '{bad-json'
+
+      const res = await app.request('/v1/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'publish-key' },
+        body: JSON.stringify(TEST_CARD),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('REGISTRY_API_KEYS must be a JSON array')
     })
   })
 })

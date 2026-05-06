@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const ORIGINAL_SERVICE_API_KEY = process.env.SERVICE_API_KEY
+const ORIGINAL_RELAY_API_KEYS = process.env.RELAY_API_KEYS
 const ORIGINAL_NODE_ENV = process.env.NODE_ENV
 
 beforeEach(() => {
   delete process.env.SERVICE_API_KEY
+  delete process.env.RELAY_API_KEYS
   process.env.NODE_ENV = 'test'
 })
 
@@ -13,6 +15,11 @@ afterEach(() => {
     process.env.SERVICE_API_KEY = ORIGINAL_SERVICE_API_KEY
   } else {
     delete process.env.SERVICE_API_KEY
+  }
+  if (ORIGINAL_RELAY_API_KEYS) {
+    process.env.RELAY_API_KEYS = ORIGINAL_RELAY_API_KEYS
+  } else {
+    delete process.env.RELAY_API_KEYS
   }
   if (ORIGINAL_NODE_ENV) {
     process.env.NODE_ENV = ORIGINAL_NODE_ENV
@@ -74,6 +81,49 @@ describe('Relay Service Routes', () => {
       expect(data.accepted).toBe(true)
       expect(data.relayId).toBeDefined()
       expect(data.expiresAt).toBeDefined()
+    })
+
+    it('enforces scoped relay API keys when configured', async () => {
+      process.env.RELAY_API_KEYS = JSON.stringify([
+        { key: 'submit-key', scopes: ['relay:messages:submit'] },
+        { key: 'delete-key', scopes: ['relay:messages:delete'] },
+      ])
+
+      const submitRes = await app.request('/v1/relay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'submit-key' },
+        body: JSON.stringify({
+          to: RECEIVER_DID,
+          from: SENDER_DID,
+          payload: { content: 'scoped message' },
+        }),
+      })
+      expect(submitRes.status).toBe(201)
+      const submitted = await submitRes.json()
+
+      const deleteRes = await app.request(`/v1/relay/${submitted.relayId}`, {
+        method: 'DELETE',
+        headers: { 'X-API-Key': 'submit-key' },
+      })
+      expect(deleteRes.status).toBe(403)
+      expect((await deleteRes.json()).error).toContain('relay:messages:delete')
+    })
+
+    it('fails closed when scoped relay API keys are malformed', async () => {
+      process.env.RELAY_API_KEYS = '{bad-json'
+
+      const res = await app.request('/v1/relay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'submit-key' },
+        body: JSON.stringify({
+          to: RECEIVER_DID,
+          from: SENDER_DID,
+          payload: { content: 'Hello from sender' },
+        }),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('RELAY_API_KEYS must be a JSON array')
     })
 
     it('returns 400 when required fields are missing', async () => {

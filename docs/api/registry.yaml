@@ -50,7 +50,9 @@ paths:
       description: |
         Publishes an AgentCard to the registry. Requires API key authentication
         with the `X-API-Key` header. In production, the endpoint returns `503`
-        when `SERVICE_API_KEY` is not configured.
+        when neither `SERVICE_API_KEY` nor `REGISTRY_API_KEYS` is configured.
+        When `REGISTRY_API_KEYS` is configured, the key must include
+        `registry:cards:publish` or `*`.
 
         If the card declares `publisher.verified: true`, the registry validates
         that claim against the discovery service before accepting the card. DNS
@@ -117,7 +119,9 @@ paths:
       summary: Delete AgentCard
       description: |
         Requires API key authentication with the `X-API-Key` header. In production,
-        the endpoint returns `503` when `SERVICE_API_KEY` is not configured.
+        the endpoint returns `503` when neither `SERVICE_API_KEY` nor
+        `REGISTRY_API_KEYS` is configured. When `REGISTRY_API_KEYS` is configured,
+        the key must include `registry:cards:delete` or `*`.
       security:
         - ApiKeyAuth: []
       parameters:
@@ -147,7 +151,9 @@ paths:
       summary: Toggle card visibility mode
       description: |
         Requires API key authentication with the `X-API-Key` header. In production,
-        the endpoint returns `503` when `SERVICE_API_KEY` is not configured.
+        the endpoint returns `503` when neither `SERVICE_API_KEY` nor
+        `REGISTRY_API_KEYS` is configured. When `REGISTRY_API_KEYS` is configured,
+        the key must include `registry:cards:mode:write` or `*`.
       security:
         - ApiKeyAuth: []
       parameters:
@@ -191,7 +197,9 @@ paths:
       summary: Update card metadata
       description: |
         Requires API key authentication with the `X-API-Key` header. In production,
-        the endpoint returns `503` when `SERVICE_API_KEY` is not configured.
+        the endpoint returns `503` when neither `SERVICE_API_KEY` nor
+        `REGISTRY_API_KEYS` is configured. When `REGISTRY_API_KEYS` is configured,
+        the key must include `registry:cards:metadata:write` or `*`.
       security:
         - ApiKeyAuth: []
       parameters:
@@ -279,6 +287,11 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
+      description: |
+        Use `SERVICE_API_KEY` for a shared service key or `REGISTRY_API_KEYS`
+        for least-privilege JSON-scoped keys. Registry scopes are
+        `registry:cards:publish`, `registry:cards:delete`,
+        `registry:cards:mode:write`, `registry:cards:metadata:write`, and `*`.
 
   schemas:
     ErrorResponse:

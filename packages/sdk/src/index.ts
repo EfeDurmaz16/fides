@@ -32,6 +32,19 @@ export { TrustLevel } from './trust/types.js'
 export { createAttestation, verifyAttestation } from './trust/attestation.js'
 export { TrustClient } from './trust/client.js'
 
+// Agent daemon exports
+export {
+  AgentdClient,
+  AgentdError,
+  type AgentdClientOptions,
+  type AuthorizationDecision,
+  type AuthorizationRequest,
+  type AuthorityPropagationListResponse,
+  type AuthorityPropagationRecord,
+  type AuthorityPropagationRetryResponse,
+  type AuthorityPropagationRetryResult,
+} from './agentd/client.js'
+
 // Security module exports
 export { RateLimiter, type RateLimiterOptions } from './security/rate-limiter.js'
 export {

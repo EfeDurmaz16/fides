@@ -39,6 +39,27 @@ await fides.trust('did:fides:...', TrustLevel.HIGH)
 const score = await fides.getReputation('did:fides:...')
 ```
 
+## agentd Client
+
+```typescript
+import { AgentdClient } from '@fides/sdk'
+
+const agentd = new AgentdClient({
+  baseUrl: 'http://localhost:7345',
+  apiKey: process.env.FIDES_API_KEY,
+})
+
+const decision = await agentd.authorize({
+  agentDid: 'did:fides:agent',
+  capabilityId: 'payments.execute',
+  sessionId: 'sess_123',
+  audience: 'agentd',
+})
+
+const pending = await agentd.listPendingPropagations(25)
+const retry = await agentd.retryPropagations(25)
+```
+
 ## API
 
 | Function | Description |
@@ -49,6 +70,9 @@ const score = await fides.getReputation('did:fides:...')
 | `verifyRequest(request, publicKey, options)` | Verify HTTP request signature |
 | `createAttestation(issuer, subject, level, key)` | Create signed trust attestation |
 | `verifyAttestation(attestation, publicKey)` | Verify attestation signature |
+| `AgentdClient.authorize(request)` | Check local agentd authorization decisions |
+| `AgentdClient.listPendingPropagations(limit)` | Inspect due authority propagation retries |
+| `AgentdClient.retryPropagations(limit)` | Replay due authority propagation records |
 
 ### Trust Levels
 

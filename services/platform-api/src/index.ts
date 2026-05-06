@@ -56,7 +56,7 @@ app.get('/metrics', (c) => {
   return c.text(collector.toPrometheus(), 200, { 'Content-Type': 'text/plain; version=0.0.4' })
 })
 
-app.get('/v1/topology', apiKeyAuth(), (c) => c.json({
+app.get('/v1/topology', apiKeyAuth('topology metadata'), (c) => c.json({
   service: 'platform-api',
   components: {
     discovery: serviceUrl('DISCOVERY_URL', SERVICE_PORTS.discovery),
@@ -68,7 +68,7 @@ app.get('/v1/topology', apiKeyAuth(), (c) => c.json({
   },
 }))
 
-app.post('/v1/passkeys/bindings', apiKeyAuth(), async (c) => {
+app.post('/v1/passkeys/bindings', apiKeyAuth('passkey credential bindings'), async (c) => {
   const body = await c.req.json()
   const binding = parsePasskeyBinding(body)
   if (!binding.ok) {
@@ -94,7 +94,7 @@ app.post('/v1/passkeys/bindings', apiKeyAuth(), async (c) => {
   return c.json({ binding: stored }, existing ? 200 : 201)
 })
 
-app.get('/v1/passkeys/principals/:did/credentials', apiKeyAuth(), async (c) => {
+app.get('/v1/passkeys/principals/:did/credentials', apiKeyAuth('passkey credential bindings'), async (c) => {
   const principalDid = c.req.param('did')
   if (!isValidFidesDid(principalDid)) {
     return c.json({ error: 'invalid principal DID' }, 400)
@@ -105,7 +105,7 @@ app.get('/v1/passkeys/principals/:did/credentials', apiKeyAuth(), async (c) => {
   return c.json({ principalDid, credentials, count: credentials.length })
 })
 
-app.get('/v1/passkeys/credentials/:credentialId', apiKeyAuth(), async (c) => {
+app.get('/v1/passkeys/credentials/:credentialId', apiKeyAuth('passkey credential bindings'), async (c) => {
   const credentialId = c.req.param('credentialId')
   const binding = await store.getPasskeyBinding(credentialId)
   if (!binding) {
@@ -114,7 +114,7 @@ app.get('/v1/passkeys/credentials/:credentialId', apiKeyAuth(), async (c) => {
   return c.json({ binding })
 })
 
-app.delete('/v1/passkeys/credentials/:credentialId', apiKeyAuth(), async (c) => {
+app.delete('/v1/passkeys/credentials/:credentialId', apiKeyAuth('passkey credential bindings'), async (c) => {
   const credentialId = c.req.param('credentialId')
   const deleted = await store.deletePasskeyBinding(credentialId)
   if (!deleted) {
@@ -123,7 +123,7 @@ app.delete('/v1/passkeys/credentials/:credentialId', apiKeyAuth(), async (c) => 
   return c.json({ success: true })
 })
 
-app.post('/v1/trust-anchors', apiKeyAuth(), async (c) => {
+app.post('/v1/trust-anchors', apiKeyAuth('trust-anchor governance'), async (c) => {
   const body = await c.req.json()
   const parsed = parseTrustAnchorRecord(body)
   if (!parsed.ok) {
@@ -142,7 +142,7 @@ app.post('/v1/trust-anchors', apiKeyAuth(), async (c) => {
   return c.json({ anchor }, existing ? 200 : 201)
 })
 
-app.get('/v1/trust-anchors', apiKeyAuth(), async (c) => {
+app.get('/v1/trust-anchors', apiKeyAuth('trust-anchor governance'), async (c) => {
   const status = c.req.query('status')
   if (status !== undefined && !isTrustAnchorStatus(status)) {
     return c.json({ error: 'status must be active, suspended, or revoked' }, 400)
@@ -155,7 +155,7 @@ app.get('/v1/trust-anchors', apiKeyAuth(), async (c) => {
   return c.json({ anchors: filtered, count: filtered.length })
 })
 
-app.get('/v1/trust-anchors/distribution', apiKeyAuth(), async (c) => {
+app.get('/v1/trust-anchors/distribution', apiKeyAuth('trust-anchor governance'), async (c) => {
   const requiredScope = c.req.query('requiredScope')
   const trustedIssuerDids = parseCsv(c.req.query('trustedIssuerDids'))
   const anchors = await store.listTrustAnchors()
@@ -173,7 +173,7 @@ app.get('/v1/trust-anchors/distribution', apiKeyAuth(), async (c) => {
   return c.json({ distribution })
 })
 
-app.get('/v1/trust-anchors/:did', apiKeyAuth(), async (c) => {
+app.get('/v1/trust-anchors/:did', apiKeyAuth('trust-anchor governance'), async (c) => {
   const did = c.req.param('did')
   const anchor = await store.getTrustAnchor(did)
   if (!anchor) {
@@ -182,7 +182,7 @@ app.get('/v1/trust-anchors/:did', apiKeyAuth(), async (c) => {
   return c.json({ anchor })
 })
 
-app.patch('/v1/trust-anchors/:did/status', apiKeyAuth(), async (c) => {
+app.patch('/v1/trust-anchors/:did/status', apiKeyAuth('trust-anchor governance'), async (c) => {
   const did = c.req.param('did')
   const existing = await store.getTrustAnchor(did)
   if (!existing) {
@@ -208,7 +208,7 @@ app.patch('/v1/trust-anchors/:did/status', apiKeyAuth(), async (c) => {
   return c.json({ anchor: updated })
 })
 
-app.delete('/v1/trust-anchors/:did', apiKeyAuth(), async (c) => {
+app.delete('/v1/trust-anchors/:did', apiKeyAuth('trust-anchor governance'), async (c) => {
   const did = c.req.param('did')
   const deleted = await store.deleteTrustAnchor(did)
   if (!deleted) {
@@ -236,13 +236,13 @@ function getCorsOrigin(): string {
   return process.env.CORS_ORIGIN || '*'
 }
 
-function apiKeyAuth(): MiddlewareHandler {
+function apiKeyAuth(productionRequirement: string): MiddlewareHandler {
   return async (c, next) => {
     const decision = evaluateApiKeyAuth({
       configuredKey: process.env.SERVICE_API_KEY,
       providedKey: c.req.header('X-API-Key'),
       nodeEnv: process.env.NODE_ENV,
-      productionRequirement: 'topology metadata',
+      productionRequirement,
     })
     if (!decision.ok) {
       return c.json({ error: decision.error }, decision.status)

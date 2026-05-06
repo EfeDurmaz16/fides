@@ -208,6 +208,62 @@ describe('platform-api service', () => {
     expect((await res.json()).error).toContain('principalDid')
   })
 
+  it('validates optional passkey credential metadata', async () => {
+    const baseBinding = {
+      principalDid: 'did:fides:principal-passkey-metadata',
+      credentialId: 'credential-passkey-metadata',
+      publicKey: 'public-key-material',
+      relyingPartyId: 'example.com',
+      signCount: 0,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    }
+
+    const invalidCases = [
+      {
+        body: { ...baseBinding, transports: ['internal', 'serial'] },
+        error: 'transports',
+      },
+      {
+        body: { ...baseBinding, backedUp: 'yes' },
+        error: 'backedUp',
+      },
+      {
+        body: { ...baseBinding, lastVerifiedAt: 'not-a-date' },
+        error: 'lastVerifiedAt',
+      },
+    ]
+
+    for (const testCase of invalidCases) {
+      const res = await app.request('/v1/passkeys/bindings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testCase.body),
+      })
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toContain(testCase.error)
+    }
+  })
+
+  it('normalizes optional passkey transports deterministically', async () => {
+    const res = await app.request('/v1/passkeys/bindings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        principalDid: 'did:fides:principal-passkey-transports',
+        credentialId: 'credential-passkey-transports',
+        publicKey: 'public-key-material',
+        relyingPartyId: 'example.com',
+        signCount: 0,
+        transports: ['usb', 'internal', 'usb'],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }),
+    })
+
+    expect(res.status).toBe(201)
+    expect((await res.json()).binding.transports).toEqual(['internal', 'usb'])
+  })
+
   it('requires API key for passkey bindings in production', async () => {
     const previousNodeEnv = process.env.NODE_ENV
     const previousApiKey = process.env.SERVICE_API_KEY

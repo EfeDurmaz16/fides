@@ -26,6 +26,7 @@ const SERVICE_PORTS = {
   relay: 7347,
   agentd: 7345,
 } as const
+const PASSKEY_TRANSPORTS = ['ble', 'hybrid', 'internal', 'nfc', 'usb'] as const
 
 app.use('*', metricsMiddleware(collector))
 app.use('*', cors({ origin: getCorsOrigin() }))
@@ -275,6 +276,16 @@ function parsePasskeyBinding(body: unknown): { ok: true; value: PasskeyCredentia
   if (typeof input.createdAt !== 'string' || Number.isNaN(Date.parse(input.createdAt))) {
     return { ok: false, error: 'createdAt must be an ISO 8601 timestamp' }
   }
+  if (input.lastVerifiedAt !== undefined && (typeof input.lastVerifiedAt !== 'string' || Number.isNaN(Date.parse(input.lastVerifiedAt)))) {
+    return { ok: false, error: 'lastVerifiedAt must be an ISO 8601 timestamp' }
+  }
+  const transports = parsePasskeyTransports(input.transports)
+  if (!transports.ok) {
+    return transports
+  }
+  if (input.backedUp !== undefined && typeof input.backedUp !== 'boolean') {
+    return { ok: false, error: 'backedUp must be a boolean' }
+  }
 
   return {
     ok: true,
@@ -284,12 +295,29 @@ function parsePasskeyBinding(body: unknown): { ok: true; value: PasskeyCredentia
       publicKey: input.publicKey.trim(),
       relyingPartyId: input.relyingPartyId.trim().toLowerCase(),
       signCount,
-      transports: input.transports,
+      transports: transports.value,
       backedUp: input.backedUp,
       createdAt: input.createdAt,
       lastVerifiedAt: input.lastVerifiedAt,
     },
   }
+}
+
+function parsePasskeyTransports(input: unknown): { ok: true; value?: PasskeyCredentialBinding['transports'] } | { ok: false; error: string } {
+  if (input === undefined) {
+    return { ok: true, value: undefined }
+  }
+  if (!Array.isArray(input)) {
+    return { ok: false, error: 'transports must be an array of WebAuthn transport strings' }
+  }
+  if (input.some(transport => typeof transport !== 'string' || !isPasskeyTransport(transport))) {
+    return { ok: false, error: `transports must only contain ${PASSKEY_TRANSPORTS.join(', ')}` }
+  }
+  return { ok: true, value: [...new Set(input)].sort() as PasskeyCredentialBinding['transports'] }
+}
+
+function isPasskeyTransport(value: string): value is NonNullable<PasskeyCredentialBinding['transports']>[number] {
+  return PASSKEY_TRANSPORTS.some(transport => transport === value)
 }
 
 function parseTrustAnchorRecord(body: unknown): { ok: true; value: PlatformTrustAnchorRecord } | { ok: false; error: string } {

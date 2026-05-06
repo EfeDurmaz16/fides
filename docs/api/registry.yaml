@@ -51,6 +51,11 @@ paths:
         Publishes an AgentCard to the registry. Requires API key authentication
         with the `X-API-Key` header. In production, the endpoint returns `503`
         when `SERVICE_API_KEY` is not configured.
+
+        If the card declares `publisher.verified: true`, the registry validates
+        that claim against the discovery service before accepting the card. DNS
+        verified publishers must have matching `did`, `domain`, `domainVerified`,
+        and `verificationMethod` state in discovery.
       security:
         - ApiKeyAuth: []
       requestBody:
@@ -70,6 +75,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
         "429":
@@ -322,7 +329,7 @@ components:
         version:
           type: string
         publisher:
-          type: string
+          $ref: "#/components/schemas/PublisherIdentity"
         homepage:
           type: string
           format: uri
@@ -343,6 +350,28 @@ components:
           $ref: "#/components/schemas/SecurityProfile"
         metadata:
           type: object
+
+    PublisherIdentity:
+      type: object
+      required: [did, name, verified, verificationMethod]
+      properties:
+        did:
+          type: string
+          description: DID of the publisher
+          example: "did:fides:publisher-01"
+        name:
+          type: string
+          example: "Example Publisher"
+        domain:
+          type: string
+          example: "example.com"
+        verified:
+          type: boolean
+          description: Whether the publisher identity is verified
+        verificationMethod:
+          type: string
+          enum: [dns, github, email, manual]
+          description: Method used to verify the publisher identity
 
     CapabilityDescriptor:
       type: object
@@ -448,6 +477,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     Unauthorized:
       description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnprocessableEntity:
+      description: Request is syntactically valid but violates registry verification rules
       content:
         application/json:
           schema:

@@ -20,6 +20,20 @@ const app = new Hono()
 const collector = new MetricsCollector()
 const registry = createRegistryStore()
 
+type PublisherClaim = {
+  did?: unknown
+  domain?: unknown
+  verified?: unknown
+  verificationMethod?: unknown
+}
+
+type DiscoveryIdentityResponse = {
+  did?: unknown
+  domain?: unknown
+  domainVerified?: unknown
+  verificationMethod?: unknown
+}
+
 function getCorsOrigin(): string {
   const corsOrigin = process.env.CORS_ORIGIN
   if (process.env.NODE_ENV === 'production') {
@@ -29,6 +43,58 @@ function getCorsOrigin(): string {
     return corsOrigin || 'https://localhost'
   }
   return corsOrigin || '*'
+}
+
+function getDiscoveryUrl(): string {
+  return (process.env.DISCOVERY_URL || 'http://localhost:7347').replace(/\/+$/, '')
+}
+
+function extractPublisherClaim(card: Record<string, unknown>): PublisherClaim | null {
+  const payload = card.payload as Record<string, unknown> | undefined
+  const publisher = card.publisher ?? payload?.publisher
+  if (!publisher || typeof publisher !== 'object' || Array.isArray(publisher)) {
+    return null
+  }
+  return publisher as PublisherClaim
+}
+
+async function verifyPublisherClaim(card: Record<string, unknown>): Promise<{ ok: true } | { ok: false; status: 422; error: string }> {
+  const publisher = extractPublisherClaim(card)
+  if (!publisher || publisher.verified !== true) {
+    return { ok: true }
+  }
+
+  if (publisher.verificationMethod !== 'dns') {
+    return { ok: false, status: 422, error: 'verified publisher claims must use dns verification' }
+  }
+  if (typeof publisher.did !== 'string' || !publisher.did) {
+    return { ok: false, status: 422, error: 'verified publisher claims require publisher.did' }
+  }
+  if (typeof publisher.domain !== 'string' || !publisher.domain) {
+    return { ok: false, status: 422, error: 'verified publisher claims require publisher.domain' }
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`${getDiscoveryUrl()}/identities/${encodeURIComponent(publisher.did)}`)
+  } catch {
+    return { ok: false, status: 422, error: 'publisher identity is not registered or not reachable in discovery' }
+  }
+  if (!response.ok) {
+    return { ok: false, status: 422, error: 'publisher identity is not registered or not reachable in discovery' }
+  }
+
+  const identity = await response.json() as DiscoveryIdentityResponse
+  if (
+    identity.did !== publisher.did ||
+    identity.domain !== publisher.domain ||
+    identity.domainVerified !== true ||
+    identity.verificationMethod !== 'dns'
+  ) {
+    return { ok: false, status: 422, error: 'publisher domain verification claim does not match discovery state' }
+  }
+
+  return { ok: true }
 }
 
 // Global middleware stack
@@ -82,6 +148,11 @@ app.post('/v1/cards', async (c) => {
   const did = body.id || body.payload?.id
   if (!did) {
     return c.json({ error: 'id is required' }, 400)
+  }
+
+  const publisherVerification = await verifyPublisherClaim(body)
+  if (!publisherVerification.ok) {
+    return c.json({ error: publisherVerification.error }, publisherVerification.status)
   }
 
   const now = new Date().toISOString()

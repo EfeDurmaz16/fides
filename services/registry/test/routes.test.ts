@@ -2,13 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const ORIGINAL_SERVICE_API_KEY = process.env.SERVICE_API_KEY
 const ORIGINAL_NODE_ENV = process.env.NODE_ENV
+const ORIGINAL_DISCOVERY_URL = process.env.DISCOVERY_URL
 
 beforeEach(() => {
   delete process.env.SERVICE_API_KEY
+  delete process.env.DISCOVERY_URL
   process.env.NODE_ENV = 'test'
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   if (ORIGINAL_SERVICE_API_KEY) {
     process.env.SERVICE_API_KEY = ORIGINAL_SERVICE_API_KEY
   } else {
@@ -18,6 +21,11 @@ afterEach(() => {
     process.env.NODE_ENV = ORIGINAL_NODE_ENV
   } else {
     delete process.env.NODE_ENV
+  }
+  if (ORIGINAL_DISCOVERY_URL) {
+    process.env.DISCOVERY_URL = ORIGINAL_DISCOVERY_URL
+  } else {
+    delete process.env.DISCOVERY_URL
   }
 })
 
@@ -92,6 +100,84 @@ describe('Registry Service Routes', () => {
       expect(res.status).toBe(400)
       const data = await res.json()
       expect(data.error).toContain('id is required')
+    })
+
+    it('allows a DNS-verified publisher claim when discovery state matches', async () => {
+      process.env.DISCOVERY_URL = 'https://discovery.test'
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+        did: 'did:fides:publisher-01',
+        domain: 'example.com',
+        domainVerified: true,
+        verificationMethod: 'dns',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+
+      const res = await app.request('/v1/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...TEST_CARD,
+          publisher: {
+            did: 'did:fides:publisher-01',
+            name: 'Example Publisher',
+            domain: 'example.com',
+            verified: true,
+            verificationMethod: 'dns',
+          },
+        }),
+      })
+
+      expect(res.status).toBe(201)
+      expect(fetchMock).toHaveBeenCalledWith('https://discovery.test/identities/did%3Afides%3Apublisher-01')
+    })
+
+    it('rejects a verified publisher claim when discovery state does not match', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+        did: 'did:fides:publisher-01',
+        domain: 'other.example',
+        domainVerified: true,
+        verificationMethod: 'dns',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+
+      const res = await app.request('/v1/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...TEST_CARD,
+          publisher: {
+            did: 'did:fides:publisher-01',
+            name: 'Example Publisher',
+            domain: 'example.com',
+            verified: true,
+            verificationMethod: 'dns',
+          },
+        }),
+      })
+
+      expect(res.status).toBe(422)
+      const data = await res.json()
+      expect(data.error).toContain('does not match discovery state')
+    })
+
+    it('rejects verified publisher claims without a DNS verification method', async () => {
+      const res = await app.request('/v1/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...TEST_CARD,
+          publisher: {
+            did: 'did:fides:publisher-01',
+            name: 'Example Publisher',
+            domain: 'example.com',
+            verified: true,
+            verificationMethod: 'manual',
+          },
+        }),
+      })
+
+      expect(res.status).toBe(422)
+      expect(await res.json()).toEqual({
+        error: 'verified publisher claims must use dns verification',
+      })
     })
   })
 

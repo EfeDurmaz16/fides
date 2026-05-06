@@ -33,9 +33,67 @@ describe('platform-api service', () => {
       discovery: 'http://localhost:3100',
       trustGraph: 'http://localhost:3200',
       policyEngine: 'http://localhost:3300',
-      registry: 'http://localhost:3400',
-      relay: 'http://localhost:3500',
+      registry: 'http://localhost:7346',
+      relay: 'http://localhost:7347',
       agentd: 'http://localhost:7345',
     })
   })
+
+  it('requires an API key for topology metadata in production', async () => {
+    const previousNodeEnv = process.env.NODE_ENV
+    const previousApiKey = process.env.SERVICE_API_KEY
+    process.env.NODE_ENV = 'production'
+    delete process.env.SERVICE_API_KEY
+
+    try {
+      const res = await app.request('/v1/topology')
+
+      expect(res.status).toBe(503)
+      const data = await res.json()
+      expect(data.error).toContain('SERVICE_API_KEY is required')
+    } finally {
+      restoreEnv('NODE_ENV', previousNodeEnv)
+      restoreEnv('SERVICE_API_KEY', previousApiKey)
+    }
+  })
+
+  it('rejects invalid API keys when topology auth is configured', async () => {
+    const previousApiKey = process.env.SERVICE_API_KEY
+    process.env.SERVICE_API_KEY = 'expected-key'
+
+    try {
+      const res = await app.request('/v1/topology', {
+        headers: { 'X-API-Key': 'wrong-key' },
+      })
+
+      expect(res.status).toBe(401)
+    } finally {
+      restoreEnv('SERVICE_API_KEY', previousApiKey)
+    }
+  })
+
+  it('accepts valid API keys when topology auth is configured', async () => {
+    const previousApiKey = process.env.SERVICE_API_KEY
+    process.env.SERVICE_API_KEY = 'expected-key'
+
+    try {
+      const res = await app.request('/v1/topology', {
+        headers: { 'X-API-Key': 'expected-key' },
+      })
+
+      expect(res.status).toBe(200)
+      const data = await res.json()
+      expect(data.components.agentd).toBe('http://localhost:7345')
+    } finally {
+      restoreEnv('SERVICE_API_KEY', previousApiKey)
+    }
+  })
 })
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name]
+  } else {
+    process.env[name] = value
+  }
+}

@@ -13,7 +13,7 @@ import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
-import { apiKeyAuth } from './middleware/auth.js'
+import { apiKeyAuth, registryScopeForRequest } from './middleware/auth.js'
 import { createRegistryStore } from './storage.js'
 
 const app = new Hono()
@@ -163,7 +163,7 @@ app.use('*', cors({
 // Auth on mutating endpoints (skip GET /health)
 app.use('/v1/*', async (c, next) => {
   if (c.req.method === 'GET') return next()
-  const auth = apiKeyAuth()
+  const auth = apiKeyAuth(registryScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
 })
 app.post('*', rateLimitMiddleware({ maxRequests: 100, windowMs: 60_000 }))

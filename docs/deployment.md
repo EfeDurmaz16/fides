@@ -45,6 +45,12 @@ cp .env.example .env
 | --------------------------- | ------- | -------- | ----------- |
 | `DISCOVERY_DB_AUTO_MIGRATE` | `true`  | no | Runs idempotent discovery migrations on startup and records applied ids plus checksums in `discovery_schema_migrations`. Set `false` when migrations are managed externally. |
 
+### Trust Graph Store
+
+| Variable                      | Default | Required | Description |
+| ----------------------------- | ------- | -------- | ----------- |
+| `TRUST_GRAPH_DB_AUTO_MIGRATE` | `true`  | no | Runs idempotent trust graph migrations on startup and records applied ids plus checksums in `trust_graph_schema_migrations`. Set `false` when migrations are managed externally. |
+
 ### Agentd Authority Store
 
 | Variable                  | Default | Required | Description |
@@ -405,9 +411,10 @@ fides.example.com {
 5. Set `LOG_LEVEL=warn` to reduce noise, use `LOG_FORMAT=json` for log aggregation
 6. Run PostgreSQL with TLS if accessed over untrusted networks
 7. Run `pnpm --filter @fides/discovery-service db:migrate` before setting `DISCOVERY_DB_AUTO_MIGRATE=false`
-8. Run `pnpm --filter @fides/agentd db:migrate` before setting `AGENTD_DB_AUTO_MIGRATE=false`
-9. Set `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true` once clients send signer public keys with delegated session, revocation, and incident writes
-10. Rotate `SERVICE_API_KEY` periodically
+8. Run `pnpm --filter @fides/trust-graph db:migrate` before setting `TRUST_GRAPH_DB_AUTO_MIGRATE=false`
+9. Run `pnpm --filter @fides/agentd db:migrate` before setting `AGENTD_DB_AUTO_MIGRATE=false`
+10. Set `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true` once clients send signer public keys with delegated session, revocation, and incident writes
+11. Rotate `SERVICE_API_KEY` periodically
 
 ---
 

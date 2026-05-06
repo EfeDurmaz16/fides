@@ -359,6 +359,7 @@ export class TrustService {
    * Record a capability invocation.
    */
   async recordCapabilityInvocation(db: DbClient, did: string, capabilityId: string): Promise<void> {
+    await this.ensureIdentity(db, did)
     return recordCapabilityInvocation(db, did, capabilityId)
   }
 

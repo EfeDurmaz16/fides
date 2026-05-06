@@ -189,6 +189,7 @@ describe('HTTP Routes', () => {
       process.env.TRUST_GRAPH_API_KEYS = JSON.stringify([
         { key: 'invoke-key', scopes: ['trust:capability:invoke'] },
       ])
+      mockIdentity(new Uint8Array(32).fill(1))
 
       const app = createTrustRoutes(mockDb)
       const res = await app.request('/v1/trust/did:fides:agent/capability/payments.execute/invoke', {
@@ -198,6 +199,54 @@ describe('HTTP Routes', () => {
 
       expect(res.status).toBe(201)
       expect(await res.json()).toEqual({ ok: true })
+    })
+
+    it('returns 404 for capability invocation when identity is absent from discovery', async () => {
+      process.env.TRUST_GRAPH_API_KEYS = JSON.stringify([
+        { key: 'invoke-key', scopes: ['trust:capability:invoke'] },
+      ])
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('not found', { status: 404 }))))
+
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb, 'http://discovery.test')
+      const res = await app.request('/v1/trust/did:fides:missing/capability/payments.execute/invoke', {
+        method: 'POST',
+        headers: { 'X-API-Key': 'invoke-key' },
+      })
+
+      expect(res.status).toBe(404)
+      expect((await res.json()).error).toContain('Identity not found: did:fides:missing')
+    })
+
+    it('returns 503 for capability invocation when discovery is unavailable', async () => {
+      process.env.TRUST_GRAPH_API_KEYS = JSON.stringify([
+        { key: 'invoke-key', scopes: ['trust:capability:invoke'] },
+      ])
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('unavailable', { status: 503 }))))
+
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb, 'http://discovery.test')
+      const res = await app.request('/v1/trust/did:fides:missing/capability/payments.execute/invoke', {
+        method: 'POST',
+        headers: { 'X-API-Key': 'invoke-key' },
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('Discovery service unavailable')
     })
 
     it('allows revocation writes with the revocations write scope', async () => {

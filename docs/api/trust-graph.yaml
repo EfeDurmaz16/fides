@@ -170,6 +170,8 @@ paths:
       summary: Record a capability invocation
       description: |
         Increments the invocation counter for capability-scoring purposes.
+        Resolves the DID through discovery before writing invocation state.
+        Unknown identities return `404`; discovery outages return `503`.
         Requires API key authentication with the `X-API-Key` header. When
         `TRUST_GRAPH_API_KEYS` is configured, the key must include
         `trust:capability:invoke` or `*`.
@@ -193,6 +195,10 @@ paths:
                   ok:
                     type: boolean
                     example: true
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
 

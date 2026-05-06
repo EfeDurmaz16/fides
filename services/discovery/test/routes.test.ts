@@ -15,6 +15,10 @@ vi.mock('../src/db/client.js', () => {
     domainVerified: false,
     domainVerifiedAt: null,
     verificationMethod: null,
+    organizationDomain: null,
+    organizationDomainVerified: false,
+    organizationDomainVerifiedAt: null,
+    organizationVerificationMethod: null,
     createdAt: new Date('2024-01-01T00:00:00.000Z'),
     updatedAt: new Date('2024-01-01T00:00:00.000Z'),
   }
@@ -38,6 +42,10 @@ vi.mock('../src/db/client.js', () => {
             domainVerified: true,
             domainVerifiedAt: new Date('2024-01-02T00:00:00.000Z'),
             verificationMethod: 'dns',
+            organizationDomain: 'example.com',
+            organizationDomainVerified: true,
+            organizationDomainVerifiedAt: new Date('2024-01-02T00:00:00.000Z'),
+            organizationVerificationMethod: 'dns',
             updatedAt: new Date('2024-01-02T00:00:00.000Z'),
           }]),
         }),
@@ -87,6 +95,7 @@ describe('Discovery Service Routes', () => {
         publicKey: TEST_PUBLIC_KEY,
         metadata: {},
         domainVerified: false,
+        organizationDomainVerified: false,
       })
     })
 
@@ -156,6 +165,7 @@ describe('Discovery Service Routes', () => {
         did: TEST_DID,
         publicKey: TEST_PUBLIC_KEY,
         domainVerified: false,
+        organizationDomainVerified: false,
       })
     })
 
@@ -215,6 +225,63 @@ describe('Discovery Service Routes', () => {
       vi.mocked(dns.resolveTxt).mockResolvedValue(['other=value'])
 
       const req = new Request(`http://localhost/identities/${encodeURIComponent(TEST_DID)}/domain/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'example.com' }),
+      })
+
+      const res = await app.fetch(req)
+
+      expect(res.status).toBe(422)
+      const data = await res.json()
+      expect(data).toMatchObject({
+        domain: 'example.com',
+        did: TEST_DID,
+        verified: false,
+        reason: 'record-not-found',
+        persisted: false,
+      })
+
+      const { db } = await import('../src/db/client.js')
+      expect(db.update).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('POST /identities/:did/organization-domain/verify', () => {
+    it('verifies and persists organization domain ownership', async () => {
+      const dns = await import('node:dns/promises')
+      vi.mocked(dns.resolveTxt).mockResolvedValue([['fides-org-did=', TEST_DID]])
+
+      const req = new Request(`http://localhost/identities/${encodeURIComponent(TEST_DID)}/organization-domain/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'Example.COM.' }),
+      })
+
+      const res = await app.fetch(req)
+
+      expect(res.status).toBe(200)
+      expect(dns.resolveTxt).toHaveBeenCalledWith('_fides-org.example.com')
+      const data = await res.json()
+      expect(data).toMatchObject({
+        did: TEST_DID,
+        organizationDomain: 'example.com',
+        organizationDomainVerified: true,
+        organizationVerificationMethod: 'dns',
+        verification: {
+          domain: 'example.com',
+          did: TEST_DID,
+          recordName: '_fides-org.example.com',
+          verified: true,
+        },
+      })
+    })
+
+    it('does not persist when organization DNS verification fails', async () => {
+      const dns = await import('node:dns/promises')
+      vi.mocked(dns.resolveTxt).mockResolvedValue(['fides-did=' + TEST_DID])
+
+      const req = new Request(`http://localhost/identities/${encodeURIComponent(TEST_DID)}/organization-domain/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ domain: 'example.com' }),

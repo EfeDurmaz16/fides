@@ -149,6 +149,7 @@ await relay.deleteMessage(accepted.relayId)
 | `AgentdClient.getCard(did)` | Read an AgentCard through agentd, preserving private versus missing card errors |
 | `AgentdClient.verifyDomain(domain, did)` | Verify a domain-to-DID DNS TXT binding through agentd |
 | `DiscoveryClient.verifyDomain(did, domain?)` | Verify and persist a registered identity domain in discovery |
+| `DiscoveryClient.verifyOrganizationDomain(did, domain?)` | Verify and persist a registered organization domain in discovery |
 | `AgentdClient.createSession(request)` | Create delegated agentd sessions |
 | `AgentdClient.createSignedSession(options)` | Create and sign a delegation token before opening a session |
 | `AgentdClient.recordRevocation(request)` | Submit signed authority revocations |

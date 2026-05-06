@@ -88,12 +88,16 @@ services:
       - "7347:7347"
     environment:
       RELAY_PORT: "7347"
+      RELAY_STORE: ${RELAY_STORE:-file}
+      RELAY_STORE_PATH: ${RELAY_STORE_PATH:-/data/fides/relay/relay-store.json}
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       SERVICE_API_KEY: ${SERVICE_API_KEY:-}
       RELAY_API_KEYS: ${RELAY_API_KEYS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
+    volumes:
+      - relay_data:/data/fides/relay
 
   policy-engine:
     build:
@@ -173,3 +177,4 @@ services:
 
 volumes:
   postgres_data:
+  relay_data:

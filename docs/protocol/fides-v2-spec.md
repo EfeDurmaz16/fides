@@ -538,7 +538,7 @@ Central registry for agent registration and capability publishing.
 
 ### 14.1 Purpose
 
-Message relay for agents behind NAT/firewalls or with dynamic addresses.
+Message relay for agents behind NAT/firewalls or with dynamic addresses. Relay deployments can use process-local memory for lightweight development or a schema-versioned file snapshot for durable production restarts.
 
 ### 14.2 API (Stub)
 

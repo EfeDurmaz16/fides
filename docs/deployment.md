@@ -15,7 +15,7 @@
 | `trust-graph`| 3200  | PostgreSQL     | Web-of-trust scoring                     |
 | `policy-engine` | 3300 | None          | Deterministic policy evaluation          |
 | `registry`   | 7346  | PostgreSQL or file | AgentCard registry with durable hosted storage |
-| `relay`      | 7347  | In-memory      | Message relay for NAT/firewall traversal |
+| `relay`      | 7347  | File or memory | Message relay for NAT/firewall traversal |
 | `agentd`     | 7345  | PostgreSQL or file | Local daemon unifying all services and durable authority state |
 | `platform-api` | 3600 | None          | Platform health, version, and topology metadata |
 
@@ -71,6 +71,13 @@ cp .env.example .env
 | `REGISTRY_DB_AUTO_MIGRATE`| `true`  | no | Runs idempotent registry migrations on startup and records applied ids plus checksums in `registry_schema_migrations`. Set `false` when migrations are managed externally. |
 | `REGISTRY_DB_POOL_MAX`    | `10`    | no | Registry store connection pool size. Falls back to `DB_POOL_MAX`. |
 | `REGISTRY_STORE_PATH`     | _(empty)_ | no | File registry store path. Defaults to `~/.fides/registry/registry.json`. |
+
+### Relay Store
+
+| Variable           | Default | Required | Description |
+| ------------------ | ------- | -------- | ----------- |
+| `RELAY_STORE`      | `memory` in development, `file` in production and Docker Compose | production | `memory` for process-local queues, `file` for schema-versioned JSON snapshots. |
+| `RELAY_STORE_PATH` | _(empty)_ | no | File relay store path. Defaults to `~/.fides/relay/relay-store.json`; Docker Compose uses `/data/fides/relay/relay-store.json`. |
 
 ### Service Ports
 
@@ -153,7 +160,7 @@ curl http://localhost:3600/health
 docker compose logs -f
 ```
 
-This starts PostgreSQL, discovery, trust-graph, policy-engine, registry, relay, agentd, and platform-api — all pre-configured for inter-service communication. In Docker Compose, `agentd` uses the same PostgreSQL container for durable authority state unless `AGENTD_DATABASE_URL` points at a dedicated database.
+This starts PostgreSQL, discovery, trust-graph, policy-engine, registry, relay, agentd, and platform-api — all pre-configured for inter-service communication. In Docker Compose, `agentd` uses the same PostgreSQL container for durable authority state unless `AGENTD_DATABASE_URL` points at a dedicated database, and relay uses the `relay_data` volume for file-backed message state.
 
 ### Development Mode
 
@@ -219,8 +226,10 @@ export POLICY_ENGINE_PORT=3300
 export NODE_ENV=production
 node services/policy-engine/dist/index.js
 
-# Terminal 5 — Relay (no database needed)
+# Terminal 5 — Relay (file-backed by default in production)
 export RELAY_PORT=7347
+export RELAY_STORE=file
+export RELAY_STORE_PATH="$HOME/.fides/relay/relay-store.json"
 export NODE_ENV=production
 node services/relay/dist/index.js
 
@@ -292,7 +301,7 @@ Expected responses:
 - `trust-graph`: `{"status":"healthy",...}` — depends on PostgreSQL connectivity
 - `policy-engine`: `{"status":"healthy",...}` — deterministic evaluator is ready
 - `registry`: `{"status":"healthy",...}` — depends on the configured registry store; inspect `checks.store.kind` for `postgres` or `file`
-- `relay`: `{"status":"healthy",...}` — always healthy (in-memory)
+- `relay`: `{"status":"healthy",...}` — inspect `store` for `file` or `memory`
 - `agentd`: `{"status":"healthy",...}` — depends on upstream services and authority store readiness
 - `platform-api`: `{"status":"healthy",...}` — topology metadata endpoint is ready
 
@@ -470,9 +479,27 @@ Restore:
 cat registry-backup.json | docker compose run --rm -T registry sh -c 'cat > /home/fides/.fides/registry/registry.json'
 ```
 
-### Relay (in-memory only)
+### Relay
 
-The relay stores messages in memory only — no backup needed. Messages have a default TTL of 5 minutes.
+When `RELAY_STORE=file`, the relay stores messages at `~/.fides/relay/relay-store.json` by default. The snapshot is schema-versioned JSON and is written through an atomic temp-file rename. Back up this file:
+
+```bash
+cp ~/.fides/relay/relay-store.json ~/fides-relay-backup-$(date +%Y%m%d).json
+```
+
+In Docker Compose, the volume `relay_data` persists this. Back it up:
+
+```bash
+docker compose run --rm relay cat /data/fides/relay/relay-store.json > relay-backup.json
+```
+
+Restore:
+
+```bash
+cat relay-backup.json | docker compose run --rm -T relay sh -c 'mkdir -p /data/fides/relay && cat > /data/fides/relay/relay-store.json'
+```
+
+When `RELAY_STORE=memory`, relay messages are process-local and disappear on restart. Messages still have a default TTL of 5 minutes.
 
 ---
 
@@ -568,7 +595,7 @@ registry ───────────────────────�
   (PostgreSQL in production)    │
                                 │
 relay ──────────────────────────┘
-  (standalone, in-memory)
+  (standalone, file or memory)
 
 policy-engine ──────────────── platform-api
   (standalone evaluator)        (metadata over service URLs)
@@ -578,7 +605,7 @@ policy-engine ──────────────── platform-api
 - `trust-graph` additionally requires `discovery` for identity resolution
 - `policy-engine` is standalone — deterministic policy evaluation
 - `registry` stores AgentCards in PostgreSQL by default in Docker Compose and can fall back to a local JSON file for development
-- `relay` is standalone — pure in-memory message queue
+- `relay` is standalone — file-backed by default in Docker/production, memory-backed for lightweight development
 - `agentd` is a local proxy that depends on discovery, trust-graph, and registry
 - `platform-api` is standalone metadata over configured service URLs
 

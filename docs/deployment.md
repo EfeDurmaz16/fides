@@ -60,6 +60,7 @@ cp .env.example .env
 | `AGENTD_AUTHORITY_STORE`  | `file`  | production | `file` for local JSON state, `postgres` for durable authority state |
 | `AGENTD_DATABASE_URL`     | _(empty)_ | production when `AGENTD_AUTHORITY_STORE=postgres` | Dedicated agentd authority database URL. Falls back to `DATABASE_URL` when unset. |
 | `AGENTD_DB_AUTO_MIGRATE`  | `true`  | no | Runs idempotent authority migrations on startup and records applied ids in `agentd_schema_migrations`. Set `false` when migrations are managed externally. |
+| `AGENTD_DB_SCHEMA`        | `agentd` in Docker Compose, otherwise _(empty)_ | no | Optional Postgres schema name for agentd authority tables when multiple services share one database. Must be a simple identifier. |
 | `AGENTD_DB_POOL_MAX`      | `10`    | no | Agentd authority store connection pool size. Falls back to `DB_POOL_MAX`. |
 | `AGENTD_STATE_STORE_PATH` | _(empty)_ | no | File authority store path. Defaults to `~/.fides/agentd/authority-store.json`. |
 | `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION` | `true` in production, `false` otherwise | no | When `true`, agentd rejects delegation, revocation, and incident writes unless the request includes the corresponding signer public key for canonical signature verification. Set `false` only for transitional deployments that cannot yet send signer public keys. |

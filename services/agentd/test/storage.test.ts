@@ -10,6 +10,7 @@ import {
   FileAuthorityStore,
   InMemoryAuthorityStore,
   PostgresAuthorityStore,
+  createAuthorityClient,
   runAuthorityMigrations,
 } from '../src/storage.js'
 
@@ -138,6 +139,23 @@ describe('agentd authority stores', () => {
     expect((await store.getSession(grant.id))?.revocationReason).toBe('manual')
   })
 
+  it('rejects unsafe configured authority schema names', () => {
+    const previousSchema = process.env.AGENTD_DB_SCHEMA
+
+    try {
+      process.env.AGENTD_DB_SCHEMA = 'agentd;DROP'
+      expect(() => createAuthorityClient('postgresql://fides:fides@localhost:5432/fides')).toThrow(
+        'AGENTD_DB_SCHEMA must be a simple Postgres identifier',
+      )
+    } finally {
+      if (previousSchema === undefined) {
+        delete process.env.AGENTD_DB_SCHEMA
+      } else {
+        process.env.AGENTD_DB_SCHEMA = previousSchema
+      }
+    }
+  })
+
   describe.skipIf(!postgresUrl && !postgresTestRequired)('postgres authority store', () => {
     if (!postgresUrl) {
       it('requires AGENTD_DATABASE_URL or DATABASE_URL when Postgres tests are mandatory', () => {
@@ -166,6 +184,55 @@ describe('agentd authority stores', () => {
         expect(rows.every(row => typeof row.checksum === 'string' && row.checksum.length === 64)).toBe(true)
       } finally {
         await sql.end()
+      }
+    }, 30_000)
+
+    it('creates and uses the configured authority schema', async () => {
+      const schema = `agentd_configured_${crypto.randomUUID().replaceAll('-', '')}`
+      const schemaIdentifier = quoteIdentifier(schema)
+      const adminSql = postgres(postgresUrl, { max: 1 })
+      const scopedUrl = postgresUrlWithSearchPath(postgresUrl, schema)
+      const scopedSql = postgres(scopedUrl, { max: 1 })
+      const previousSchema = process.env.AGENTD_DB_SCHEMA
+
+      try {
+        process.env.AGENTD_DB_SCHEMA = schema
+        await runAuthorityMigrations(scopedSql)
+
+        const schemaRows = await adminSql`
+          SELECT schema_name
+          FROM information_schema.schemata
+          WHERE schema_name = ${schema}
+        `
+        expect(schemaRows).toHaveLength(1)
+
+        const tableRows = await adminSql`
+          SELECT table_name
+          FROM information_schema.tables
+          WHERE table_schema = ${schema}
+            AND table_name IN (
+              'agentd_delegation_nonces',
+              'agentd_sessions',
+              'agentd_evidence_chains',
+              'agentd_revocations',
+              'agentd_incidents',
+              'agentd_authority_propagations',
+              'agentd_schema_migrations'
+            )
+        `
+        expect(tableRows).toHaveLength(7)
+
+        const currentSchema = await scopedSql`SELECT current_schema() AS schema`
+        expect(currentSchema[0]?.schema).toBe(schema)
+      } finally {
+        if (previousSchema === undefined) {
+          delete process.env.AGENTD_DB_SCHEMA
+        } else {
+          process.env.AGENTD_DB_SCHEMA = previousSchema
+        }
+        await scopedSql.end()
+        await adminSql.unsafe(`DROP SCHEMA IF EXISTS ${schemaIdentifier} CASCADE`)
+        await adminSql.end()
       }
     }, 30_000)
 

@@ -13,9 +13,11 @@ const execFileAsync = promisify(execFile)
 const services = {
   discovery: 'http://127.0.0.1:3100',
   trustGraph: 'http://127.0.0.1:3200',
+  policyEngine: 'http://127.0.0.1:3300',
   registry: 'http://127.0.0.1:7346',
   relay: 'http://127.0.0.1:7347',
   agentd: 'http://127.0.0.1:7345',
+  platformApi: 'http://127.0.0.1:3600',
 } as const
 
 const serviceApiKey = process.env.SERVICE_API_KEY
@@ -28,9 +30,20 @@ async function main() {
   }
 
   await assertAgentdUsesPostgres()
+  await assertPlatformTopology()
   await runAuthorityFlow()
 
   console.log('docker compose smoke complete')
+}
+
+async function assertPlatformTopology() {
+  const response = await fetch(`${services.platformApi}/v1/topology`)
+  await expectStatus(response, 200, 'read platform topology')
+  const body = await response.json() as { components?: Record<string, string> }
+  if (body.components?.agentd !== 'http://agentd:7345') {
+    throw new Error(`platform topology did not expose docker agentd URL: ${JSON.stringify(body)}`)
+  }
+  console.log('ok platform topology exposes docker service URLs')
 }
 
 async function runAuthorityFlow() {

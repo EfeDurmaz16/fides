@@ -43,11 +43,33 @@ services:
     environment:
       NODE_ENV: development
 
+  policy-engine:
+    build: !reset null
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm --filter @fides/policy-engine dev"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+
   agentd:
     build: !reset null
     image: node:22-alpine
     working_dir: /app
     command: sh -c "corepack enable && pnpm --filter @fides/agentd dev"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+
+  platform-api:
+    build: !reset null
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm --filter @fides/platform-api dev"
     volumes:
       - .:/app
       - /app/node_modules

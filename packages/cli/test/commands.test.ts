@@ -51,6 +51,10 @@ vi.mock('node:child_process', () => ({
   })),
 }));
 
+vi.mock('node:dns/promises', () => ({
+  resolveTxt: vi.fn(),
+}));
+
 vi.mock('node:os', () => ({
   default: {
     homedir: vi.fn(() => '/tmp/test-home'),
@@ -403,6 +407,60 @@ describe('CLI Commands', () => {
 
       expect(mockDiscoveryClient.resolve).toHaveBeenCalledWith('did:fides:test123');
       expect(mockTrustClient.getScore).toHaveBeenCalledWith(mockIdentity.did);
+    });
+  });
+
+  describe('identity domain commands', () => {
+    it('prints a domain verification challenge as JSON', async () => {
+      const { createIdentityCommand } = await import('../src/commands/identity.js');
+      const cmd = createIdentityCommand();
+
+      await cmd.parseAsync(['domain', 'challenge', 'Example.COM.', 'did:fides:agent123', '--json'], { from: 'user' });
+
+      expect(JSON.parse(vi.mocked(console.log).mock.calls[0][0] as string)).toEqual({
+        domain: 'example.com',
+        did: 'did:fides:agent123',
+        recordName: '_fides.example.com',
+        recordValue: 'fides-did=did:fides:agent123',
+      });
+    });
+
+    it('verifies a domain DID binding through DNS TXT records', async () => {
+      const dns = await import('node:dns/promises');
+      vi.mocked(dns.resolveTxt).mockResolvedValue([['fides-did=', 'did:fides:agent123']]);
+
+      const { createIdentityCommand } = await import('../src/commands/identity.js');
+      const cmd = createIdentityCommand();
+
+      await cmd.parseAsync(['domain', 'verify', 'example.com', 'did:fides:agent123', '--json'], { from: 'user' });
+
+      expect(dns.resolveTxt).toHaveBeenCalledWith('_fides.example.com');
+      expect(JSON.parse(vi.mocked(console.log).mock.calls[0][0] as string)).toEqual({
+        domain: 'example.com',
+        did: 'did:fides:agent123',
+        recordName: '_fides.example.com',
+        verified: true,
+      });
+      expect(process.exitCode).toBeUndefined();
+    });
+
+    it('returns non-zero exit code when domain verification fails', async () => {
+      const dns = await import('node:dns/promises');
+      vi.mocked(dns.resolveTxt).mockResolvedValue(['other=value']);
+
+      const { createIdentityCommand } = await import('../src/commands/identity.js');
+      const cmd = createIdentityCommand();
+
+      await cmd.parseAsync(['domain', 'verify', 'example.com', 'did:fides:agent123', '--json'], { from: 'user' });
+
+      expect(JSON.parse(vi.mocked(console.log).mock.calls[0][0] as string)).toEqual({
+        domain: 'example.com',
+        did: 'did:fides:agent123',
+        recordName: '_fides.example.com',
+        verified: false,
+        reason: 'record-not-found',
+      });
+      expect(process.exitCode).toBe(1);
     });
   });
 

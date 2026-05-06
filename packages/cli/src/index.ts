@@ -19,6 +19,7 @@ import { createIncidentCommand } from './commands/incident.js';
 import { createPropagationCommand } from './commands/propagation.js';
 import { createAuthorizeCommand } from './commands/authorize.js';
 import { createRelayCommand } from './commands/relay.js';
+import { createIdentityCommand } from './commands/identity.js';
 
 const program = new Command();
 
@@ -46,5 +47,6 @@ program.addCommand(createIncidentCommand());
 program.addCommand(createPropagationCommand());
 program.addCommand(createAuthorizeCommand());
 program.addCommand(createRelayCommand());
+program.addCommand(createIdentityCommand());
 
 program.parse();

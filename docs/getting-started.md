@@ -420,6 +420,22 @@ Host your identity document at `https://yourdomain.com/.well-known/fides.json`:
 
 FIDES will resolve your DID from `.well-known` before falling back to the central discovery service.
 
+### Domain Verification
+
+Bind a domain to a FIDES DID with a DNS TXT record:
+
+```bash
+fides identity domain challenge yourdomain.com did:fides:5XqKCvJHVqQ8pBbNvCFz8JpqhP6ZcJW3M7FqHGxWJQYd
+```
+
+Publish the returned TXT record, then verify it:
+
+```bash
+fides identity domain verify yourdomain.com did:fides:5XqKCvJHVqQ8pBbNvCFz8JpqhP6ZcJW3M7FqHGxWJQYd
+```
+
+The CLI checks `_fides.yourdomain.com` for an exact `fides-did=<did>` TXT token.
+
 ### Running Tests
 
 Run the test suite to verify your installation:

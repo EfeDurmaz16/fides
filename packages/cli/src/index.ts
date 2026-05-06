@@ -20,12 +20,13 @@ import { createPropagationCommand } from './commands/propagation.js';
 import { createAuthorizeCommand } from './commands/authorize.js';
 import { createRelayCommand } from './commands/relay.js';
 import { createIdentityCommand } from './commands/identity.js';
+import packageJson from '../package.json' with { type: 'json' };
 
 const program = new Command();
 
 program
   .name('fides')
-  .version('0.2.0')
+  .version(packageJson.version)
   .description('FIDES v2 - Agent Trust Fabric');
 
 // Register commands

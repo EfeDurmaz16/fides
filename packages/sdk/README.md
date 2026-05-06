@@ -56,6 +56,23 @@ const decision = await agentd.authorize({
   audience: 'agentd',
 })
 
+const session = await agentd.createSession({
+  token: signedDelegationToken,
+  capabilityId: 'payments.execute',
+  audience: 'agentd',
+  delegatorPublicKey: process.env.DELEGATOR_PUBLIC_KEY_HEX,
+})
+
+await agentd.recordRevocation({
+  record: signedRevocationRecord,
+  revokerPublicKey: process.env.REVOKER_PUBLIC_KEY_HEX,
+})
+
+await agentd.recordIncident({
+  record: signedIncidentRecord,
+  reporterPublicKey: process.env.REPORTER_PUBLIC_KEY_HEX,
+})
+
 const pending = await agentd.listPendingPropagations(25)
 const retry = await agentd.retryPropagations(25)
 ```
@@ -71,6 +88,9 @@ const retry = await agentd.retryPropagations(25)
 | `createAttestation(issuer, subject, level, key)` | Create signed trust attestation |
 | `verifyAttestation(attestation, publicKey)` | Verify attestation signature |
 | `AgentdClient.authorize(request)` | Check local agentd authorization decisions |
+| `AgentdClient.createSession(request)` | Create delegated agentd sessions |
+| `AgentdClient.recordRevocation(request)` | Submit signed authority revocations |
+| `AgentdClient.recordIncident(request)` | Submit signed authority incidents |
 | `AgentdClient.listPendingPropagations(limit)` | Inspect due authority propagation retries |
 | `AgentdClient.retryPropagations(limit)` | Replay due authority propagation records |
 

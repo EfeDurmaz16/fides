@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evaluateApiKeyAuth } from '../src/service-auth.js'
+import { evaluateApiKeyAuth, parseScopedApiKeys } from '../src/service-auth.js'
 
 describe('evaluateApiKeyAuth', () => {
   it('allows unconfigured API keys outside production', () => {
@@ -79,5 +79,21 @@ describe('evaluateApiKeyAuth', () => {
       productionRequirement: 'trust-anchor governance',
       requiredScope: 'platform:trust-anchors:write',
     })).toEqual({ ok: true })
+  })
+
+  it('parses scoped API keys from JSON env values', () => {
+    expect(parseScopedApiKeys(JSON.stringify([
+      { key: ' operator-key ', scopes: ['agentd:evidence:write', 'agentd:evidence:write', ' * '] },
+    ]), 'AGENTD_API_KEYS')).toEqual({
+      ok: true,
+      value: [{ key: 'operator-key', scopes: ['*', 'agentd:evidence:write'] }],
+    })
+  })
+
+  it('rejects malformed scoped API key JSON', () => {
+    expect(parseScopedApiKeys('{bad-json', 'AGENTD_API_KEYS')).toEqual({
+      ok: false,
+      error: 'AGENTD_API_KEYS must be a JSON array of scoped API keys',
+    })
   })
 })

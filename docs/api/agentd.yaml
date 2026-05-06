@@ -599,7 +599,14 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: Required for mutating `/v1/*` endpoints when `SERVICE_API_KEY` is configured.
+      description: >
+        Required for mutating `/v1/*` endpoints when `SERVICE_API_KEY` or
+        `AGENTD_API_KEYS` is configured. Legacy `SERVICE_API_KEY` grants full
+        mutating access. Scoped `AGENTD_API_KEYS` can grant
+        `agentd:policy:evaluate`, `agentd:sessions:write`,
+        `agentd:authority:write`, `agentd:authorize:write`,
+        `agentd:evidence:write`, `agentd:attest:write`,
+        `agentd:killswitch:write`, or `*`.
 
   parameters:
     DidParam:

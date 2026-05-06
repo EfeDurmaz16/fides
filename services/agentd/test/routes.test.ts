@@ -239,6 +239,23 @@ describe('Agentd Service Routes', () => {
       const data = await res.json()
       expect(data.error).toBe('not found')
     })
+
+    it('preserves private card denial from registry', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: () => Promise.resolve({ error: 'Private card - access denied' }),
+        text: () => Promise.resolve(''),
+        headers: new Headers(),
+      } as any)
+
+      const res = await app.request(`/v1/cards/${encodeURIComponent(TEST_DID)}`)
+      expect(res.status).toBe(403)
+      const data = await res.json()
+      expect(data.did).toBe(TEST_DID)
+      expect(data.card).toBeNull()
+      expect(data.error).toContain('private card')
+    })
   })
 
   describe('GET /v1/trust/:did/score', () => {

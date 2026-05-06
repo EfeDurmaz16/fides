@@ -97,6 +97,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CardResponse"
+        "403":
+          description: Registry card is private
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardResponse"
         "502":
           description: Registry unreachable
           content:

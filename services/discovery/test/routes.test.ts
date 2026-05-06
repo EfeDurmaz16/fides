@@ -1,9 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { app } from '../src/index.js'
+import { DISCOVERY_API_SCOPES, discoveryScopeForRequest } from '../src/middleware/auth.js'
 
 // Valid test identity: 32 bytes of 0xaa
 const TEST_PUBLIC_KEY = 'aa'.repeat(32)
 const TEST_DID = 'did:fides:CVDFLCAjXhVWiPXH9nTCTpCgVzmDVoiPzNJYuccr1dqB'
+const ORIGINAL_SERVICE_API_KEY = process.env.SERVICE_API_KEY
+const ORIGINAL_DISCOVERY_API_KEYS = process.env.DISCOVERY_API_KEYS
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV
 
 // Mock the database module
 vi.mock('../src/db/client.js', () => {
@@ -72,6 +76,91 @@ vi.mock('node:dns/promises', () => ({
 describe('Discovery Service Routes', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete process.env.SERVICE_API_KEY
+    delete process.env.DISCOVERY_API_KEYS
+    process.env.NODE_ENV = 'test'
+  })
+
+  afterEach(() => {
+    restoreEnv('SERVICE_API_KEY', ORIGINAL_SERVICE_API_KEY)
+    restoreEnv('DISCOVERY_API_KEYS', ORIGINAL_DISCOVERY_API_KEYS)
+    restoreEnv('NODE_ENV', ORIGINAL_NODE_ENV)
+  })
+
+  describe('API key authentication', () => {
+    it('maps discovery write routes to least-privilege scopes', () => {
+      expect(discoveryScopeForRequest('POST', '/identities')).toBe(DISCOVERY_API_SCOPES.identitiesRegister)
+      expect(discoveryScopeForRequest('POST', '/identities/did%3Afides%3Aagent/domain/verify')).toBe(DISCOVERY_API_SCOPES.identitiesDomainVerify)
+      expect(discoveryScopeForRequest('POST', '/identities/did%3Afides%3Aagent/organization-domain/verify')).toBe(DISCOVERY_API_SCOPES.identitiesOrganizationDomainVerify)
+      expect(discoveryScopeForRequest('POST', '/agents')).toBe(DISCOVERY_API_SCOPES.agentsRegister)
+      expect(discoveryScopeForRequest('PUT', '/agents/did%3Afides%3Aagent')).toBe(DISCOVERY_API_SCOPES.agentsUpdate)
+      expect(discoveryScopeForRequest('PUT', '/agents/did%3Afides%3Aagent/heartbeat')).toBe(DISCOVERY_API_SCOPES.agentsHeartbeat)
+      expect(discoveryScopeForRequest('DELETE', '/agents/did%3Afides%3Aagent')).toBe(DISCOVERY_API_SCOPES.agentsDelete)
+      expect(discoveryScopeForRequest('POST', '/unknown')).toBe(DISCOVERY_API_SCOPES.write)
+    })
+
+    it('fails closed for discovery writes in production when API key is not configured', async () => {
+      process.env.NODE_ENV = 'production'
+      delete process.env.SERVICE_API_KEY
+
+      const req = new Request('http://localhost/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          did: TEST_DID,
+          publicKey: TEST_PUBLIC_KEY,
+        }),
+      })
+
+      const res = await app.fetch(req)
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('SERVICE_API_KEY is required in production')
+    })
+
+    it('enforces scoped discovery API keys when configured', async () => {
+      process.env.DISCOVERY_API_KEYS = JSON.stringify([
+        { key: 'identity-key', scopes: ['discovery:identities:register'] },
+        { key: 'heartbeat-key', scopes: ['discovery:agents:heartbeat'] },
+      ])
+
+      const deniedReq = new Request(`http://localhost/agents/${encodeURIComponent(TEST_DID)}/heartbeat`, {
+        method: 'PUT',
+        headers: { 'X-API-Key': 'identity-key' },
+      })
+
+      const deniedRes = await app.fetch(deniedReq)
+      expect(deniedRes.status).toBe(403)
+      expect((await deniedRes.json()).error).toContain('discovery:agents:heartbeat')
+
+      const allowedReq = new Request(`http://localhost/agents/${encodeURIComponent(TEST_DID)}/heartbeat`, {
+        method: 'PUT',
+        headers: { 'X-API-Key': 'heartbeat-key' },
+      })
+
+      const allowedRes = await app.fetch(allowedReq)
+      expect(allowedRes.status).toBe(200)
+      expect(await allowedRes.json()).toMatchObject({ status: 'online' })
+    })
+
+    it('fails closed when scoped discovery API keys are malformed', async () => {
+      process.env.DISCOVERY_API_KEYS = '{bad-json'
+
+      const req = new Request('http://localhost/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'agent-key' },
+        body: JSON.stringify({
+          did: TEST_DID,
+          name: 'Test Agent',
+          url: 'https://agent.example.com',
+        }),
+      })
+
+      const res = await app.fetch(req)
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('DISCOVERY_API_KEYS must be a JSON array')
+    })
   })
 
   describe('POST /identities', () => {
@@ -341,3 +430,11 @@ describe('Discovery Service Routes', () => {
     })
   })
 })
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name]
+  } else {
+    process.env[name] = value
+  }
+}

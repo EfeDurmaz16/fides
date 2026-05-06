@@ -88,6 +88,7 @@ cp .env.example .env
 | Variable          | Default | Required | Description                                   |
 | ----------------- | ------- | -------- | --------------------------------------------- |
 | `SERVICE_API_KEY` | _(empty)_ | production | Shared API key for protected service routes. In production, protected routes return `503` when this is unset. Outside production, leaving it unset disables local auth. |
+| `DISCOVERY_API_KEYS` | _(empty)_ | no | Optional discovery scoped keys as JSON, for example `[{"key":"discovery-operator-key","scopes":["discovery:identities:register","discovery:identities:domain:verify","discovery:identities:organization-domain:verify","discovery:agents:register","discovery:agents:update","discovery:agents:heartbeat","discovery:agents:delete"]}]`. When set, it takes precedence over `SERVICE_API_KEY` for discovery write routes and malformed JSON fails closed with `503`. |
 | `PLATFORM_API_KEYS` | _(empty)_ | no | Optional platform-api scoped keys as JSON, for example `[{"key":"operator-key","scopes":["platform:topology:read","platform:passkeys:read","platform:passkeys:write","platform:trust-anchors:read","platform:trust-anchors:write"]}]`. When set, it takes precedence over `SERVICE_API_KEY` for platform-api routes and malformed JSON fails closed with `503`. |
 | `AGENTD_API_KEYS` | _(empty)_ | no | Optional agentd scoped keys as JSON, for example `[{"key":"agentd-operator-key","scopes":["agentd:policy:evaluate","agentd:sessions:write","agentd:authority:write","agentd:authorize:write","agentd:evidence:write","agentd:attest:write","agentd:killswitch:write"]}]`. When set, it takes precedence over `SERVICE_API_KEY` for agentd mutating `/v1/*` routes and malformed JSON fails closed with `503`. |
 | `REGISTRY_API_KEYS` | _(empty)_ | no | Optional registry scoped keys as JSON, for example `[{"key":"registry-operator-key","scopes":["registry:cards:publish","registry:cards:delete","registry:cards:mode:write","registry:cards:metadata:write"]}]`. When set, it takes precedence over `SERVICE_API_KEY` for registry mutating `/v1/*` routes and malformed JSON fails closed with `503`. |
@@ -392,7 +393,7 @@ fides.example.com {
 ### Production Checklist
 
 1. Set `NODE_ENV=production` on all services
-2. Set `SERVICE_API_KEY` to a strong random value (generated via `openssl rand -hex 32`); protected service routes fail closed with `503` in production when it is missing. For least privilege, prefer `PLATFORM_API_KEYS`, `AGENTD_API_KEYS`, `REGISTRY_API_KEYS`, `RELAY_API_KEYS`, `POLICY_ENGINE_API_KEYS`, and `TRUST_GRAPH_API_KEYS` with route-specific scopes on their services.
+2. Set `SERVICE_API_KEY` to a strong random value (generated via `openssl rand -hex 32`); protected service routes fail closed with `503` in production when it is missing. For least privilege, prefer `DISCOVERY_API_KEYS`, `PLATFORM_API_KEYS`, `AGENTD_API_KEYS`, `REGISTRY_API_KEYS`, `RELAY_API_KEYS`, `POLICY_ENGINE_API_KEYS`, and `TRUST_GRAPH_API_KEYS` with route-specific scopes on their services.
 3. Set `CORS_ORIGIN` to your frontend origin (not `*`)
 4. Enable rate limiting via `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS`
 5. Set `LOG_LEVEL=warn` to reduce noise, use `LOG_FORMAT=json` for log aggregation

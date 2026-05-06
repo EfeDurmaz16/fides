@@ -10,6 +10,7 @@ import wellKnownRouter from './routes/well-known.js'
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
+import { apiKeyAuth, discoveryScopeForRequest } from './middleware/auth.js'
 import { sql } from './db/client.js'
 
 function getCorsOrigin(): string {
@@ -34,6 +35,11 @@ app.use('*', cors({
   origin: getCorsOrigin(),
   exposeHeaders: ['Signature', 'Signature-Input', 'X-Request-Id'],
 }))
+app.use('*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(discoveryScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
 // Rate limiting: writes 100/min, reads 300/min
 app.post('*', rateLimitMiddleware({ maxRequests: 100, windowMs: 60_000 }))
 app.get('*', rateLimitMiddleware({ maxRequests: 300, windowMs: 60_000 }))

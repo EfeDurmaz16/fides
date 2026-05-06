@@ -138,6 +138,198 @@ paths:
               schema:
                 $ref: "#/components/schemas/PolicyEvaluationResponse"
 
+  /v1/sessions:
+    post:
+      operationId: createSession
+      tags: [Authority]
+      summary: Create a delegated session
+      description: |
+        Creates a local SessionGrant from a DelegationToken. When
+        `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`, the request
+        must include `delegatorPublicKey` so agentd can verify the
+        DelegationToken before storing the session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCreateRequest"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionCreateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Delegation rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorityErrorResponse"
+
+  /v1/sessions/{id}:
+    get:
+      operationId: getSession
+      tags: [Authority]
+      summary: Get a delegated session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLookupResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/sessions/{id}/revoke:
+    post:
+      operationId: revokeSession
+      tags: [Authority]
+      summary: Revoke a delegated session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRevokeRequest"
+      responses:
+        "200":
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRevokeResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/revocations:
+    post:
+      operationId: recordRevocation
+      tags: [Authority]
+      summary: Record a signed revocation
+      description: |
+        Stores a signed RevocationRecord locally and propagates it to
+        trust-graph. When authority signature verification is required,
+        `revokerPublicKey` must be included.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevocationSubmitRequest"
+      responses:
+        "201":
+          description: Revocation recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevocationSubmitResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /v1/revocations/{did}:
+    get:
+      operationId: getRevocation
+      tags: [Authority]
+      summary: Get revocation status for a DID
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Revocation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevocationStatusResponse"
+
+  /v1/incidents:
+    post:
+      operationId: recordIncident
+      tags: [Authority]
+      summary: Record a signed incident
+      description: |
+        Stores a signed IncidentRecord locally and propagates it to
+        trust-graph. When authority signature verification is required,
+        `reporterPublicKey` must be included.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IncidentSubmitRequest"
+      responses:
+        "201":
+          description: Incident recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentSubmitResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /v1/incidents/{did}:
+    get:
+      operationId: listIncidents
+      tags: [Authority]
+      summary: List incidents for a DID
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Incident list and aggregate impact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentListResponse"
+
+  /v1/authorize:
+    post:
+      operationId: authorizeAction
+      tags: [Authority]
+      summary: Evaluate unified authorization for an agent action
+      description: |
+        Combines optional delegated session checks, local revocations,
+        incident impact, policy evaluation, runtime trust context, and kill
+        switch state before returning an allow, deny, or approval-required
+        decision.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthorizationRequest"
+      responses:
+        "200":
+          description: Authorization allowed or approval required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Authorization denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizationResponse"
+
   /v1/evidence:
     post:
       operationId: submitEvidence
@@ -494,7 +686,7 @@ components:
           default: custom
         actor:
           type: string
-          description: DID of the actor (alias: did)
+          description: "DID of the actor (alias: did)"
         action:
           type: string
         target:
@@ -586,6 +778,360 @@ components:
           type: string
         signature:
           type: string
+
+    DelegationToken:
+      type: object
+      required: [id, delegator, delegatee, capabilities, constraints, issuedAt, expiresAt, nonce, signature]
+      properties:
+        id:
+          type: string
+        delegator:
+          type: string
+        delegatee:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        constraints:
+          type: object
+          properties:
+            maxActions:
+              type: integer
+            maxSpend:
+              type: string
+            allowedContexts:
+              type: array
+              items:
+                type: string
+            forbiddenContexts:
+              type: array
+              items:
+                type: string
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        nonce:
+          type: string
+        audience:
+          type: array
+          items:
+            type: string
+        signature:
+          type: string
+          description: Hex-encoded Ed25519 signature over the canonical token body
+
+    SessionGrant:
+      type: object
+      properties:
+        id:
+          type: string
+        token:
+          $ref: "#/components/schemas/DelegationToken"
+        sessionKey:
+          type: string
+          example: redacted
+        expiresAt:
+          type: string
+          format: date-time
+        boundTo:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        revoked:
+          type: boolean
+        revokedAt:
+          type: string
+          format: date-time
+        revocationReason:
+          type: string
+
+    SessionCreateRequest:
+      type: object
+      required: [token, capabilityId]
+      properties:
+        token:
+          $ref: "#/components/schemas/DelegationToken"
+        capabilityId:
+          type: string
+        audience:
+          type: string
+          default: agentd
+        boundTo:
+          type: string
+        ttlMs:
+          type: integer
+        delegatorPublicKey:
+          type: string
+          pattern: "^[a-fA-F0-9]{64}$"
+          description: Delegator Ed25519 public key. Required when `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`.
+
+    SessionCreateResponse:
+      type: object
+      properties:
+        authorized:
+          type: boolean
+        session:
+          $ref: "#/components/schemas/SessionGrant"
+
+    SessionLookupResponse:
+      type: object
+      properties:
+        session:
+          $ref: "#/components/schemas/SessionGrant"
+
+    SessionRevokeRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+
+    SessionRevokeResponse:
+      type: object
+      properties:
+        revoked:
+          type: boolean
+        session:
+          $ref: "#/components/schemas/SessionGrant"
+
+    RevocationRecord:
+      type: object
+      required: [id, did, reason, revokedAt, revokedBy, signature, propagatedTo]
+      properties:
+        id:
+          type: string
+        did:
+          type: string
+        reason:
+          type: string
+        revokedAt:
+          type: string
+          format: date-time
+        revokedBy:
+          type: string
+        signature:
+          type: string
+          description: Hex-encoded Ed25519 signature over the canonical revocation body
+        propagatedTo:
+          type: array
+          items:
+            type: string
+
+    RevocationSubmitRequest:
+      type: object
+      required: [record]
+      properties:
+        record:
+          $ref: "#/components/schemas/RevocationRecord"
+        revokerPublicKey:
+          type: string
+          pattern: "^[a-fA-F0-9]{64}$"
+          description: Revoker Ed25519 public key. Required when `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`.
+
+    RevocationSubmitResponse:
+      type: object
+      properties:
+        revoked:
+          type: boolean
+        record:
+          $ref: "#/components/schemas/RevocationRecord"
+        propagation:
+          $ref: "#/components/schemas/AuthorityPropagationResponse"
+
+    RevocationStatusResponse:
+      type: object
+      properties:
+        did:
+          type: string
+        revoked:
+          type: boolean
+        record:
+          $ref: "#/components/schemas/RevocationRecord"
+
+    IncidentRecord:
+      type: object
+      required: [id, type, severity, actor, reportedBy, description, evidenceRefs, reportedAt, impact, signature]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [compromise, misbehavior, policy_violation, runtime_failure, sybil]
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        actor:
+          type: string
+        reportedBy:
+          type: string
+        description:
+          type: string
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        reportedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+        impact:
+          $ref: "#/components/schemas/IncidentImpact"
+        signature:
+          type: string
+          description: Hex-encoded Ed25519 signature over the canonical incident body
+
+    IncidentImpact:
+      type: object
+      properties:
+        trustPenalty:
+          type: number
+        reputationPenalty:
+          type: number
+        capabilitiesRevoked:
+          type: array
+          items:
+            type: string
+
+    IncidentAggregateImpact:
+      allOf:
+        - $ref: "#/components/schemas/IncidentImpact"
+        - type: object
+          properties:
+            incidentCount:
+              type: integer
+            criticalCount:
+              type: integer
+            allRevokedCapabilities:
+              type: array
+              items:
+                type: string
+
+    IncidentSubmitRequest:
+      type: object
+      required: [record]
+      properties:
+        record:
+          $ref: "#/components/schemas/IncidentRecord"
+        reporterPublicKey:
+          type: string
+          pattern: "^[a-fA-F0-9]{64}$"
+          description: Reporter Ed25519 public key. Required when `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`.
+
+    IncidentSubmitResponse:
+      type: object
+      properties:
+        recorded:
+          type: boolean
+        record:
+          $ref: "#/components/schemas/IncidentRecord"
+        impact:
+          $ref: "#/components/schemas/IncidentAggregateImpact"
+        propagation:
+          $ref: "#/components/schemas/AuthorityPropagationResponse"
+
+    IncidentListResponse:
+      type: object
+      properties:
+        did:
+          type: string
+        incidents:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentRecord"
+        impact:
+          $ref: "#/components/schemas/IncidentAggregateImpact"
+
+    AuthorizationRequest:
+      type: object
+      required: [agentDid, capabilityId]
+      properties:
+        agentDid:
+          type: string
+        capabilityId:
+          type: string
+        sessionId:
+          type: string
+        audience:
+          type: string
+        policy:
+          $ref: "#/components/schemas/PolicyBundle"
+        context:
+          type: object
+        attestationValid:
+          type: boolean
+        reputationScore:
+          type: number
+        capabilityScore:
+          type: number
+        capabilityHighRisk:
+          type: boolean
+        requiresRuntimeAttestation:
+          type: boolean
+        requiresApproval:
+          type: boolean
+        approvalGranted:
+          type: boolean
+
+    AuthorizationResponse:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum: [allow, deny, approve-required]
+        explanation:
+          type: string
+        factors:
+          type: array
+          items:
+            type: string
+        session:
+          $ref: "#/components/schemas/SessionGrant"
+        incidentImpact:
+          $ref: "#/components/schemas/IncidentAggregateImpact"
+        revoked:
+          type: boolean
+
+    AuthorityErrorResponse:
+      type: object
+      properties:
+        authorized:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+
+    AuthorityPropagationResponse:
+      type: object
+      properties:
+        attempted:
+          type: boolean
+        ok:
+          type: boolean
+        status:
+          type: integer
+        target:
+          type: string
+          example: trust-graph
+        path:
+          type: string
+        attemptedAt:
+          type: string
+          format: date-time
+        error:
+          type: string
+        queued:
+          type: boolean
+        outboxId:
+          type: string
+        attempts:
+          type: integer
 
     AuthorityPropagationRecord:
       type: object
@@ -687,7 +1233,7 @@ components:
       properties:
         did:
           type: string
-          description: DID of the agent (alias: agentDid)
+          description: "DID of the agent (alias: agentDid)"
         agentDid:
           type: string
 
@@ -740,6 +1286,12 @@ components:
   responses:
     BadRequest:
       description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
       content:
         application/json:
           schema:

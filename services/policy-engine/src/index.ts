@@ -4,11 +4,13 @@ import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import type { MiddlewareHandler } from 'hono'
 import { evaluatePolicy, type PolicyBundle, type PolicyContext } from '@fides/policy'
-import { evaluateApiKeyAuth } from '@fides/shared'
+import { evaluateApiKeyAuth, MetricsCollector, metricsMiddleware } from '@fides/shared'
 
 const app = new Hono()
 const startTime = Date.now()
+const collector = new MetricsCollector()
 
+app.use('*', metricsMiddleware(collector))
 app.use('*', cors({ origin: getCorsOrigin() }))
 app.use('*', bodyLimit({ maxSize: 1024 * 1024 }))
 
@@ -18,6 +20,10 @@ app.get('/health', (c) => c.json({
   uptime: Math.floor((Date.now() - startTime) / 1000),
   timestamp: new Date().toISOString(),
 }))
+
+app.get('/metrics', (c) => {
+  return c.text(collector.toPrometheus(), 200, { 'Content-Type': 'text/plain; version=0.0.4' })
+})
 
 app.post('/v1/policies/evaluate', apiKeyAuth(), async (c) => {
   const body = await c.req.json().catch(() => null)

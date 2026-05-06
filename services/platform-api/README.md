@@ -11,6 +11,7 @@ Implemented as a TypeScript Hono service.
 Current scope:
 
 - Health endpoint for readiness checks.
+- Prometheus metrics endpoint for request counters and latency summaries.
 - Version metadata for platform clients.
 - Topology endpoint that exposes configured service URLs.
 
@@ -42,6 +43,10 @@ Returns service readiness metadata.
 ### `GET /v1/version`
 
 Returns the platform API version and protocol family.
+
+### `GET /metrics`
+
+Returns Prometheus text metrics for HTTP request counts, response latency summaries, and active connections.
 
 ### `GET /v1/topology`
 

@@ -39,7 +39,10 @@ pnpm --filter @fides/platform-api lint
 
 The service listens on `PLATFORM_API_PORT`, then `PORT`, then `3600`.
 Passkey bindings persist to `PLATFORM_STORE_PATH` when set, otherwise
-`~/.fides/platform-api/platform-store.json`. Tests use an in-memory store.
+`~/.fides/platform-api/platform-store.json`. The file snapshot includes
+`schemaVersion: 1`; legacy unversioned snapshots are migrated on read and
+rewritten with the current schema on the next mutation. Tests use an in-memory
+store.
 
 ## API
 

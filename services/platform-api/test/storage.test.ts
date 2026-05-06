@@ -1,8 +1,8 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
-import { FilePlatformStore, InMemoryPlatformStore } from '../src/storage.js'
+import { FilePlatformStore, InMemoryPlatformStore, PLATFORM_STORE_SCHEMA_VERSION } from '../src/storage.js'
 import type { PasskeyCredentialBinding } from '@fides/core'
 import type { PlatformTrustAnchorRecord } from '../src/storage.js'
 
@@ -99,6 +99,9 @@ describe('platform stores', () => {
       backedUp: true,
     })
     expect(await reader.healthCheck()).toMatchObject({ ok: true, kind: 'file' })
+    expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({
+      schemaVersion: PLATFORM_STORE_SCHEMA_VERSION,
+    })
   })
 
   it('persists governed trust anchors through the file store', async () => {
@@ -115,5 +118,58 @@ describe('platform stores', () => {
       metadata: { tier: 'root' },
     })
     expect(await reader.listTrustAnchors()).toHaveLength(1)
+  })
+
+  it('migrates legacy unversioned file snapshots on read and writes current schema version', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fides-platform-'))
+    tempDirs.push(dir)
+    const path = join(dir, 'platform-store.json')
+
+    await writeFile(path, JSON.stringify({
+      passkeyBindings: {
+        'credential-store-01': binding(),
+      },
+    }), 'utf8')
+
+    const store = new FilePlatformStore(path)
+    expect(await store.getPasskeyBinding('credential-store-01')).toMatchObject({
+      principalDid: 'did:fides:principal-store-01',
+    })
+
+    await store.putTrustAnchor(trustAnchor())
+
+    const snapshot = JSON.parse(await readFile(path, 'utf8'))
+    expect(snapshot).toMatchObject({
+      schemaVersion: PLATFORM_STORE_SCHEMA_VERSION,
+      passkeyBindings: {
+        'credential-store-01': {
+          principalDid: 'did:fides:principal-store-01',
+        },
+      },
+      trustAnchors: {
+        'did:fides:anchor-store-01': {
+          status: 'active',
+        },
+      },
+    })
+  })
+
+  it('rejects unsupported file snapshot schema versions', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fides-platform-'))
+    tempDirs.push(dir)
+    const path = join(dir, 'platform-store.json')
+
+    await writeFile(path, JSON.stringify({
+      schemaVersion: 999,
+      passkeyBindings: {},
+      trustAnchors: {},
+    }), 'utf8')
+
+    const store = new FilePlatformStore(path)
+    await expect(store.healthCheck()).resolves.toMatchObject({
+      ok: false,
+      kind: 'file',
+      detail: 'Unsupported platform store schemaVersion 999',
+    })
   })
 })

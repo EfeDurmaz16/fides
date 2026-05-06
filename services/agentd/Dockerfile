@@ -36,8 +36,8 @@ COPY packages/sdk/ ./packages/sdk/
 COPY services/agentd/ ./services/agentd/
 COPY tsconfig.base.json ./
 RUN cd packages/shared && pnpm build
-RUN cd packages/sdk && pnpm build
 RUN cd packages/core && pnpm build
+RUN cd packages/sdk && pnpm build
 RUN cd packages/evidence && pnpm build
 RUN cd packages/runtime && pnpm build
 RUN cd packages/policy && pnpm build

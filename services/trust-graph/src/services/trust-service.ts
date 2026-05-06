@@ -39,7 +39,7 @@ export class TrustService {
    * Create a new trust edge
    */
   async createTrust(db: DbClient, request: CreateTrustRequest): Promise<string> {
-    const { issuerDid, subjectDid, trustLevel, signature, payload, expiresAt } = request
+    const { issuerDid, subjectDid, trustLevel, capabilityId, context, signature, payload, expiresAt } = request
 
     // Validate trust level
     if (!Number.isInteger(trustLevel) || trustLevel < MIN_TRUST_LEVEL || trustLevel > MAX_TRUST_LEVEL) {
@@ -136,6 +136,12 @@ export class TrustService {
     if (parsedPayload.trustLevel !== trustLevel) {
       throw new TrustError('Invalid attestation: trustLevel mismatch')
     }
+    if ((parsedPayload.capabilityId ?? undefined) !== capabilityId) {
+      throw new TrustError('Invalid attestation: capabilityId mismatch')
+    }
+    if ((parsedPayload.context ?? undefined) !== context) {
+      throw new TrustError('Invalid attestation: context mismatch')
+    }
 
     // Create trust edge
     const issuedAt = new Date().toISOString()
@@ -143,6 +149,8 @@ export class TrustService {
       issuerDid,
       subjectDid,
       trustLevel,
+      ...(capabilityId && { capabilityId }),
+      ...(context && { context }),
       issuedAt,
       ...(expiresAt && { expiresAt }),
     }
@@ -151,6 +159,8 @@ export class TrustService {
       sourceDid: issuerDid,
       targetDid: subjectDid,
       trustLevel,
+      capabilityId,
+      context,
       attestation,
       signature: Buffer.from(signature, 'hex'),
       ...(expiresAt && { expiresAt: new Date(expiresAt) }),

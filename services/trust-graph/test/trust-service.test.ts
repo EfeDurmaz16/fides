@@ -76,6 +76,35 @@ describe('TrustService', () => {
     return signIncidentRecord(record, privateKey)
   }
 
+  async function signedTrustRequest(overrides: Partial<CreateTrustRequest> = {}) {
+    const privateKey = ed.utils.randomPrivateKey()
+    const publicKey = await ed.getPublicKeyAsync(privateKey)
+    mockIdentity(publicKey)
+
+    const payloadObject = {
+      issuerDid: 'did:fides:alice',
+      subjectDid: 'did:fides:bob',
+      trustLevel: 85,
+      capabilityId: 'payments.execute',
+      context: 'production-delegation',
+      ...overrides,
+    }
+    const payload = JSON.stringify(payloadObject)
+    const signature = Buffer.from(
+      await ed.signAsync(new TextEncoder().encode(payload), privateKey)
+    ).toString('hex')
+
+    return {
+      issuerDid: payloadObject.issuerDid,
+      subjectDid: payloadObject.subjectDid,
+      trustLevel: payloadObject.trustLevel,
+      capabilityId: payloadObject.capabilityId,
+      context: payloadObject.context,
+      signature,
+      payload,
+    }
+  }
+
   describe('createTrust', () => {
     it('should reject invalid trust levels', async () => {
       const request: CreateTrustRequest = {
@@ -116,6 +145,44 @@ describe('TrustService', () => {
       await expect(service.createTrust(mockDb, request)).rejects.toThrow(
         'Payload is required'
       )
+    })
+
+    it('persists capability-scoped trust edges', async () => {
+      let insertedValues: Record<string, unknown> | undefined
+      mockDb.insert = vi.fn(() => ({
+        values: vi.fn((values) => {
+          insertedValues = values
+          return {
+            returning: vi.fn(() => Promise.resolve([{ id: 'trust-edge-id' }])),
+          }
+        }),
+      }))
+
+      const request = await signedTrustRequest()
+
+      const id = await service.createTrust(mockDb, request)
+
+      expect(id).toBe('trust-edge-id')
+      expect(insertedValues).toMatchObject({
+        sourceDid: request.issuerDid,
+        targetDid: request.subjectDid,
+        trustLevel: request.trustLevel,
+        capabilityId: 'payments.execute',
+        context: 'production-delegation',
+      })
+      expect(insertedValues?.attestation).toMatchObject({
+        capabilityId: 'payments.execute',
+        context: 'production-delegation',
+      })
+    })
+
+    it('rejects capability scope mismatches in signed trust payloads', async () => {
+      const request = await signedTrustRequest()
+
+      await expect(service.createTrust(mockDb, {
+        ...request,
+        capabilityId: 'payments.refund',
+      })).rejects.toThrow('capabilityId mismatch')
     })
   })
 

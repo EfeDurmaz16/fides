@@ -3,6 +3,8 @@ export interface TrustEdgeRow {
   sourceDid: string
   targetDid: string
   trustLevel: number
+  capabilityId: string | null
+  context: string | null
   attestation: Record<string, unknown>
   signature: Buffer
   createdAt: Date
@@ -39,6 +41,8 @@ export interface CreateTrustRequest {
   issuerDid: string
   subjectDid: string
   trustLevel: number
+  capabilityId?: string
+  context?: string
   signature: string
   payload: string  // The signed JSON payload (required for signature verification)
   expiresAt?: string

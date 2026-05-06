@@ -154,7 +154,13 @@ app.get('/v1/cards/:did', async (c) => {
       const card = await resp.json()
       return c.json({ did, card })
     }
-    return c.json({ did, card: null, error: 'not found' }, 404)
+    if (resp.status === 403) {
+      return c.json({ did, card: null, error: 'private card - access denied' }, 403)
+    }
+    if (resp.status === 404) {
+      return c.json({ did, card: null, error: 'not found' }, 404)
+    }
+    return c.json({ did, card: null, error: 'registry error' }, 502)
   } catch {
     return c.json({ did, card: null, error: 'registry unreachable' }, 502)
   }

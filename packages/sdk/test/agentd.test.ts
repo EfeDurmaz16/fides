@@ -133,6 +133,29 @@ describe('AgentdClient', () => {
     expect((init.headers as Headers).get('X-API-Key')).toBe('sdk-key')
   })
 
+  it('verifies domain bindings through agentd', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => JSON.stringify({
+        domain: 'example.com',
+        did: 'did:fides:agent',
+        recordName: '_fides.example.com',
+        verified: true,
+      }),
+    })
+
+    await expect(client.verifyDomain('example.com', 'did:fides:agent')).resolves.toMatchObject({
+      domain: 'example.com',
+      did: 'did:fides:agent',
+      verified: true,
+    })
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:7345/v1/identities/domain/verify?domain=example.com&did=did%3Afides%3Aagent',
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
   it('preserves private and missing registry card errors', async () => {
     mockFetch
       .mockResolvedValueOnce({

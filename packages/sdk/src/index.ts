@@ -71,6 +71,7 @@ export {
   type AuthorityPropagationRetryResult,
   type CreateSignedSessionOptions,
   type DelegationToken,
+  type DomainVerificationResponse,
   type IncidentListResponse,
   type IncidentRecord,
   type RecordSignedIncidentOptions,

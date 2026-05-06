@@ -77,6 +77,45 @@ paths:
               schema:
                 $ref: "#/components/schemas/IdentityResolutionResponse"
 
+  /v1/identities/domain/verify:
+    get:
+      operationId: verifyIdentityDomain
+      tags: [Identity]
+      summary: Verify a domain-to-DID DNS binding
+      description: Resolves `_fides.<domain>` TXT records and checks for an exact `fides-did=<did>` token.
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          schema:
+            type: string
+          example: example.com
+        - name: did
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "did:fides:agentd-test-01"
+      responses:
+        "200":
+          description: Domain binding verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainVerificationResponse"
+        "400":
+          description: Missing query parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Domain binding was not verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainVerificationResponse"
+
   /v1/cards/{did}:
     get:
       operationId: getAgentCard
@@ -631,6 +670,25 @@ components:
           type: string
         service:
           type: string
+
+    DomainVerificationResponse:
+      type: object
+      required: [domain, did, recordName, verified]
+      properties:
+        domain:
+          type: string
+          example: example.com
+        did:
+          type: string
+          example: "did:fides:agentd-test-01"
+        recordName:
+          type: string
+          example: _fides.example.com
+        verified:
+          type: boolean
+        reason:
+          type: string
+          enum: [invalid-domain, invalid-did, record-not-found, resolver-error]
 
     CardResponse:
       type: object

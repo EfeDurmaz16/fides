@@ -25,7 +25,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 | 5 | Domainless individual identity | Prototype | DID-based identity exists in SDK/core; individual proofing is not production-backed. |
 | 6 | Platform-hosted identity | Spec-complete | Architecture describes it, but `services/platform-api` is metadata/topology only and does not host identity issuance or verification. |
 | 7 | Domain-verified identity | Prototype | `PublisherIdentity.verificationMethod = "dns"`, `packages/core/src/domain-verifier.ts`, `fides identity domain verify`, `GET /v1/identities/domain/verify`, discovery `POST /identities/{did}/domain/verify`, and registry rejection of unbacked `publisher.verified` claims. |
-| 8 | Organization-verified identity | Spec-complete | Org identity is modeled through `PrincipalIdentity.type = "organization"` but no org verifier exists. |
+| 8 | Organization-verified identity | Prototype | Org identity is modeled through `PrincipalIdentity.type = "organization"` with optional domain verification fields; `verifyOrganizationDomainDid` checks `_fides-org.<domain>` DNS TXT ownership and creates verified organization principals. |
 | 9 | Trust anchors | Prototype | `TrustAnchor` type exists in `packages/core/src/identity.ts`; no anchor governance or distribution service yet. |
 | 10 | Signed AgentCards | Implemented | `AgentCard` and `SignedAgentCard` in `packages/core/src/agent-card.ts`; canonical signing in `packages/core/src/canonical-signer.ts`; tests in `packages/core/test/agent-card.test.ts`. |
 | 11 | Capability descriptors | Implemented | `CapabilityDescriptor` and risk classifier in `packages/core/src/capability.ts`; tests in `packages/core/test/capability.test.ts`. |
@@ -115,7 +115,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 ## Remaining Blockers for a Production FIDES v2
 
 1. Durable trust-fabric state: registry, evidence, revocation, and incidents need real storage contracts; sessions now have a file-backed local store but not a production database adapter.
-2. Production attestation providers: the TEE/build/container/package/GitHub providers now have adapter boundaries or local structured verification, but live vendor/API-backed verification and passkeys are still missing; domain verification still depends on DNS/discovery availability and is not a broader organization proof.
+2. Production attestation providers: the TEE/build/container/package/GitHub providers now have adapter boundaries or local structured verification, but live vendor/API-backed verification and passkeys are still missing; domain and organization verification still depend on DNS/discovery availability.
 3. Federation semantics: registry peering, cross-node revocation conflict handling, and trust-anchor governance need implementation.
 4. Authority separation hardening: identity, trust score, and policy are separated conceptually, but remote invocation execution remains adapter-ready rather than implemented.
 5. Service packaging: platform-api and policy-engine now have standalone service packages, Dockerfiles, compose wiring, and CI image builds; they still need production persistence/auth/metrics beyond health and topology/evaluation routes.
@@ -124,6 +124,6 @@ This document classifies the current status of every required FIDES v2 / Agent T
 
 1. Add production storage adapters for registry, evidence, revocation, incidents, and session state.
 2. Add live vendor-backed attestation verification for Nitro, SGX, SEV, Sigstore/SLSA, GitHub artifact attestations, email, package registries, and passkeys.
-3. Add organization-level verification and trust-anchor governance around verified publishers.
+3. Add service/API persistence for organization-level verification and trust-anchor governance around verified publishers.
 4. Extend the authority path demo into a multi-process demo that starts discovery, trust-graph, registry, relay, policy-engine, agentd, and platform-api.
 5. Add federation peering and cross-node revocation conflict semantics.

@@ -4,6 +4,7 @@ import os from 'node:os';
 
 export interface FidesConfig {
   discoveryUrl: string;
+  registryUrl: string;
   trustUrl: string;
   activeDid?: string;
   keyDir: string;
@@ -11,6 +12,7 @@ export interface FidesConfig {
 
 const DEFAULT_CONFIG: FidesConfig = {
   discoveryUrl: 'http://localhost:3100',
+  registryUrl: 'http://localhost:7346',
   trustUrl: 'http://localhost:3200',
   keyDir: path.join(os.homedir(), '.fides', 'keys'),
 };

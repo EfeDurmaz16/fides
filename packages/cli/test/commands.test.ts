@@ -13,6 +13,7 @@ vi.mock('@fides/sdk', () => ({
   createAttestation: vi.fn(),
   FileKeyStore: vi.fn(),
   DiscoveryClient: vi.fn(),
+  RegistryClient: vi.fn(),
   TrustClient: vi.fn(),
   TrustLevel: {
     NONE: 0,
@@ -25,6 +26,12 @@ vi.mock('@fides/sdk', () => ({
 
 // Mock fs and os
 vi.mock('node:fs', () => ({
+  existsSync: vi.fn(() => false),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  openSync: vi.fn(() => 1),
+  rmSync: vi.fn(),
   default: {
     existsSync: vi.fn(() => false),
     readFileSync: vi.fn(),
@@ -119,6 +126,74 @@ describe('CLI Commands', () => {
       expect(sdk.generateKeyPair).toHaveBeenCalled();
       expect(sdk.generateDID).toHaveBeenCalledWith(mockKeyPair.publicKey);
       expect(mockKeyStore.save).toHaveBeenCalledWith(mockDid, mockKeyPair);
+    });
+  });
+
+  describe('card registry commands', () => {
+    it('publishes a validated AgentCard to the registry', async () => {
+      const fs = await import('node:fs');
+      const card = {
+        id: 'did:fides:agent',
+        identity: {
+          did: 'did:fides:agent',
+          publicKey: Array(32).fill(0),
+          keyType: 'Ed25519',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        capabilities: [],
+        endpoints: [],
+        policies: [{ requiresRuntimeAttestation: false, requiresApproval: false }],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      vi.mocked(fs.default.readFileSync).mockReturnValue(JSON.stringify(card));
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(card));
+
+      const mockRegistryClient = {
+        register: vi.fn().mockResolvedValue({
+          success: true,
+          did: 'did:fides:agent',
+          registeredAt: '2026-01-01T00:00:00.000Z',
+        }),
+        getCard: vi.fn(),
+        search: vi.fn(),
+        setMode: vi.fn(),
+        updateMetadata: vi.fn(),
+      };
+      vi.mocked(sdk.RegistryClient).mockImplementation(() => mockRegistryClient as any);
+
+      const { createCardCommand } = await import('../src/commands/card.js');
+      const cmd = createCardCommand();
+
+      await cmd.parseAsync(['publish', 'agent-card.json', '--registry-url', 'http://registry.test', '--api-key', 'test-key'], { from: 'user' });
+
+      expect(sdk.RegistryClient).toHaveBeenCalledWith({
+        baseUrl: 'http://registry.test',
+        apiKey: 'test-key',
+      });
+      expect(mockRegistryClient.register).toHaveBeenCalledWith(card);
+    });
+
+    it('searches registry cards', async () => {
+      const mockRegistryClient = {
+        register: vi.fn(),
+        getCard: vi.fn(),
+        search: vi.fn().mockResolvedValue({
+          results: [{ did: 'did:fides:agent', name: 'Agent', capabilities: ['payments.execute'] }],
+          count: 1,
+          query: 'Agent',
+        }),
+        setMode: vi.fn(),
+        updateMetadata: vi.fn(),
+      };
+      vi.mocked(sdk.RegistryClient).mockImplementation(() => mockRegistryClient as any);
+
+      const { createCardCommand } = await import('../src/commands/card.js');
+      const cmd = createCardCommand();
+
+      await cmd.parseAsync(['search', 'Agent'], { from: 'user' });
+
+      expect(mockRegistryClient.search).toHaveBeenCalledWith('Agent');
     });
   });
 

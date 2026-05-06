@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
+import { createHash } from 'node:crypto'
 import postgres from 'postgres'
 
 export interface RegistryEntry {
@@ -244,20 +245,56 @@ export async function runRegistryMigrations(sql: postgres.Sql): Promise<void> {
   await sql`SELECT pg_advisory_lock(hashtext('registry_migrations'))`
 
   try {
-    await sql`CREATE TABLE IF NOT EXISTS registry_schema_migrations (id TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`
+    await ensureRegistryMigrationLedger(sql)
     for (const migration of REGISTRY_MIGRATIONS) {
-      const existing = await sql`SELECT id FROM registry_schema_migrations WHERE id = ${migration.id} LIMIT 1`
-      if (existing.length > 0) continue
+      const checksum = registryMigrationChecksum(migration)
+      const existing = await sql`
+        SELECT id, checksum
+        FROM registry_schema_migrations
+        WHERE id = ${migration.id}
+        LIMIT 1
+      `
+      if (existing.length > 0) {
+        const appliedChecksum = existing[0]?.checksum as string | null | undefined
+        if (appliedChecksum && appliedChecksum !== checksum) {
+          throw new Error(`registry migration ${migration.id} checksum mismatch`)
+        }
+        if (!appliedChecksum) {
+          await sql`
+            UPDATE registry_schema_migrations
+            SET checksum = ${checksum}
+            WHERE id = ${migration.id}
+          `
+        }
+        continue
+      }
 
       for (const statement of migration.statements) {
         await sql.unsafe(statement)
       }
 
-      await sql`INSERT INTO registry_schema_migrations (id) VALUES (${migration.id})`
+      await sql`INSERT INTO registry_schema_migrations (id, checksum) VALUES (${migration.id}, ${checksum})`
     }
   } finally {
     await sql`SELECT pg_advisory_unlock(hashtext('registry_migrations'))`
   }
+}
+
+async function ensureRegistryMigrationLedger(sql: postgres.Sql): Promise<void> {
+  await sql`
+    CREATE TABLE IF NOT EXISTS registry_schema_migrations (
+      id TEXT PRIMARY KEY,
+      checksum TEXT,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `
+  await sql`ALTER TABLE registry_schema_migrations ADD COLUMN IF NOT EXISTS checksum TEXT`
+}
+
+function registryMigrationChecksum(migration: typeof REGISTRY_MIGRATIONS[number]): string {
+  return createHash('sha256')
+    .update(migration.statements.join('\n'))
+    .digest('hex')
 }
 
 export function createRegistryStore(): RegistryStore {
@@ -295,7 +332,7 @@ async function assertRegistrySchema(sql: postgres.Sql): Promise<void> {
   const rows = await sql`
     SELECT table_name
     FROM information_schema.tables
-    WHERE table_schema = 'public'
+    WHERE table_schema = current_schema()
       AND table_name IN ('registry_cards', 'registry_schema_migrations')
   `
   if (rows.length !== 2) {
@@ -303,12 +340,18 @@ async function assertRegistrySchema(sql: postgres.Sql): Promise<void> {
   }
 
   const applied = await sql`
-    SELECT id
+    SELECT id, checksum
     FROM registry_schema_migrations
     WHERE id IN ${sql(REGISTRY_MIGRATIONS.map(migration => migration.id))}
   `
   if (applied.length !== REGISTRY_MIGRATIONS.length) {
     throw new Error('registry store schema is not migrated')
+  }
+  const checksums = new Map(applied.map(row => [row.id as string, row.checksum as string | null]))
+  for (const migration of REGISTRY_MIGRATIONS) {
+    if (checksums.get(migration.id) !== registryMigrationChecksum(migration)) {
+      throw new Error(`registry migration ${migration.id} checksum mismatch`)
+    }
   }
 }
 

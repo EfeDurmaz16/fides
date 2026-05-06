@@ -56,7 +56,7 @@ cp .env.example .env
 | ------------------------- | ------- | -------- | ----------- |
 | `REGISTRY_STORE`          | `file`  | production | `file` for local JSON state, `postgres` for durable hosted registry state |
 | `REGISTRY_DATABASE_URL`   | _(empty)_ | production when `REGISTRY_STORE=postgres` | Dedicated registry database URL. Falls back to `DATABASE_URL` when unset. |
-| `REGISTRY_DB_AUTO_MIGRATE`| `true`  | no | Runs idempotent registry migrations on startup and records applied ids in `registry_schema_migrations`. Set `false` when migrations are managed externally. |
+| `REGISTRY_DB_AUTO_MIGRATE`| `true`  | no | Runs idempotent registry migrations on startup and records applied ids plus checksums in `registry_schema_migrations`. Set `false` when migrations are managed externally. |
 | `REGISTRY_DB_POOL_MAX`    | `10`    | no | Registry store connection pool size. Falls back to `DB_POOL_MAX`. |
 | `REGISTRY_STORE_PATH`     | _(empty)_ | no | File registry store path. Defaults to `~/.fides/registry/registry.json`. |
 

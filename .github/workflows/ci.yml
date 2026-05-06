@@ -57,6 +57,7 @@ jobs:
         run: pnpm test
         env:
           DATABASE_URL: postgresql://fides:fides@localhost:5432/fides
+          AGENTD_POSTGRES_TEST_REQUIRED: 'true'
 
   docker-build:
     runs-on: ubuntu-latest

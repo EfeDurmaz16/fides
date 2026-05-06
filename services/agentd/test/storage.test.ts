@@ -15,6 +15,7 @@ import {
 
 const tempDirs: string[] = []
 const postgresUrl = process.env.AGENTD_DATABASE_URL || process.env.DATABASE_URL
+const postgresTestRequired = process.env.AGENTD_POSTGRES_TEST_REQUIRED === 'true'
 
 afterEach(async () => {
   await Promise.all(tempDirs.map(dir => rm(dir, { recursive: true, force: true })))
@@ -127,9 +128,17 @@ describe('agentd authority stores', () => {
     expect((await store.getSession(grant.id))?.revocationReason).toBe('manual')
   })
 
-  describe.skipIf(!postgresUrl)('postgres authority store', () => {
+  describe.skipIf(!postgresUrl && !postgresTestRequired)('postgres authority store', () => {
+    if (!postgresUrl) {
+      it('requires AGENTD_DATABASE_URL or DATABASE_URL when Postgres tests are mandatory', () => {
+        expect(postgresUrl, 'AGENTD_DATABASE_URL or DATABASE_URL must be set when AGENTD_POSTGRES_TEST_REQUIRED=true').toBeTruthy()
+      })
+
+      return
+    }
+
     it('records applied authority migrations once', async () => {
-      const sql = postgres(postgresUrl!, { max: 1 })
+      const sql = postgres(postgresUrl, { max: 1 })
 
       try {
         await runAuthorityMigrations(sql)
@@ -150,7 +159,7 @@ describe('agentd authority stores', () => {
     }, 30_000)
 
     it('round-trips authority state through Postgres', async () => {
-      const store = new PostgresAuthorityStore(postgresUrl!)
+      const store = new PostgresAuthorityStore(postgresUrl)
       const did = `did:fides:pg-agent-${crypto.randomUUID()}`
       const baseSession = session()
       const grant = {

@@ -3,11 +3,13 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import type { MiddlewareHandler } from 'hono'
+import { isValidFidesDid, type PasskeyCredentialBinding } from '@fides/core'
 import { evaluateApiKeyAuth, MetricsCollector, metricsMiddleware } from '@fides/shared'
 
 const app = new Hono()
 const startTime = Date.now()
 const collector = new MetricsCollector()
+const passkeyBindings = new Map<string, PasskeyCredentialBinding>()
 
 const SERVICE_PORTS = {
   discovery: 3100,
@@ -51,6 +53,64 @@ app.get('/v1/topology', apiKeyAuth(), (c) => c.json({
   },
 }))
 
+app.post('/v1/passkeys/bindings', apiKeyAuth(), async (c) => {
+  const body = await c.req.json()
+  const binding = parsePasskeyBinding(body)
+  if (!binding.ok) {
+    return c.json({ error: binding.error }, 400)
+  }
+
+  const existing = passkeyBindings.get(binding.value.credentialId)
+  if (existing && existing.principalDid !== binding.value.principalDid) {
+    return c.json({ error: 'credential is already bound to a different principal' }, 409)
+  }
+  if (existing && binding.value.signCount < existing.signCount) {
+    return c.json({ error: 'credential signCount cannot move backwards' }, 409)
+  }
+
+  const now = new Date().toISOString()
+  const stored: PasskeyCredentialBinding = {
+    ...binding.value,
+    createdAt: existing?.createdAt ?? binding.value.createdAt,
+    lastVerifiedAt: now,
+  }
+  passkeyBindings.set(stored.credentialId, stored)
+
+  return c.json({ binding: stored }, existing ? 200 : 201)
+})
+
+app.get('/v1/passkeys/principals/:did/credentials', apiKeyAuth(), (c) => {
+  const principalDid = c.req.param('did')
+  if (!isValidFidesDid(principalDid)) {
+    return c.json({ error: 'invalid principal DID' }, 400)
+  }
+
+  const credentials = [...passkeyBindings.values()]
+    .filter(binding => binding.principalDid === principalDid)
+    .sort((a, b) => a.credentialId.localeCompare(b.credentialId))
+    .map(toCredentialDescriptor)
+
+  return c.json({ principalDid, credentials, count: credentials.length })
+})
+
+app.get('/v1/passkeys/credentials/:credentialId', apiKeyAuth(), (c) => {
+  const credentialId = c.req.param('credentialId')
+  const binding = passkeyBindings.get(credentialId)
+  if (!binding) {
+    return c.json({ error: 'passkey credential binding not found' }, 404)
+  }
+  return c.json({ binding })
+})
+
+app.delete('/v1/passkeys/credentials/:credentialId', apiKeyAuth(), (c) => {
+  const credentialId = c.req.param('credentialId')
+  const deleted = passkeyBindings.delete(credentialId)
+  if (!deleted) {
+    return c.json({ error: 'passkey credential binding not found' }, 404)
+  }
+  return c.json({ success: true })
+})
+
 export { app }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -83,5 +143,66 @@ function apiKeyAuth(): MiddlewareHandler {
     }
 
     return next()
+  }
+}
+
+function parsePasskeyBinding(body: unknown): { ok: true; value: PasskeyCredentialBinding } | { ok: false; error: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { ok: false, error: 'request body must be a passkey credential binding' }
+  }
+  const input = body as Partial<PasskeyCredentialBinding>
+  if (typeof input.principalDid !== 'string' || !isValidFidesDid(input.principalDid)) {
+    return { ok: false, error: 'principalDid must be a valid did:fides DID' }
+  }
+  if (typeof input.credentialId !== 'string' || input.credentialId.trim().length === 0) {
+    return { ok: false, error: 'credentialId is required' }
+  }
+  if (typeof input.publicKey !== 'string' || input.publicKey.trim().length === 0) {
+    return { ok: false, error: 'publicKey is required' }
+  }
+  if (typeof input.relyingPartyId !== 'string' || input.relyingPartyId.trim().length === 0) {
+    return { ok: false, error: 'relyingPartyId is required' }
+  }
+  const signCount = input.signCount
+  if (!Number.isInteger(signCount) || signCount === undefined || signCount < 0) {
+    return { ok: false, error: 'signCount must be a non-negative integer' }
+  }
+  if (typeof input.createdAt !== 'string' || Number.isNaN(Date.parse(input.createdAt))) {
+    return { ok: false, error: 'createdAt must be an ISO 8601 timestamp' }
+  }
+
+  return {
+    ok: true,
+    value: {
+      principalDid: input.principalDid,
+      credentialId: input.credentialId.trim(),
+      publicKey: input.publicKey.trim(),
+      relyingPartyId: input.relyingPartyId.trim().toLowerCase(),
+      signCount,
+      transports: input.transports,
+      backedUp: input.backedUp,
+      createdAt: input.createdAt,
+      lastVerifiedAt: input.lastVerifiedAt,
+    },
+  }
+}
+
+function toCredentialDescriptor(binding: PasskeyCredentialBinding): {
+  credentialId: string
+  relyingPartyId: string
+  signCount: number
+  transports?: PasskeyCredentialBinding['transports']
+  backedUp?: boolean
+  createdAt: string
+  lastVerifiedAt?: string
+} {
+  return {
+    credentialId: binding.credentialId,
+    relyingPartyId: binding.relyingPartyId,
+    signCount: binding.signCount,
+    transports: binding.transports,
+    backedUp: binding.backedUp,
+    createdAt: binding.createdAt,
+    lastVerifiedAt: binding.lastVerifiedAt,
   }
 }

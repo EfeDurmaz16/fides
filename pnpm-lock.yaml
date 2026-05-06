@@ -349,6 +349,9 @@ importers:
 
   services/platform-api:
     dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@fides/shared':
         specifier: workspace:*
         version: link:../../packages/shared

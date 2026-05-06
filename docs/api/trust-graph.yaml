@@ -374,7 +374,7 @@ components:
 
     CreateTrustRequest:
       type: object
-      required: [issuerDid, subjectDid, trustLevel, signature]
+      required: [issuerDid, subjectDid, trustLevel, signature, payload]
       properties:
         issuerDid:
           type: string

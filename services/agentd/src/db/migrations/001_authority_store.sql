@@ -1,7 +1,11 @@
 CREATE TABLE IF NOT EXISTS agentd_schema_migrations (
   id TEXT PRIMARY KEY,
+  checksum TEXT,
   applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE agentd_schema_migrations
+  ADD COLUMN IF NOT EXISTS checksum TEXT;
 
 CREATE TABLE IF NOT EXISTS agentd_delegation_nonces (
   nonce TEXT PRIMARY KEY,
@@ -61,6 +65,7 @@ CREATE INDEX IF NOT EXISTS idx_agentd_incidents_actor
 CREATE INDEX IF NOT EXISTS idx_agentd_propagations_pending
   ON agentd_authority_propagations(status, next_attempt_at);
 
-INSERT INTO agentd_schema_migrations (id)
-VALUES ('001_authority_store')
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO agentd_schema_migrations (id, checksum)
+VALUES ('001_authority_store', '644aa2331e775ad73b7c971282d7d9850a0cb4a5dd531cc7901764dbe77d214d')
+ON CONFLICT (id) DO UPDATE SET checksum = EXCLUDED.checksum
+WHERE agentd_schema_migrations.checksum IS NULL;

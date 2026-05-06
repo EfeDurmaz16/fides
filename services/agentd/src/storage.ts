@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
+import { createHash } from 'node:crypto'
 import postgres from 'postgres'
 import type { EvidenceChain } from '@fides/evidence'
 import type {
@@ -496,20 +497,56 @@ export async function runAuthorityMigrations(sql: postgres.Sql): Promise<void> {
   await sql`SELECT pg_advisory_lock(hashtext('agentd_authority_migrations'))`
 
   try {
-    await sql`CREATE TABLE IF NOT EXISTS agentd_schema_migrations (id TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`
+    await ensureAuthorityMigrationLedger(sql)
     for (const migration of AUTHORITY_MIGRATIONS) {
-      const existing = await sql`SELECT id FROM agentd_schema_migrations WHERE id = ${migration.id} LIMIT 1`
-      if (existing.length > 0) continue
+      const checksum = authorityMigrationChecksum(migration)
+      const existing = await sql`
+        SELECT id, checksum
+        FROM agentd_schema_migrations
+        WHERE id = ${migration.id}
+        LIMIT 1
+      `
+      if (existing.length > 0) {
+        const appliedChecksum = existing[0]?.checksum as string | null | undefined
+        if (appliedChecksum && appliedChecksum !== checksum) {
+          throw new Error(`agentd authority migration ${migration.id} checksum mismatch`)
+        }
+        if (!appliedChecksum) {
+          await sql`
+            UPDATE agentd_schema_migrations
+            SET checksum = ${checksum}
+            WHERE id = ${migration.id}
+          `
+        }
+        continue
+      }
 
       for (const statement of migration.statements) {
         await sql.unsafe(statement)
       }
 
-      await sql`INSERT INTO agentd_schema_migrations (id) VALUES (${migration.id})`
+      await sql`INSERT INTO agentd_schema_migrations (id, checksum) VALUES (${migration.id}, ${checksum})`
     }
   } finally {
     await sql`SELECT pg_advisory_unlock(hashtext('agentd_authority_migrations'))`
   }
+}
+
+async function ensureAuthorityMigrationLedger(sql: postgres.Sql): Promise<void> {
+  await sql`
+    CREATE TABLE IF NOT EXISTS agentd_schema_migrations (
+      id TEXT PRIMARY KEY,
+      checksum TEXT,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `
+  await sql`ALTER TABLE agentd_schema_migrations ADD COLUMN IF NOT EXISTS checksum TEXT`
+}
+
+function authorityMigrationChecksum(migration: typeof AUTHORITY_MIGRATIONS[number]): string {
+  return createHash('sha256')
+    .update(migration.statements.join('\n'))
+    .digest('hex')
 }
 
 async function assertAuthoritySchema(sql: postgres.Sql): Promise<void> {
@@ -532,12 +569,18 @@ async function assertAuthoritySchema(sql: postgres.Sql): Promise<void> {
   }
 
   const applied = await sql`
-    SELECT id
+    SELECT id, checksum
     FROM agentd_schema_migrations
     WHERE id IN ${sql(AUTHORITY_MIGRATIONS.map(migration => migration.id))}
   `
   if (applied.length !== AUTHORITY_MIGRATIONS.length) {
     throw new Error('agentd authority store schema is not migrated')
+  }
+  const checksums = new Map(applied.map(row => [row.id as string, row.checksum as string | null]))
+  for (const migration of AUTHORITY_MIGRATIONS) {
+    if (checksums.get(migration.id) !== authorityMigrationChecksum(migration)) {
+      throw new Error(`agentd authority migration ${migration.id} checksum mismatch`)
+    }
   }
 }
 

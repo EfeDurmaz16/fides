@@ -155,16 +155,49 @@ describe('agentd authority stores', () => {
         await runAuthorityMigrations(sql)
 
         const rows = await sql`
-          SELECT id, count(*)::int AS count
+          SELECT id, checksum, count(*)::int AS count
           FROM agentd_schema_migrations
           WHERE id IN ${sql(AUTHORITY_MIGRATIONS.map(migration => migration.id))}
-          GROUP BY id
+          GROUP BY id, checksum
         `
 
         expect(rows).toHaveLength(AUTHORITY_MIGRATIONS.length)
         expect(rows.every(row => row.count === 1)).toBe(true)
+        expect(rows.every(row => typeof row.checksum === 'string' && row.checksum.length === 64)).toBe(true)
       } finally {
         await sql.end()
+      }
+    }, 30_000)
+
+    it('fails closed when an applied migration checksum drifts', async () => {
+      const schema = `agentd_migration_checksum_${crypto.randomUUID().replaceAll('-', '')}`
+      const schemaIdentifier = quoteIdentifier(schema)
+      const adminSql = postgres(postgresUrl, { max: 1 })
+      const scopedUrl = postgresUrlWithSearchPath(postgresUrl, schema)
+      const scopedSql = postgres(scopedUrl, { max: 1 })
+
+      try {
+        await adminSql.unsafe(`CREATE SCHEMA ${schemaIdentifier}`)
+        await runAuthorityMigrations(scopedSql)
+        await scopedSql`
+          UPDATE agentd_schema_migrations
+          SET checksum = ${'0'.repeat(64)}
+          WHERE id = ${AUTHORITY_MIGRATIONS[0].id}
+        `
+
+        await expect(runAuthorityMigrations(scopedSql)).rejects.toThrow('checksum mismatch')
+        const store = new PostgresAuthorityStore(scopedUrl)
+        try {
+          const health = await store.healthCheck()
+          expect(health.ok).toBe(false)
+          expect(health.detail).toContain('checksum mismatch')
+        } finally {
+          await store.close()
+        }
+      } finally {
+        await scopedSql.end()
+        await adminSql.unsafe(`DROP SCHEMA IF EXISTS ${schemaIdentifier} CASCADE`)
+        await adminSql.end()
       }
     }, 30_000)
 

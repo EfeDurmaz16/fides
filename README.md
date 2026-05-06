@@ -210,7 +210,7 @@ pnpm --filter @fides/agentd db:migrate
 ```
 
 Set `AGENTD_DB_AUTO_MIGRATE=false` when migrations are managed externally. `/health` reports the active authority store kind and readiness.
-Manual and startup migrations record applied ids in `agentd_schema_migrations`; with `AGENTD_DB_AUTO_MIGRATE=false`, `agentd` refuses to start unless the authority tables and migration ledger are present.
+Manual and startup migrations record applied ids and statement checksums in `agentd_schema_migrations`; with `AGENTD_DB_AUTO_MIGRATE=false`, `agentd` refuses to start unless the authority tables and migration ledger are present and checksums match the current migrations.
 
 For local agentd lifecycle control through the CLI:
 

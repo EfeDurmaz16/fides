@@ -472,6 +472,10 @@ describe('CLI Commands', () => {
         'http://agentd.test/v1/revocations',
         expect.objectContaining({ method: 'POST' })
       );
+      const [, init] = mockFetch.mock.calls[0];
+      const body = JSON.parse(init.body as string);
+      expect(body.record.did).toBe('did:fides:agent');
+      expect(body.revokerPublicKey).toMatch(/^[0-9a-f]{64}$/);
     });
 
     it('incident report should call agentd incidents', async () => {
@@ -507,6 +511,10 @@ describe('CLI Commands', () => {
         'http://agentd.test/v1/incidents',
         expect.objectContaining({ method: 'POST' })
       );
+      const [, init] = mockFetch.mock.calls[0];
+      const body = JSON.parse(init.body as string);
+      expect(body.record.actor).toBe('did:fides:agent');
+      expect(body.reporterPublicKey).toMatch(/^[0-9a-f]{64}$/);
     });
   });
 });

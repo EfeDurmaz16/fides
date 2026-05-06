@@ -3,6 +3,7 @@ import type { DbClient } from '../db/client.js'
 import { TrustService } from '../services/trust-service.js'
 import type { CreateTrustRequest } from '../types.js'
 import { apiKeyAuth, TRUST_GRAPH_API_SCOPES } from '../middleware/auth.js'
+import { TrustError } from '@fides/shared'
 
 export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
   const app = new Hono()
@@ -29,7 +30,8 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
       c.header('Cache-Control', 'public, max-age=300')
       return c.json(score)
     } catch (error) {
-      return c.json({ error: 'Internal server error' }, 500)
+      const mapped = mapScoreLookupError(error)
+      return c.json({ error: mapped.message }, mapped.status)
     }
   })
 
@@ -55,7 +57,8 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
       c.header('Cache-Control', 'public, max-age=300')
       return c.json(score)
     } catch (error) {
-      return c.json({ error: 'Internal server error' }, 500)
+      const mapped = mapScoreLookupError(error)
+      return c.json({ error: mapped.message }, mapped.status)
     }
   })
 
@@ -122,4 +125,17 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
   })
 
   return app
+}
+
+function mapScoreLookupError(error: unknown): { status: 404 | 500 | 503; message: string } {
+  if (error instanceof TrustError) {
+    if (error.message.startsWith('Discovery service unavailable')) {
+      return { status: 503, message: error.message }
+    }
+    if (error.message.startsWith('Identity not found')) {
+      return { status: 404, message: error.message }
+    }
+  }
+
+  return { status: 500, message: 'Internal server error' }
 }

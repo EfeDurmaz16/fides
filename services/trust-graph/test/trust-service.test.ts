@@ -250,7 +250,15 @@ describe('TrustService', () => {
           where: vi.fn(() => {
             selectCallCount++
             if (selectCallCount === 1) {
-              // First call: cached score (expired)
+              // First call: identity lookup
+              return {
+                limit: vi.fn(() => Promise.resolve([
+                  { did: 'did:fides:alice', publicKey: Buffer.from('01'.repeat(32), 'hex') },
+                ])),
+              }
+            }
+            if (selectCallCount === 2) {
+              // Second call: cached score (expired)
               return {
                 limit: vi.fn(() => Promise.resolve([
                   {
@@ -262,10 +270,9 @@ describe('TrustService', () => {
                   },
                 ])),
               }
-            } else {
-              // Second call: edges for recomputation
-              return Promise.resolve([])
             }
+            // Third call: edges for recomputation
+            return Promise.resolve([])
           }),
         })),
       }))

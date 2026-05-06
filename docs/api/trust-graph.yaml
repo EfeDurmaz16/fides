@@ -87,6 +87,8 @@ paths:
       description: |
         Computes a reputation score based on direct and transitive trust edges.
         Algorithm: direct × 1.0 + depth-2 × 0.5 + depth-3+ × 0.25.
+        The DID is resolved through discovery before scores are computed so
+        unknown identities fail before reputation cache writes.
       parameters:
         - $ref: "#/components/parameters/DidParam"
       responses:
@@ -96,6 +98,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReputationScore"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -132,6 +138,9 @@ paths:
       operationId: getCapabilityScore
       tags: [Trust]
       summary: Get capability-specific trust score
+      description: |
+        Resolves the DID through discovery before computing capability trust.
+        Unknown identities return `404`; discovery outages return `503`.
       parameters:
         - $ref: "#/components/parameters/DidParam"
         - name: capabilityId
@@ -147,6 +156,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CapabilityScore"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -585,6 +598,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     InternalError:
       description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServiceUnavailable:
+      description: Upstream dependency unavailable
       content:
         application/json:
           schema:

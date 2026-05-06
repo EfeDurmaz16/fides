@@ -84,6 +84,33 @@ const pending = await agentd.listPendingPropagations(25)
 const retry = await agentd.retryPropagations(25)
 ```
 
+## Registry Client
+
+```typescript
+import { RegistryClient } from '@fides/sdk'
+
+const registry = new RegistryClient({
+  baseUrl: 'http://localhost:7346',
+  apiKey: process.env.FIDES_API_KEY,
+})
+
+await registry.register({
+  id: 'did:fides:agent',
+  name: 'Payment Agent',
+  version: '1.0.0',
+  capabilities: [{ id: 'payments.execute', name: 'Payments' }],
+  protocols: ['mcp'],
+  endpoints: [],
+  security: { authentication: ['api-key'], encryption: ['tls1.3'] },
+  metadata: {},
+})
+
+const card = await registry.getCard('did:fides:agent')
+const matches = await registry.search('Payment')
+await registry.setMode('did:fides:agent', 'private')
+await registry.updateMetadata('did:fides:agent', { owner: 'ops' })
+```
+
 ## API
 
 | Function | Description |
@@ -103,6 +130,11 @@ const retry = await agentd.retryPropagations(25)
 | `AgentdClient.recordSignedIncident(options)` | Create and sign an authority incident before submission |
 | `AgentdClient.listPendingPropagations(limit)` | Inspect due authority propagation retries |
 | `AgentdClient.retryPropagations(limit)` | Replay due authority propagation records |
+| `RegistryClient.register(card)` | Publish an AgentCard to the hosted registry |
+| `RegistryClient.getCard(did)` | Read a public AgentCard, returning `null` when it is missing |
+| `RegistryClient.search(query)` | Search public registry cards |
+| `RegistryClient.setMode(did, mode)` | Switch a registry card between `public` and `private` |
+| `RegistryClient.updateMetadata(did, metadata)` | Merge operator metadata into a registry card |
 
 ### Trust Levels
 

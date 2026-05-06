@@ -296,6 +296,17 @@ components:
             persistence:
               type: string
               enum: [ok, fail]
+            store:
+              type: object
+              required: [ok, kind]
+              properties:
+                ok:
+                  type: boolean
+                kind:
+                  type: string
+                  enum: [memory, file, postgres]
+                detail:
+                  type: string
 
     AgentCard:
       type: object

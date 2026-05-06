@@ -50,6 +50,16 @@ cp .env.example .env
 | `AGENTD_STATE_STORE_PATH` | _(empty)_ | no | File authority store path. Defaults to `~/.fides/agentd/authority-store.json`. |
 | `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION` | `false` | production recommended | When `true`, agentd rejects delegation, revocation, and incident writes unless the request includes the corresponding signer public key for canonical signature verification. |
 
+### Registry Store
+
+| Variable                  | Default | Required | Description |
+| ------------------------- | ------- | -------- | ----------- |
+| `REGISTRY_STORE`          | `file`  | production | `file` for local JSON state, `postgres` for durable hosted registry state |
+| `REGISTRY_DATABASE_URL`   | _(empty)_ | production when `REGISTRY_STORE=postgres` | Dedicated registry database URL. Falls back to `DATABASE_URL` when unset. |
+| `REGISTRY_DB_AUTO_MIGRATE`| `true`  | no | Runs idempotent registry migrations on startup and records applied ids in `registry_schema_migrations`. Set `false` when migrations are managed externally. |
+| `REGISTRY_DB_POOL_MAX`    | `10`    | no | Registry store connection pool size. Falls back to `DB_POOL_MAX`. |
+| `REGISTRY_STORE_PATH`     | _(empty)_ | no | File registry store path. Defaults to `~/.fides/registry/registry.json`. |
+
 ### Service Ports
 
 | Variable          | Default | Service       |
@@ -177,9 +187,12 @@ export DISCOVERY_URL="http://localhost:3100"
 export NODE_ENV=production
 node services/trust-graph/dist/index.js
 
-# Terminal 3 — Registry (no database needed)
+# Terminal 3 — Registry
 export REGISTRY_PORT=7346
+export REGISTRY_STORE=postgres
+export REGISTRY_DATABASE_URL="postgresql://fides:CHANGEME@localhost:5432/fides"
 export NODE_ENV=production
+pnpm --filter @fides/registry-service db:migrate
 node services/registry/dist/index.js
 
 # Terminal 4 — Policy Engine (no database needed)
@@ -410,9 +423,15 @@ docker compose exec postgres pg_dump -U fides fides > backup.sql
 cat backup.sql | docker compose exec -T postgres psql -U fides fides
 ```
 
-### Registry (file-based)
+### Registry
 
-The registry stores data at `~/.fides/registry/registry.json`. Back up this file:
+When `REGISTRY_STORE=postgres`, registry cards live in the `registry_cards` table and are covered by the normal Postgres backup flow above. Migrations are idempotent and can be applied with:
+
+```bash
+REGISTRY_DATABASE_URL="postgresql://fides:CHANGEME@localhost:5432/fides" pnpm --filter @fides/registry-service db:migrate
+```
+
+When `REGISTRY_STORE=file`, the registry stores data at `~/.fides/registry/registry.json`. Back up this file:
 
 ```bash
 cp ~/.fides/registry/registry.json ~/fides-registry-backup-$(date +%Y%m%d).json

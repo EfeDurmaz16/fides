@@ -56,6 +56,12 @@ paths:
         that claim against the discovery service before accepting the card. DNS
         verified publishers must have matching `did`, `domain`, `domainVerified`,
         and `verificationMethod` state in discovery.
+
+        If the card declares `publisher.organization.verified: true`, the
+        registry also validates the organization principal against discovery.
+        DNS verified organization publishers must have matching `did`,
+        `organizationDomain`, `organizationDomainVerified`, and
+        `organizationVerificationMethod` state in discovery.
       security:
         - ApiKeyAuth: []
       requestBody:
@@ -372,6 +378,30 @@ components:
           type: string
           enum: [dns, github, email, manual]
           description: Method used to verify the publisher identity
+        organization:
+          $ref: "#/components/schemas/PublisherOrganizationIdentity"
+
+    PublisherOrganizationIdentity:
+      type: object
+      required: [did, name, verified, verificationMethod]
+      properties:
+        did:
+          type: string
+          description: DID of the organization principal behind the publisher
+          example: "did:fides:org-01"
+        name:
+          type: string
+          example: "Example Org"
+        domain:
+          type: string
+          example: "example.com"
+        verified:
+          type: boolean
+          description: Whether the organization principal has been verified
+        verificationMethod:
+          type: string
+          enum: [dns, github, email, manual]
+          description: Method used to verify the organization principal
 
     CapabilityDescriptor:
       type: object

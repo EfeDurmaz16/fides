@@ -25,6 +25,14 @@ type PublisherClaim = {
   domain?: unknown
   verified?: unknown
   verificationMethod?: unknown
+  organization?: unknown
+}
+
+type OrganizationPublisherClaim = {
+  did?: unknown
+  domain?: unknown
+  verified?: unknown
+  verificationMethod?: unknown
 }
 
 type DiscoveryIdentityResponse = {
@@ -32,6 +40,9 @@ type DiscoveryIdentityResponse = {
   domain?: unknown
   domainVerified?: unknown
   verificationMethod?: unknown
+  organizationDomain?: unknown
+  organizationDomainVerified?: unknown
+  organizationVerificationMethod?: unknown
 }
 
 function getCorsOrigin(): string {
@@ -58,40 +69,84 @@ function extractPublisherClaim(card: Record<string, unknown>): PublisherClaim | 
   return publisher as PublisherClaim
 }
 
+function extractOrganizationPublisherClaim(publisher: PublisherClaim): OrganizationPublisherClaim | null {
+  if (!publisher.organization || typeof publisher.organization !== 'object' || Array.isArray(publisher.organization)) {
+    return null
+  }
+  return publisher.organization as OrganizationPublisherClaim
+}
+
 async function verifyPublisherClaim(card: Record<string, unknown>): Promise<{ ok: true } | { ok: false; status: 422; error: string }> {
   const publisher = extractPublisherClaim(card)
-  if (!publisher || publisher.verified !== true) {
+  if (!publisher) {
     return { ok: true }
   }
 
-  if (publisher.verificationMethod !== 'dns') {
-    return { ok: false, status: 422, error: 'verified publisher claims must use dns verification' }
+  if (publisher.verified === true) {
+    if (publisher.verificationMethod !== 'dns') {
+      return { ok: false, status: 422, error: 'verified publisher claims must use dns verification' }
+    }
+    if (typeof publisher.did !== 'string' || !publisher.did) {
+      return { ok: false, status: 422, error: 'verified publisher claims require publisher.did' }
+    }
+    if (typeof publisher.domain !== 'string' || !publisher.domain) {
+      return { ok: false, status: 422, error: 'verified publisher claims require publisher.domain' }
+    }
+
+    let response: Response
+    try {
+      response = await fetch(`${getDiscoveryUrl()}/identities/${encodeURIComponent(publisher.did)}`)
+    } catch {
+      return { ok: false, status: 422, error: 'publisher identity is not registered or not reachable in discovery' }
+    }
+    if (!response.ok) {
+      return { ok: false, status: 422, error: 'publisher identity is not registered or not reachable in discovery' }
+    }
+
+    const identity = await response.json() as DiscoveryIdentityResponse
+    if (
+      identity.did !== publisher.did ||
+      identity.domain !== publisher.domain ||
+      identity.domainVerified !== true ||
+      identity.verificationMethod !== 'dns'
+    ) {
+      return { ok: false, status: 422, error: 'publisher domain verification claim does not match discovery state' }
+    }
   }
-  if (typeof publisher.did !== 'string' || !publisher.did) {
-    return { ok: false, status: 422, error: 'verified publisher claims require publisher.did' }
+
+  const organization = extractOrganizationPublisherClaim(publisher)
+  if (!organization || organization.verified !== true) {
+    return { ok: true }
   }
-  if (typeof publisher.domain !== 'string' || !publisher.domain) {
-    return { ok: false, status: 422, error: 'verified publisher claims require publisher.domain' }
+
+  if (organization.verificationMethod !== 'dns') {
+    return { ok: false, status: 422, error: 'verified publisher organization claims must use dns verification' }
+  }
+  if (typeof organization.did !== 'string' || !organization.did) {
+    return { ok: false, status: 422, error: 'verified publisher organization claims require organization.did' }
+  }
+  if (typeof organization.domain !== 'string' || !organization.domain) {
+    return { ok: false, status: 422, error: 'verified publisher organization claims require organization.domain' }
   }
 
   let response: Response
   try {
-    response = await fetch(`${getDiscoveryUrl()}/identities/${encodeURIComponent(publisher.did)}`)
+    response = await fetch(`${getDiscoveryUrl()}/identities/${encodeURIComponent(organization.did)}`)
   } catch {
-    return { ok: false, status: 422, error: 'publisher identity is not registered or not reachable in discovery' }
+    return { ok: false, status: 422, error: 'publisher organization identity is not registered or not reachable in discovery' }
   }
   if (!response.ok) {
-    return { ok: false, status: 422, error: 'publisher identity is not registered or not reachable in discovery' }
+    return { ok: false, status: 422, error: 'publisher organization identity is not registered or not reachable in discovery' }
   }
 
   const identity = await response.json() as DiscoveryIdentityResponse
   if (
-    identity.did !== publisher.did ||
-    identity.domain !== publisher.domain ||
-    identity.domainVerified !== true ||
-    identity.verificationMethod !== 'dns'
+    identity.did !== organization.did ||
+    identity.organizationDomain !== organization.domain ||
+    identity.organizationDomainVerified !== true ||
+    identity.organizationVerificationMethod !== 'dns'
   ) {
-    return { ok: false, status: 422, error: 'publisher domain verification claim does not match discovery state' }
+    return { ok: false, status: 422, error: 'publisher organization verification claim does not match discovery state' }
   }
 
   return { ok: true }

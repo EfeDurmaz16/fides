@@ -179,6 +179,102 @@ describe('Registry Service Routes', () => {
         error: 'verified publisher claims must use dns verification',
       })
     })
+
+    it('allows a DNS-verified publisher organization claim when discovery state matches', async () => {
+      process.env.DISCOVERY_URL = 'https://discovery.test'
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+        did: 'did:fides:org-01',
+        organizationDomain: 'example.com',
+        organizationDomainVerified: true,
+        organizationVerificationMethod: 'dns',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+
+      const res = await app.request('/v1/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...TEST_CARD,
+          publisher: {
+            did: 'did:fides:publisher-01',
+            name: 'Example Publisher',
+            verified: false,
+            verificationMethod: 'manual',
+            organization: {
+              did: 'did:fides:org-01',
+              name: 'Example Org',
+              domain: 'example.com',
+              verified: true,
+              verificationMethod: 'dns',
+            },
+          },
+        }),
+      })
+
+      expect(res.status).toBe(201)
+      expect(fetchMock).toHaveBeenCalledWith('https://discovery.test/identities/did%3Afides%3Aorg-01')
+    })
+
+    it('rejects a verified publisher organization claim when discovery state does not match', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+        did: 'did:fides:org-01',
+        organizationDomain: 'other.example',
+        organizationDomainVerified: true,
+        organizationVerificationMethod: 'dns',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+
+      const res = await app.request('/v1/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...TEST_CARD,
+          publisher: {
+            did: 'did:fides:publisher-01',
+            name: 'Example Publisher',
+            verified: false,
+            verificationMethod: 'manual',
+            organization: {
+              did: 'did:fides:org-01',
+              name: 'Example Org',
+              domain: 'example.com',
+              verified: true,
+              verificationMethod: 'dns',
+            },
+          },
+        }),
+      })
+
+      expect(res.status).toBe(422)
+      const data = await res.json()
+      expect(data.error).toContain('publisher organization verification claim does not match discovery state')
+    })
+
+    it('rejects verified publisher organization claims without a DNS verification method', async () => {
+      const res = await app.request('/v1/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...TEST_CARD,
+          publisher: {
+            did: 'did:fides:publisher-01',
+            name: 'Example Publisher',
+            verified: false,
+            verificationMethod: 'manual',
+            organization: {
+              did: 'did:fides:org-01',
+              name: 'Example Org',
+              domain: 'example.com',
+              verified: true,
+              verificationMethod: 'manual',
+            },
+          },
+        }),
+      })
+
+      expect(res.status).toBe(422)
+      expect(await res.json()).toEqual({
+        error: 'verified publisher organization claims must use dns verification',
+      })
+    })
   })
 
   describe('GET /v1/cards/:did', () => {

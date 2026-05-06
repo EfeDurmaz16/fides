@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   AwsNitroTEEAdapter,
   BuildProvenanceAttestationProvider,
+  ContainerImageAttestationProvider,
   GitHubActionsAttestationProvider,
   InMemoryKillSwitch,
   MockTEEProvider,
@@ -45,6 +46,40 @@ describe('Production attestation adapters', () => {
     expect(await provider.verify(attestation)).toBe(true)
 
     attestation.measurement = 'sha256:tampered'
+    expect(await provider.verify(attestation)).toBe(false)
+  })
+
+  it('verifies container image attestations against allowed images', async () => {
+    const provider = new ContainerImageAttestationProvider([
+      { registry: 'ghcr.io', repository: 'efedurmaz16/fides-agent' },
+    ])
+    const digest = `sha256:${'a'.repeat(64)}`
+    const attestation = await provider.attest({
+      agentDid: 'did:fides:agent1',
+      registry: 'ghcr.io',
+      repository: 'efedurmaz16/fides-agent',
+      digest,
+      tag: 'main',
+      sourceCommit: 'abc123',
+    })
+
+    expect(attestation.provider).toBe('container-image')
+    expect(attestation.measurement).toBe(digest)
+    expect(await provider.verify(attestation)).toBe(true)
+
+    ;(attestation.evidence as any).repository = 'other/image'
+    expect(await provider.verify(attestation)).toBe(false)
+  })
+
+  it('rejects malformed container image digests', async () => {
+    const provider = new ContainerImageAttestationProvider()
+    const attestation = await provider.attest({
+      agentDid: 'did:fides:agent1',
+      registry: 'ghcr.io',
+      repository: 'efedurmaz16/fides-agent',
+      digest: 'sha256:not-a-real-digest',
+    })
+
     expect(await provider.verify(attestation)).toBe(false)
   })
 

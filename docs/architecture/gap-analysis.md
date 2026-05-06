@@ -51,14 +51,14 @@ This document classifies the current status of every required FIDES v2 / Agent T
 | 31 | Revocation records | Implemented | `packages/core/src/revocation.ts`, core tests, `agentd` revocation API routes, propagation outbox, and trust-graph record/read routes. |
 | 32 | Incident records | Implemented | `IncidentRecord` and impact aggregation in `packages/core/src/revocation.ts`; `agentd` incident API routes feed authorization context. |
 | 33 | Runtime attestation | Prototype | `packages/runtime/src/index.ts`, `services/agentd/src/index.ts`, runtime tests. |
-| 34 | TEE-ready attestation | Adapter-ready | `TEEAdapter` interface in `packages/runtime/src/index.ts`; production vendor adapters are not implemented. |
+| 34 | TEE-ready attestation | Adapter-ready | `TEEAdapter`, `HttpTEEAdapter`, `AwsNitroTEEAdapter`, `IntelSGXTEEAdapter`, and `AmdSEVTEEAdapter` in `packages/runtime/src/index.ts`; vendor verification services are external adapters. |
 | 35 | Mock TEE provider | Mock | `MockTEEProvider` in `packages/runtime/src/index.ts`, `packages/runtime/test/runtime.test.ts`. |
-| 36 | Container image attestation provider interface | Missing | No container image attestation interface exists yet. |
-| 37 | Reproducible build attestation interface | Missing | No reproducible build attestation interface exists yet. |
-| 38 | GitHub attestation | Missing | No GitHub verifier/provider exists yet. |
+| 36 | Container image attestation provider interface | Prototype | `ContainerImageAttestationInput`, `ContainerImageAttestationAdapter`, and `ContainerImageAttestationProvider` validate registry/repository/digest claims locally; registry transparency or Sigstore verification is not implemented. |
+| 37 | Reproducible build attestation interface | Prototype | `BuildAttestationInput`, `BuildAttestationAdapter`, and `BuildProvenanceAttestationProvider` model image digest, source commit, and builder identity; external SLSA/in-toto verification is not implemented. |
+| 38 | GitHub attestation | Prototype | `GitHubAttestationInput`, `GitHubAttestationAdapter`, and `GitHubActionsAttestationProvider` validate structured workflow evidence and allowed repositories; GitHub artifact attestation API verification is not implemented. |
 | 39 | Email attestation | Missing | No email verifier/provider exists yet. |
 | 40 | Domain attestation | Prototype | DNS TXT verifier helper exists in `packages/core/src/domain-verifier.ts`; CLI, agentd, and discovery have Node DNS verification, with discovery persistence for verified identity domains. |
-| 41 | Package registry attestation | Missing | No npm/PyPI/crates registry attestation provider exists yet. |
+| 41 | Package registry attestation | Prototype | `PackageAttestationInput`, `PackageAttestationAdapter`, and `PackageRegistryAttestationProvider` validate structured package integrity claims; live npm/PyPI/crates metadata verification is not implemented. |
 | 42 | Wallet attestation | Missing | Deliberately left out of FIDES core; Sardis should own payment/wallet-specific proofing. |
 | 43 | Passkey identity interface | Missing | No WebAuthn/passkey abstraction exists yet. |
 | 44 | CLI | Prototype | `packages/cli/src/index.ts` plus v2 commands for cards, policy, runtime, killswitch; daemon control is thin. |
@@ -107,7 +107,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 
 ### Still missing
 
-- Production attestation providers: Nitro, SGX, SEV, container image, reproducible build, GitHub, email, package registry, passkey.
+- Production attestation providers: live Nitro, SGX, SEV, Sigstore/SLSA, GitHub artifact-attestation, email, package registry metadata, and passkey verification.
 - Federation registry peering implementation.
 - Real mDNS/libp2p transport.
 - Platform metadata API under `services/platform-api/`.
@@ -115,7 +115,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 ## Remaining Blockers for a Production FIDES v2
 
 1. Durable trust-fabric state: registry, evidence, revocation, and incidents need real storage contracts; sessions now have a file-backed local store but not a production database adapter.
-2. Production attestation providers: the TEE/build/package/passkey providers are interfaces or missing; domain verification still depends on DNS/discovery availability and is not a broader organization proof.
+2. Production attestation providers: the TEE/build/container/package/GitHub providers now have adapter boundaries or local structured verification, but live vendor/API-backed verification and passkeys are still missing; domain verification still depends on DNS/discovery availability and is not a broader organization proof.
 3. Federation semantics: registry peering, cross-node revocation conflict handling, and trust-anchor governance need implementation.
 4. Authority separation hardening: identity, trust score, and policy are separated conceptually, but remote invocation execution remains adapter-ready rather than implemented.
 5. Service packaging: platform-api and policy-engine now have standalone service packages, Dockerfiles, compose wiring, and CI image builds; they still need production persistence/auth/metrics beyond health and topology/evaluation routes.
@@ -123,7 +123,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 ## Next Implementation Slice
 
 1. Add production storage adapters for registry, evidence, revocation, incidents, and session state.
-2. Add production attestation providers for Nitro, SGX, SEV, container image, reproducible build, GitHub, email, package registry, and passkeys.
+2. Add live vendor-backed attestation verification for Nitro, SGX, SEV, Sigstore/SLSA, GitHub artifact attestations, email, package registries, and passkeys.
 3. Add organization-level verification and trust-anchor governance around verified publishers.
 4. Extend the authority path demo into a multi-process demo that starts discovery, trust-graph, registry, relay, policy-engine, agentd, and platform-api.
 5. Add federation peering and cross-node revocation conflict semantics.

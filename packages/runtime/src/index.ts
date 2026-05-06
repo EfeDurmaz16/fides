@@ -29,6 +29,16 @@ export interface BuildAttestationInput {
   expiresInMs?: number
 }
 
+export interface ContainerImageAttestationInput {
+  agentDid: string
+  registry: string
+  repository: string
+  digest: string
+  tag?: string
+  sourceCommit?: string
+  expiresInMs?: number
+}
+
 export interface PackageAttestationInput {
   agentDid: string
   registry: 'npm' | 'pypi' | 'crates' | string
@@ -50,6 +60,12 @@ export interface GitHubAttestationInput {
 export interface BuildAttestationAdapter {
   readonly provider: string
   attest(input: BuildAttestationInput): Promise<RuntimeAttestation>
+  verify(attestation: RuntimeAttestation): Promise<boolean>
+}
+
+export interface ContainerImageAttestationAdapter {
+  readonly provider: string
+  attest(input: ContainerImageAttestationInput): Promise<RuntimeAttestation>
   verify(attestation: RuntimeAttestation): Promise<boolean>
 }
 
@@ -172,6 +188,46 @@ export class BuildProvenanceAttestationProvider implements BuildAttestationAdapt
   }
 }
 
+export class ContainerImageAttestationProvider implements ContainerImageAttestationAdapter {
+  readonly provider = 'container-image'
+
+  constructor(private readonly allowedImages?: Array<{ registry: string; repository: string }>) {}
+
+  async attest(input: ContainerImageAttestationInput): Promise<RuntimeAttestation> {
+    const expiresAt = new Date(Date.now() + (input.expiresInMs ?? 24 * 3600_000)).toISOString()
+    return createStructuredAttestation({
+      provider: this.provider,
+      agentDid: input.agentDid,
+      measurement: input.digest,
+      expiresAt,
+      evidence: {
+        type: 'container-image',
+        registry: input.registry,
+        repository: input.repository,
+        digest: input.digest,
+        tag: input.tag,
+        sourceCommit: input.sourceCommit,
+      },
+    })
+  }
+
+  async verify(attestation: RuntimeAttestation): Promise<boolean> {
+    if (!isFreshProvider(attestation, this.provider)) return false
+    const evidence = attestation.evidence as Partial<ContainerImageAttestationInput> & { type?: string }
+    if (evidence.type !== 'container-image') return false
+    if (typeof evidence.registry !== 'string' || !evidence.registry) return false
+    if (typeof evidence.repository !== 'string' || !evidence.repository) return false
+    if (typeof evidence.digest !== 'string' || !isSha256Digest(evidence.digest)) return false
+    if (evidence.digest !== attestation.measurement) return false
+    if (this.allowedImages && !this.allowedImages.some(image =>
+      image.registry === evidence.registry && image.repository === evidence.repository
+    )) {
+      return false
+    }
+    return true
+  }
+}
+
 export class GitHubActionsAttestationProvider implements GitHubAttestationAdapter {
   readonly provider = 'github-actions'
 
@@ -283,4 +339,8 @@ function createStructuredAttestation(input: {
 
 function isFreshProvider(attestation: RuntimeAttestation, provider: string): boolean {
   return attestation.provider === provider && new Date(attestation.expiresAt) >= new Date()
+}
+
+function isSha256Digest(value: string): boolean {
+  return /^sha256:[a-f0-9]{64}$/i.test(value)
 }

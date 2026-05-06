@@ -44,6 +44,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Check public package packs
+        run: pnpm package:packcheck
+
       - name: Lint
         run: pnpm lint
 

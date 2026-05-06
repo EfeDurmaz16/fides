@@ -1,24 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { publicPackageJsonPaths } from './public-packages.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
-
-const packagePaths = [
-  'packages/cli/package.json',
-  'packages/core/package.json',
-  'packages/discovery/package.json',
-  'packages/evidence/package.json',
-  'packages/policy/package.json',
-  'packages/runtime/package.json',
-  'packages/sdk/package.json',
-  'packages/shared/package.json',
-]
 
 const requiredFileEntries = new Set(['README.md', 'LICENSE'])
 const errors = []
 
-for (const packagePath of packagePaths) {
+for (const packagePath of publicPackageJsonPaths) {
   const absolutePath = join(root, packagePath)
   const pkg = JSON.parse(readFileSync(absolutePath, 'utf8'))
   const packageDir = dirname(absolutePath)
@@ -64,4 +54,4 @@ if (errors.length > 0) {
   process.exit(1)
 }
 
-console.log(`Package hygiene check passed for ${packagePaths.length} publishable package manifests.`)
+console.log(`Package hygiene check passed for ${publicPackageJsonPaths.length} publishable package manifests.`)

@@ -32,21 +32,16 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Check public package packs
+        run: pnpm package:packcheck
+
       - name: Test
         run: pnpm test
 
       - name: Publish public packages
         run: |
           set -euo pipefail
-          for package_dir in \
-            packages/shared \
-            packages/core \
-            packages/policy \
-            packages/runtime \
-            packages/discovery \
-            packages/evidence \
-            packages/sdk \
-            packages/cli
+          for package_dir in $(node scripts/print-public-package-dirs.mjs)
           do
             echo "Publishing ${package_dir}"
             (cd "${package_dir}" && pnpm publish --access public --no-git-checks)

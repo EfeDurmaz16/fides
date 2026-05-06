@@ -274,7 +274,7 @@ describe('platform-api service', () => {
       const res = await app.request('/v1/passkeys/principals/did%3Afides%3Aprincipal/credentials')
 
       expect(res.status).toBe(503)
-      expect((await res.json()).error).toContain('SERVICE_API_KEY is required')
+      expect((await res.json()).error).toBe('SERVICE_API_KEY is required in production for passkey credential bindings')
     } finally {
       restoreEnv('NODE_ENV', previousNodeEnv)
       restoreEnv('SERVICE_API_KEY', previousApiKey)
@@ -387,6 +387,23 @@ describe('platform-api service', () => {
 
     expect(res.status).toBe(400)
     expect((await res.json()).error).toContain('status')
+  })
+
+  it('requires API key for trust-anchor governance in production', async () => {
+    const previousNodeEnv = process.env.NODE_ENV
+    const previousApiKey = process.env.SERVICE_API_KEY
+    process.env.NODE_ENV = 'production'
+    delete process.env.SERVICE_API_KEY
+
+    try {
+      const res = await app.request('/v1/trust-anchors')
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toBe('SERVICE_API_KEY is required in production for trust-anchor governance')
+    } finally {
+      restoreEnv('NODE_ENV', previousNodeEnv)
+      restoreEnv('SERVICE_API_KEY', previousApiKey)
+    }
   })
 })
 

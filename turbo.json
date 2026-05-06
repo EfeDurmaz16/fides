@@ -10,6 +10,8 @@
       "env": [
         "AGENTD_DATABASE_URL",
         "AGENTD_POSTGRES_TEST_REQUIRED",
+        "DISCOVERY_DATABASE_URL",
+        "DISCOVERY_DB_AUTO_MIGRATE",
         "DATABASE_URL"
       ]
     },

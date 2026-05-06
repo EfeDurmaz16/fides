@@ -64,3 +64,19 @@ export async function postJson(url: string, body: unknown): Promise<unknown> {
   }
   return payload
 }
+
+export async function getJson(url: string): Promise<unknown> {
+  const headers: Record<string, string> = {}
+  const apiKey = process.env.FIDES_API_KEY || process.env.SERVICE_API_KEY
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey
+  }
+
+  const response = await fetch(url, { method: 'GET', headers })
+  const text = await response.text()
+  const payload = text ? JSON.parse(text) : {}
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${JSON.stringify(payload)}`)
+  }
+  return payload
+}

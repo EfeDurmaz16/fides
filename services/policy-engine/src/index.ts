@@ -4,11 +4,14 @@ import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import type { MiddlewareHandler } from 'hono'
 import { evaluatePolicy, type PolicyBundle, type PolicyContext } from '@fides/policy'
-import { evaluateApiKeyAuth, MetricsCollector, metricsMiddleware } from '@fides/shared'
+import { evaluateApiKeyAuth, MetricsCollector, metricsMiddleware, parseScopedApiKeys } from '@fides/shared'
 
 const app = new Hono()
 const startTime = Date.now()
 const collector = new MetricsCollector()
+const POLICY_ENGINE_API_SCOPES = {
+  evaluate: 'policy:evaluate',
+} as const
 
 app.use('*', metricsMiddleware(collector))
 app.use('*', cors({ origin: getCorsOrigin() }))
@@ -118,11 +121,18 @@ function isRecord(value: unknown): value is Record<string, any> {
 
 function apiKeyAuth(): MiddlewareHandler {
   return async (c, next) => {
+    const scopedKeys = parseScopedApiKeys(process.env.POLICY_ENGINE_API_KEYS, 'POLICY_ENGINE_API_KEYS')
+    if (!scopedKeys.ok) {
+      return c.json({ error: scopedKeys.error }, 503)
+    }
+
     const decision = evaluateApiKeyAuth({
       configuredKey: process.env.SERVICE_API_KEY,
+      configuredKeys: scopedKeys.value,
       providedKey: c.req.header('X-API-Key'),
       nodeEnv: process.env.NODE_ENV,
       productionRequirement: 'policy evaluation',
+      requiredScope: POLICY_ENGINE_API_SCOPES.evaluate,
     })
     if (!decision.ok) {
       return c.json({ error: decision.error }, decision.status)

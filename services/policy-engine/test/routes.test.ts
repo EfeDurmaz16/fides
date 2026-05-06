@@ -166,6 +166,60 @@ describe('policy-engine service', () => {
       restoreEnv('SERVICE_API_KEY', previousApiKey)
     }
   })
+
+  it('enforces scoped policy-engine API keys when configured', async () => {
+    const previousApiKey = process.env.SERVICE_API_KEY
+    const previousScopedKeys = process.env.POLICY_ENGINE_API_KEYS
+    delete process.env.SERVICE_API_KEY
+    process.env.POLICY_ENGINE_API_KEYS = JSON.stringify([
+      { key: 'evaluate-key', scopes: ['policy:evaluate'] },
+      { key: 'other-key', scopes: ['policy:admin'] },
+    ])
+
+    try {
+      const allowed = await app.request('/v1/policies/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'evaluate-key' },
+        body: JSON.stringify({ policy, context: { amount: 20 } }),
+      })
+
+      expect(allowed.status).toBe(200)
+      expect((await allowed.json()).decision).toBe('allow')
+
+      const denied = await app.request('/v1/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'other-key' },
+        body: JSON.stringify({ policy, context: { amount: 20 } }),
+      })
+
+      expect(denied.status).toBe(403)
+      expect((await denied.json()).error).toContain('policy:evaluate')
+    } finally {
+      restoreEnv('SERVICE_API_KEY', previousApiKey)
+      restoreEnv('POLICY_ENGINE_API_KEYS', previousScopedKeys)
+    }
+  })
+
+  it('fails closed when scoped policy-engine API keys are malformed', async () => {
+    const previousApiKey = process.env.SERVICE_API_KEY
+    const previousScopedKeys = process.env.POLICY_ENGINE_API_KEYS
+    delete process.env.SERVICE_API_KEY
+    process.env.POLICY_ENGINE_API_KEYS = '{bad-json'
+
+    try {
+      const res = await app.request('/v1/policies/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'evaluate-key' },
+        body: JSON.stringify({ policy, context: { amount: 20 } }),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('POLICY_ENGINE_API_KEYS must be a JSON array')
+    } finally {
+      restoreEnv('SERVICE_API_KEY', previousApiKey)
+      restoreEnv('POLICY_ENGINE_API_KEYS', previousScopedKeys)
+    }
+  })
 })
 
 function restoreEnv(name: string, value: string | undefined): void {

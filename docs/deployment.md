@@ -92,6 +92,7 @@ cp .env.example .env
 | `AGENTD_API_KEYS` | _(empty)_ | no | Optional agentd scoped keys as JSON, for example `[{"key":"agentd-operator-key","scopes":["agentd:policy:evaluate","agentd:sessions:write","agentd:authority:write","agentd:authorize:write","agentd:evidence:write","agentd:attest:write","agentd:killswitch:write"]}]`. When set, it takes precedence over `SERVICE_API_KEY` for agentd mutating `/v1/*` routes and malformed JSON fails closed with `503`. |
 | `REGISTRY_API_KEYS` | _(empty)_ | no | Optional registry scoped keys as JSON, for example `[{"key":"registry-operator-key","scopes":["registry:cards:publish","registry:cards:delete","registry:cards:mode:write","registry:cards:metadata:write"]}]`. When set, it takes precedence over `SERVICE_API_KEY` for registry mutating `/v1/*` routes and malformed JSON fails closed with `503`. |
 | `RELAY_API_KEYS` | _(empty)_ | no | Optional relay scoped keys as JSON, for example `[{"key":"relay-operator-key","scopes":["relay:messages:submit","relay:messages:delete"]}]`. When set, it takes precedence over `SERVICE_API_KEY` for relay mutating `/v1/*` routes and malformed JSON fails closed with `503`. |
+| `POLICY_ENGINE_API_KEYS` | _(empty)_ | no | Optional policy-engine scoped keys as JSON, for example `[{"key":"policy-operator-key","scopes":["policy:evaluate"]}]`. When set, it takes precedence over `SERVICE_API_KEY` for policy evaluation routes and malformed JSON fails closed with `503`. |
 
 ### Logging
 
@@ -390,7 +391,7 @@ fides.example.com {
 ### Production Checklist
 
 1. Set `NODE_ENV=production` on all services
-2. Set `SERVICE_API_KEY` to a strong random value (generated via `openssl rand -hex 32`); protected service routes fail closed with `503` in production when it is missing. For least privilege, prefer `PLATFORM_API_KEYS`, `AGENTD_API_KEYS`, `REGISTRY_API_KEYS`, and `RELAY_API_KEYS` with route-specific scopes on their services.
+2. Set `SERVICE_API_KEY` to a strong random value (generated via `openssl rand -hex 32`); protected service routes fail closed with `503` in production when it is missing. For least privilege, prefer `PLATFORM_API_KEYS`, `AGENTD_API_KEYS`, `REGISTRY_API_KEYS`, `RELAY_API_KEYS`, and `POLICY_ENGINE_API_KEYS` with route-specific scopes on their services.
 3. Set `CORS_ORIGIN` to your frontend origin (not `*`)
 4. Enable rate limiting via `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS`
 5. Set `LOG_LEVEL=warn` to reduce noise, use `LOG_FORMAT=json` for log aggregation

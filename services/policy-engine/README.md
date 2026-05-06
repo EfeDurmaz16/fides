@@ -33,7 +33,18 @@ pnpm --filter @fides/policy-engine lint
 
 The service listens on `POLICY_ENGINE_PORT`, then `PORT`, then `3300`.
 
-Policy evaluation routes are protected with `X-API-Key` when `SERVICE_API_KEY` is set. In `NODE_ENV=production`, evaluation routes fail closed with `503` if `SERVICE_API_KEY` is unset.
+Policy evaluation routes are protected with `X-API-Key` when `SERVICE_API_KEY`
+is set. For least-privilege deployments, `POLICY_ENGINE_API_KEYS` can provide
+JSON-scoped keys such as:
+
+```bash
+POLICY_ENGINE_API_KEYS='[{"key":"policy-operator-key","scopes":["policy:evaluate"]}]'
+```
+
+When `POLICY_ENGINE_API_KEYS` is set, it takes precedence over `SERVICE_API_KEY`.
+In `NODE_ENV=production`, evaluation routes fail closed with `503` if neither
+`SERVICE_API_KEY` nor valid `POLICY_ENGINE_API_KEYS` are configured. Malformed
+`POLICY_ENGINE_API_KEYS` also fails closed with `503`.
 
 ## API
 

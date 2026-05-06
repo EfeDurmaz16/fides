@@ -102,6 +102,7 @@ services:
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       SERVICE_API_KEY: ${SERVICE_API_KEY:-}
+      POLICY_ENGINE_API_KEYS: ${POLICY_ENGINE_API_KEYS:-}
 
   agentd:
     build:

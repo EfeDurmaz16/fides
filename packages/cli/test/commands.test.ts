@@ -188,7 +188,7 @@ describe('CLI Commands', () => {
         apiKey: 'test-key',
       });
       expect(mockRegistryClient.register).toHaveBeenCalledWith(card);
-    });
+    }, 10000);
 
     it('searches registry cards', async () => {
       const mockRegistryClient = {

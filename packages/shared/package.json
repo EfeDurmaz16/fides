@@ -11,6 +11,7 @@
     "url": "https://github.com/EfeDurmaz16/fides",
     "directory": "packages/shared"
   },
+  "homepage": "https://github.com/EfeDurmaz16/fides#readme",
   "keywords": ["fides", "trust", "ai-agents", "did", "decentralized-identity"],
   "engines": {
     "node": ">=22.0.0"

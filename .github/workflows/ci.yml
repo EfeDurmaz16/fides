@@ -38,6 +38,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check package hygiene
+        run: pnpm package:hygiene
+
       - name: Build
         run: pnpm build
 

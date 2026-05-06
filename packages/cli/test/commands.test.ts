@@ -62,6 +62,7 @@ describe('CLI Commands', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.FIDES_API_KEY;
+    process.exitCode = undefined;
     // Suppress console output in tests
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -73,6 +74,7 @@ describe('CLI Commands', () => {
     } else {
       delete process.env.FIDES_API_KEY;
     }
+    process.exitCode = undefined;
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -325,6 +327,62 @@ describe('CLI Commands', () => {
 
       expect(mockKeyStore.load).toHaveBeenCalledWith(mockDid);
       expect(mockTrustClient.getScore).toHaveBeenCalledWith(mockDid);
+    });
+  });
+
+  describe('daemon command', () => {
+    it('should check agentd health status', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        status: 'healthy',
+        service: 'agentd',
+        uptime: 12,
+        checks: {
+          discovery: 'connected',
+          trustGraph: 'connected',
+          registry: 'connected',
+          authorityStore: 'ready',
+        },
+        authorityStore: {
+          kind: 'file',
+          ok: true,
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDaemonCommand } = await import('../src/commands/daemon.js');
+      const cmd = createDaemonCommand();
+
+      await cmd.parseAsync(['status', '--agentd-url', 'http://localhost:7345'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:7345/health');
+      expect(process.exitCode).toBeUndefined();
+    });
+
+    it('should emit json and non-zero exit code for degraded agentd health', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        status: 'degraded',
+        service: 'agentd',
+        checks: {
+          discovery: 'unreachable',
+          trustGraph: 'connected',
+          registry: 'connected',
+          authorityStore: 'ready',
+        },
+        authorityStore: {
+          kind: 'postgres',
+          ok: true,
+        },
+      }), { status: 503, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDaemonCommand } = await import('../src/commands/daemon.js');
+      const cmd = createDaemonCommand();
+
+      await cmd.parseAsync(['status', '--agentd-url', 'http://localhost:7345/', '--json'], { from: 'user' });
+
+      const output = JSON.parse(vi.mocked(console.log).mock.calls[0][0] as string);
+      expect(output.status).toBe('degraded');
+      expect(process.exitCode).toBe(1);
     });
   });
 

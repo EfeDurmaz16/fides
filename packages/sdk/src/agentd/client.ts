@@ -19,6 +19,118 @@ export interface AuthorizationRequest {
   approvalGranted?: boolean
 }
 
+export interface DelegationToken {
+  id: string
+  delegator: string
+  delegatee: string
+  capabilities: string[]
+  constraints: Record<string, unknown>
+  issuedAt: string
+  expiresAt: string
+  nonce: string
+  signature: string
+  audience?: string[]
+}
+
+export interface SessionGrant {
+  id: string
+  token: DelegationToken
+  sessionKey: string
+  expiresAt: string
+  boundTo?: string
+  createdAt?: string
+  revoked?: boolean
+  revokedAt?: string
+  revocationReason?: string
+}
+
+export interface SessionCreateRequest {
+  token: DelegationToken
+  capabilityId?: string
+  audience?: string
+  boundTo?: string
+  ttlMs?: number
+  delegatorPublicKey?: string
+}
+
+export interface SessionCreateResponse {
+  authorized: boolean
+  session?: SessionGrant
+  errors?: string[]
+}
+
+export interface SessionLookupResponse {
+  session: SessionGrant
+}
+
+export interface SessionRevokeResponse {
+  revoked: boolean
+  session: SessionGrant
+}
+
+export interface RevocationRecord {
+  id: string
+  did: string
+  reason: string
+  revokedAt: string
+  revokedBy: string
+  signature: string
+  propagatedTo: string[]
+}
+
+export interface RevocationSubmitRequest {
+  record: RevocationRecord
+  revokerPublicKey?: string
+}
+
+export interface RevocationSubmitResponse {
+  revoked: boolean
+  record: RevocationRecord
+  propagation?: AuthorityPropagationResponse
+}
+
+export interface RevocationStatusResponse {
+  did: string
+  revoked: boolean
+  record?: RevocationRecord
+}
+
+export interface IncidentRecord {
+  id: string
+  type: 'compromise' | 'misbehavior' | 'policy_violation' | 'runtime_failure' | 'sybil'
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  actor: string
+  reportedBy: string
+  description: string
+  evidenceRefs: string[]
+  reportedAt: string
+  impact: {
+    trustPenalty: number
+    reputationPenalty: number
+    capabilitiesRevoked: string[]
+  }
+  signature: string
+  resolvedAt?: string
+}
+
+export interface IncidentSubmitRequest {
+  record: IncidentRecord
+  reporterPublicKey?: string
+}
+
+export interface IncidentSubmitResponse {
+  recorded: boolean
+  record: IncidentRecord
+  impact?: Record<string, unknown>
+  propagation?: AuthorityPropagationResponse
+}
+
+export interface IncidentListResponse {
+  did: string
+  incidents: IncidentRecord[]
+  impact: Record<string, unknown>
+}
+
 export interface AuthorizationDecision {
   decision: 'allow' | 'deny'
   explanation: string
@@ -27,6 +139,16 @@ export interface AuthorizationDecision {
   incidentImpact?: Record<string, unknown>
   revoked?: boolean
   errors?: string[]
+}
+
+export interface AuthorityPropagationResponse {
+  attempted: boolean
+  ok: boolean
+  target: string
+  status: number
+  queued: boolean
+  outboxId?: string
+  error?: string
 }
 
 export interface AuthorityPropagationRecord {
@@ -82,6 +204,34 @@ export class AgentdError extends Error {
 export class AgentdClient {
   constructor(private options: AgentdClientOptions) {}
 
+  async createSession(request: SessionCreateRequest): Promise<SessionCreateResponse> {
+    return this.post<SessionCreateResponse>('/v1/sessions', request)
+  }
+
+  async getSession(id: string): Promise<SessionLookupResponse> {
+    return this.get<SessionLookupResponse>(`/v1/sessions/${encodeURIComponent(id)}`)
+  }
+
+  async revokeSession(id: string, reason?: string): Promise<SessionRevokeResponse> {
+    return this.post<SessionRevokeResponse>(`/v1/sessions/${encodeURIComponent(id)}/revoke`, { reason })
+  }
+
+  async recordRevocation(request: RevocationSubmitRequest): Promise<RevocationSubmitResponse> {
+    return this.post<RevocationSubmitResponse>('/v1/revocations', request)
+  }
+
+  async getRevocation(did: string): Promise<RevocationStatusResponse> {
+    return this.get<RevocationStatusResponse>(`/v1/revocations/${encodeURIComponent(did)}`)
+  }
+
+  async recordIncident(request: IncidentSubmitRequest): Promise<IncidentSubmitResponse> {
+    return this.post<IncidentSubmitResponse>('/v1/incidents', request)
+  }
+
+  async listIncidents(did: string): Promise<IncidentListResponse> {
+    return this.get<IncidentListResponse>(`/v1/incidents/${encodeURIComponent(did)}`)
+  }
+
   async authorize(request: AuthorizationRequest): Promise<AuthorizationDecision> {
     return this.post<AuthorizationDecision>('/v1/authorize', request)
   }
@@ -94,6 +244,10 @@ export class AgentdClient {
 
   async retryPropagations(limit = 25): Promise<AuthorityPropagationRetryResponse> {
     return this.post<AuthorityPropagationRetryResponse>('/v1/authority/propagations/retry', { limit })
+  }
+
+  private async get<T>(path: string): Promise<T> {
+    return this.request<T>(`${this.baseUrl()}${path}`, { method: 'GET' })
   }
 
   private async post<T>(path: string, body: unknown): Promise<T> {

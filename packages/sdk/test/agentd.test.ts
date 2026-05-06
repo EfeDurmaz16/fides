@@ -104,6 +104,76 @@ describe('AgentdClient', () => {
     )
   })
 
+  it('reads registry cards through agentd', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => JSON.stringify({
+        did: 'did:fides:agent',
+        card: {
+          id: 'did:fides:agent',
+          name: 'Payment Agent',
+          version: '1.0.0',
+        },
+      }),
+    })
+
+    await expect(client.getCard('did:fides:agent')).resolves.toMatchObject({
+      did: 'did:fides:agent',
+      card: {
+        id: 'did:fides:agent',
+        name: 'Payment Agent',
+      },
+    })
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:7345/v1/cards/did%3Afides%3Aagent',
+      expect.objectContaining({ method: 'GET' })
+    )
+    const [, init] = mockFetch.mock.calls[0]
+    expect((init.headers as Headers).get('X-API-Key')).toBe('sdk-key')
+  })
+
+  it('preserves private and missing registry card errors', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: async () => JSON.stringify({
+          did: 'did:fides:private',
+          card: null,
+          error: 'private card - access denied',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: async () => JSON.stringify({
+          did: 'did:fides:missing',
+          card: null,
+          error: 'not found',
+        }),
+      })
+
+    await expect(client.getCard('did:fides:private')).rejects.toMatchObject({
+      name: 'AgentdError',
+      status: 403,
+      payload: {
+        did: 'did:fides:private',
+        card: null,
+        error: 'private card - access denied',
+      },
+    } satisfies Partial<AgentdError>)
+    await expect(client.getCard('did:fides:missing')).rejects.toMatchObject({
+      name: 'AgentdError',
+      status: 404,
+      payload: {
+        did: 'did:fides:missing',
+        card: null,
+        error: 'not found',
+      },
+    } satisfies Partial<AgentdError>)
+  })
+
   it('creates signed sessions from authority inputs', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

@@ -56,6 +56,8 @@ const decision = await agentd.authorize({
   audience: 'agentd',
 })
 
+const card = await agentd.getCard('did:fides:agent')
+
 const session = await agentd.createSignedSession({
   delegator: 'did:fides:principal',
   delegatee: 'did:fides:agent',
@@ -122,6 +124,7 @@ await registry.updateMetadata('did:fides:agent', { owner: 'ops' })
 | `createAttestation(issuer, subject, level, key)` | Create signed trust attestation |
 | `verifyAttestation(attestation, publicKey)` | Verify attestation signature |
 | `AgentdClient.authorize(request)` | Check local agentd authorization decisions |
+| `AgentdClient.getCard(did)` | Read an AgentCard through agentd, preserving private versus missing card errors |
 | `AgentdClient.createSession(request)` | Create delegated agentd sessions |
 | `AgentdClient.createSignedSession(options)` | Create and sign a delegation token before opening a session |
 | `AgentdClient.recordRevocation(request)` | Submit signed authority revocations |

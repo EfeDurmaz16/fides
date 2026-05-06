@@ -49,6 +49,7 @@ export { TrustClient } from './trust/client.js'
 export {
   AgentdClient,
   AgentdError,
+  type AgentdCardResponse,
   type AgentdClientOptions,
   type AuthorizationDecision,
   type AuthorizationRequest,

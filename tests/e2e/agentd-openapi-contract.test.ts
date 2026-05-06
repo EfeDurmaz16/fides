@@ -6,6 +6,7 @@ import { AgentdClient } from '@fides/sdk'
 const openApiPath = resolve(process.cwd(), '../../docs/api/agentd.yaml')
 const openApi = readFileSync(openApiPath, 'utf8')
 const agentdPaths = extractOpenApiPaths(openApi)
+const securedOperations = extractApiKeySecuredOperations(openApi)
 
 describe('Agentd OpenAPI contract', () => {
   const fetchMock = vi.fn()
@@ -106,6 +107,26 @@ describe('Agentd OpenAPI contract', () => {
     expect(openApi).toContain('AuthorityPropagationRetryResponse:')
     expect(openApi).toContain('ApiKeyAuth:')
   })
+
+  it('documents API key auth on mutating v1 operations', () => {
+    const mutatingV1Operations = [
+      'post /v1/policy/evaluate',
+      'post /v1/sessions',
+      'post /v1/sessions/{id}/revoke',
+      'post /v1/revocations',
+      'post /v1/incidents',
+      'post /v1/authorize',
+      'post /v1/evidence',
+      'post /v1/authority/propagations/retry',
+      'post /v1/attest',
+      'post /v1/killswitch/engage',
+      'post /v1/killswitch/disengage',
+    ]
+
+    for (const operation of mutatingV1Operations) {
+      expect(securedOperations, operation).toContain(operation)
+    }
+  })
 })
 
 function normalizeAgentdPath(url: string): string {
@@ -145,4 +166,47 @@ function extractOpenApiPaths(source: string): Map<string, string[]> {
   }
 
   return paths
+}
+
+function extractApiKeySecuredOperations(source: string): string[] {
+  const secured = new Set<string>()
+  let inPaths = false
+  let currentPath: string | null = null
+  let currentMethod: string | null = null
+  let inSecurityBlock = false
+
+  for (const line of source.split('\n')) {
+    if (line === 'paths:') {
+      inPaths = true
+      continue
+    }
+    if (inPaths && line.startsWith('components:')) break
+
+    const pathMatch = line.match(/^  (\/[^:]+):$/)
+    if (pathMatch) {
+      currentPath = pathMatch[1]
+      currentMethod = null
+      inSecurityBlock = false
+      continue
+    }
+
+    const methodMatch = line.match(/^    (get|post|patch|delete):$/)
+    if (methodMatch) {
+      currentMethod = methodMatch[1]
+      inSecurityBlock = false
+      continue
+    }
+
+    if (currentPath && currentMethod && line.match(/^      security:$/)) {
+      inSecurityBlock = true
+      continue
+    }
+
+    if (currentPath && currentMethod && inSecurityBlock && line.match(/^        - ApiKeyAuth: \[\]$/)) {
+      secured.add(`${currentMethod} ${currentPath}`)
+      inSecurityBlock = false
+    }
+  }
+
+  return Array.from(secured)
 }

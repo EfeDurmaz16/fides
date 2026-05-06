@@ -130,6 +130,8 @@ paths:
       operationId: evaluatePolicy
       tags: [Policy]
       summary: Evaluate a policy bundle
+      security:
+        - ApiKeyAuth: []
       requestBody:
         required: true
         content:
@@ -149,6 +151,8 @@ paths:
       operationId: createSession
       tags: [Authority]
       summary: Create a delegated session
+      security:
+        - ApiKeyAuth: []
       description: |
         Creates a local SessionGrant from a DelegationToken. When
         `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`, the request
@@ -202,6 +206,8 @@ paths:
       operationId: revokeSession
       tags: [Authority]
       summary: Revoke a delegated session
+      security:
+        - ApiKeyAuth: []
       parameters:
         - name: id
           in: path
@@ -229,6 +235,8 @@ paths:
       operationId: recordRevocation
       tags: [Authority]
       summary: Record a signed revocation
+      security:
+        - ApiKeyAuth: []
       description: |
         Stores a signed RevocationRecord locally and propagates it to
         trust-graph. When authority signature verification is required,
@@ -269,6 +277,8 @@ paths:
       operationId: recordIncident
       tags: [Authority]
       summary: Record a signed incident
+      security:
+        - ApiKeyAuth: []
       description: |
         Stores a signed IncidentRecord locally and propagates it to
         trust-graph. When authority signature verification is required,
@@ -309,6 +319,8 @@ paths:
       operationId: authorizeAction
       tags: [Authority]
       summary: Evaluate unified authorization for an agent action
+      security:
+        - ApiKeyAuth: []
       description: |
         Combines optional delegated session checks, local revocations,
         incident impact, policy evaluation, runtime trust context, and kill
@@ -341,6 +353,8 @@ paths:
       operationId: submitEvidence
       tags: [Evidence]
       summary: Submit evidence event
+      security:
+        - ApiKeyAuth: []
       description: |
         Appends an evidence event to the chain for a given actor DID.
         Events are hash-chained and Merkle-rooted.
@@ -421,6 +435,8 @@ paths:
       operationId: retryAuthorityPropagations
       tags: [Authority]
       summary: Retry due authority propagations
+      security:
+        - ApiKeyAuth: []
       description: |
         Replays due revocation and incident propagation records to trust-graph,
         updates outbox status, and appends local evidence for each attempt.
@@ -443,6 +459,8 @@ paths:
       operationId: createAttestation
       tags: [Attestation]
       summary: Create runtime attestation
+      security:
+        - ApiKeyAuth: []
       description: |
         Generates a TEE runtime attestation using the configured attestation
         provider (mock provider in development).
@@ -483,6 +501,8 @@ paths:
       operationId: engageKillSwitch
       tags: [Kill Switch]
       summary: Engage kill switch
+      security:
+        - ApiKeyAuth: []
       description: |
         Engage a kill switch at global, agent, or capability level.
         Global overrides all. Agent overrides capability for that agent.
@@ -505,6 +525,8 @@ paths:
       operationId: disengageKillSwitch
       tags: [Kill Switch]
       summary: Disengage kill switch
+      security:
+        - ApiKeyAuth: []
       requestBody:
         required: true
         content:

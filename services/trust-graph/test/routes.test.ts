@@ -453,6 +453,50 @@ describe('HTTP Routes', () => {
       expect(json.error).toContain('signed revocation record')
     })
 
+    it('POST /v1/revocations should return 404 when revoker identity is absent from discovery', async () => {
+      const record = await signedRevocationRecord()
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('not found', { status: 404 }))))
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb, 'http://discovery.test')
+      const res = await app.request('/v1/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record }),
+      })
+
+      expect(res.status).toBe(404)
+      expect((await res.json()).error).toContain('Identity not found: did:fides:principal')
+    })
+
+    it('POST /v1/revocations should return 503 when discovery is unavailable for revoker identity', async () => {
+      const record = await signedRevocationRecord()
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('unavailable', { status: 503 }))))
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb, 'http://discovery.test')
+      const res = await app.request('/v1/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record }),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('Discovery service unavailable')
+    })
+
     it('GET /v1/revocations/:did should return latest revocation state', async () => {
       const record = await signedRevocationRecord()
       mockDb.select = vi.fn(() => ({
@@ -520,6 +564,50 @@ describe('HTTP Routes', () => {
       expect(res.status).toBe(400)
       const json = await res.json()
       expect(json.error).toContain('signed incident record')
+    })
+
+    it('POST /v1/incidents should return 404 when reporter identity is absent from discovery', async () => {
+      const record = await signedIncidentRecord()
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('not found', { status: 404 }))))
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb, 'http://discovery.test')
+      const res = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actorDid: record.actor, record }),
+      })
+
+      expect(res.status).toBe(404)
+      expect((await res.json()).error).toContain('Identity not found: did:fides:principal')
+    })
+
+    it('POST /v1/incidents should return 503 when discovery is unavailable for reporter identity', async () => {
+      const record = await signedIncidentRecord()
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('unavailable', { status: 503 }))))
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([])),
+          })),
+        })),
+      }))
+
+      const app = createTrustRoutes(mockDb, 'http://discovery.test')
+      const res = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actorDid: record.actor, record }),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('Discovery service unavailable')
     })
 
     it('POST /v1/incidents should accept agentd incident payloads', async () => {

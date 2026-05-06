@@ -82,8 +82,8 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
       const id = await trustService.recordIncident(db, body)
       return c.json({ id }, 201)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      return c.json({ error: message }, 400)
+      const mapped = mapTrustWriteError(error)
+      return c.json({ error: mapped.message }, mapped.status)
     }
   })
 
@@ -94,8 +94,8 @@ export function createTrustRoutes(db: DbClient, discoveryUrl?: string) {
       const result = await trustService.recordRevocation(db, body)
       return c.json(result, 201)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      return c.json({ error: message }, 400)
+      const mapped = mapTrustWriteError(error)
+      return c.json({ error: mapped.message }, mapped.status)
     }
   })
 
@@ -139,4 +139,17 @@ function mapTrustLookupError(error: unknown): { status: 404 | 500 | 503; message
   }
 
   return { status: 500, message: 'Internal server error' }
+}
+
+function mapTrustWriteError(error: unknown): { status: 400 | 404 | 500 | 503; message: string } {
+  const lookup = mapTrustLookupError(error)
+  if (lookup.status !== 500) {
+    return lookup
+  }
+
+  if (error instanceof TrustError || error instanceof Error) {
+    return { status: 400, message: error.message }
+  }
+
+  return { status: 400, message: 'Unknown error' }
 }

@@ -128,6 +128,7 @@ describe('CLI Commands', () => {
         register: vi.fn().mockResolvedValue({ did: mockDid }),
         resolve: vi.fn(),
       };
+      process.env.FIDES_API_KEY = 'cli-discovery-key';
       vi.mocked(sdk.DiscoveryClient).mockImplementation(() => mockDiscoveryClient as any);
 
       const { createInitCommand } = await import('../src/commands/init.js');
@@ -137,6 +138,9 @@ describe('CLI Commands', () => {
 
       expect(sdk.generateKeyPair).toHaveBeenCalled();
       expect(sdk.generateDID).toHaveBeenCalledWith(mockKeyPair.publicKey);
+      expect(sdk.DiscoveryClient).toHaveBeenCalledWith(expect.objectContaining({
+        apiKey: 'cli-discovery-key',
+      }));
       expect(mockKeyStore.save).toHaveBeenCalledWith(mockDid, mockKeyPair);
     });
   });

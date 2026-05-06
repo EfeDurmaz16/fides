@@ -10,6 +10,11 @@ export interface RegisterIdentityParams {
   organizationDomain?: string
 }
 
+export interface DiscoveryClientOptions {
+  baseUrl: string
+  apiKey?: string
+}
+
 export interface VerifyIdentityDomainResponse {
   did: string
   publicKey: string
@@ -47,7 +52,7 @@ export interface VerifyOrganizationDomainResponse {
 }
 
 export class DiscoveryClient {
-  constructor(private options: { baseUrl: string }) {}
+  constructor(private options: DiscoveryClientOptions) {}
 
   /**
    * Register an identity with the discovery service
@@ -56,9 +61,7 @@ export class DiscoveryClient {
     try {
       const response = await fetch(`${this.options.baseUrl}/identities`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: this.jsonHeaders(),
         body: JSON.stringify(identity),
       })
 
@@ -120,7 +123,7 @@ export class DiscoveryClient {
         `${this.options.baseUrl}/identities/${encodeURIComponent(did)}/domain/verify`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.jsonHeaders(),
           body: JSON.stringify(domain ? { domain } : {}),
         }
       )
@@ -152,7 +155,7 @@ export class DiscoveryClient {
         `${this.options.baseUrl}/identities/${encodeURIComponent(did)}/organization-domain/verify`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.jsonHeaders(),
           body: JSON.stringify(domain ? { domain } : {}),
         }
       )
@@ -203,5 +206,11 @@ export class DiscoveryClient {
         `Failed to resolve well-known: ${error instanceof Error ? error.message : String(error)}`
       )
     }
+  }
+
+  private jsonHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (this.options.apiKey) headers['X-API-Key'] = this.options.apiKey
+    return headers
   }
 }

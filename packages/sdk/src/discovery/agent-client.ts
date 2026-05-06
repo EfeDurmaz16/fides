@@ -19,12 +19,18 @@ interface CacheEntry {
   timestamp: number
 }
 
+export interface AgentDiscoveryClientOptions {
+  baseUrl: string
+  apiKey?: string
+  cacheTtlMs?: number
+}
+
 export class AgentDiscoveryClient {
   private cache: Map<string, CacheEntry> = new Map()
   private cacheTtlMs: number
 
   constructor(
-    private options: { baseUrl: string; cacheTtlMs?: number }
+    private options: AgentDiscoveryClientOptions
   ) {
     this.cacheTtlMs = options.cacheTtlMs ?? DEFAULT_AGENT_CACHE_TTL_MS
   }
@@ -36,7 +42,7 @@ export class AgentDiscoveryClient {
     try {
       const response = await fetch(`${this.options.baseUrl}/agents`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.jsonHeaders(),
         body: JSON.stringify(params),
       })
 
@@ -132,7 +138,7 @@ export class AgentDiscoveryClient {
         `${this.options.baseUrl}/agents/${encodeURIComponent(did)}`,
         {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: this.jsonHeaders(),
           body: JSON.stringify(updates),
         }
       )
@@ -159,7 +165,7 @@ export class AgentDiscoveryClient {
     try {
       const response = await fetch(
         `${this.options.baseUrl}/agents/${encodeURIComponent(did)}/heartbeat`,
-        { method: 'PUT' }
+        { method: 'PUT', headers: this.authHeaders() }
       )
 
       if (!response.ok) {
@@ -181,7 +187,7 @@ export class AgentDiscoveryClient {
     try {
       const response = await fetch(
         `${this.options.baseUrl}/agents/${encodeURIComponent(did)}`,
-        { method: 'DELETE' }
+        { method: 'DELETE', headers: this.authHeaders() }
       )
 
       if (!response.ok) {
@@ -200,5 +206,16 @@ export class AgentDiscoveryClient {
 
   clearCache(): void {
     this.cache.clear()
+  }
+
+  private jsonHeaders(): Record<string, string> {
+    return {
+      ...this.authHeaders(),
+      'Content-Type': 'application/json',
+    }
+  }
+
+  private authHeaders(): Record<string, string> {
+    return this.options.apiKey ? { 'X-API-Key': this.options.apiKey } : {}
   }
 }

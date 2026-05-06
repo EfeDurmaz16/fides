@@ -20,6 +20,7 @@ import { AgentDiscoveryClient, type RegisterAgentParams } from './discovery/agen
 export interface FidesOptions {
   discoveryUrl: string
   trustUrl: string
+  apiKey?: string
   keyStore?: KeyStore
 }
 
@@ -33,8 +34,8 @@ export class Fides {
   private heartbeatTimer?: ReturnType<typeof setInterval>
 
   constructor(options: FidesOptions) {
-    this.discoveryClient = new DiscoveryClient({ baseUrl: options.discoveryUrl })
-    this.agentClient = new AgentDiscoveryClient({ baseUrl: options.discoveryUrl })
+    this.discoveryClient = new DiscoveryClient({ baseUrl: options.discoveryUrl, apiKey: options.apiKey })
+    this.agentClient = new AgentDiscoveryClient({ baseUrl: options.discoveryUrl, apiKey: options.apiKey })
     this.resolver = new IdentityResolver({ discoveryUrl: options.discoveryUrl })
     this.trustClient = new TrustClient({ baseUrl: options.trustUrl })
     this.keyStore = options.keyStore ?? new MemoryKeyStore()

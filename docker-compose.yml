@@ -62,13 +62,18 @@ services:
       - "7346:7346"
     environment:
       REGISTRY_PORT: "7346"
+      REGISTRY_STORE: ${REGISTRY_STORE:-postgres}
+      REGISTRY_DATABASE_URL: ${REGISTRY_DATABASE_URL:-postgresql://${POSTGRES_USER:-fides}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-fides}}
+      REGISTRY_DB_AUTO_MIGRATE: ${REGISTRY_DB_AUTO_MIGRATE:-true}
+      REGISTRY_DB_POOL_MAX: ${REGISTRY_DB_POOL_MAX:-10}
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       SERVICE_API_KEY: ${SERVICE_API_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
-    volumes:
-      - registry_data:/home/fides/.fides/registry
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   relay:
     build:
@@ -159,4 +164,3 @@ services:
 
 volumes:
   postgres_data:
-  registry_data:

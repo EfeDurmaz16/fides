@@ -10,6 +10,7 @@ import {
   type IncidentRecord as CoreIncidentRecord,
   type RevocationRecord as CoreRevocationRecord,
 } from '@fides/core'
+import type { AgentCard } from '../registry/client.js'
 
 export interface AgentdClientOptions {
   baseUrl: string
@@ -68,6 +69,12 @@ export interface SessionLookupResponse {
 export interface SessionRevokeResponse {
   revoked: boolean
   session: SessionGrant
+}
+
+export interface AgentdCardResponse {
+  did: string
+  card: AgentCard | null
+  error?: string
 }
 
 export type RevocationRecord = CoreRevocationRecord
@@ -246,6 +253,10 @@ export class AgentdClient {
 
   async getSession(id: string): Promise<SessionLookupResponse> {
     return this.get<SessionLookupResponse>(`/v1/sessions/${encodeURIComponent(id)}`)
+  }
+
+  async getCard(did: string): Promise<AgentdCardResponse> {
+    return this.get<AgentdCardResponse>(`/v1/cards/${encodeURIComponent(did)}`)
   }
 
   async revokeSession(id: string, reason?: string): Promise<SessionRevokeResponse> {

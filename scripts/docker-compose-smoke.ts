@@ -4,6 +4,8 @@ import {
   createDelegationToken,
   createIncidentRecord,
   createRevocationRecord,
+  deriveEd25519PublicKeyHex,
+  signDelegationToken,
   signIncidentRecord,
   signRevocationRecord,
 } from '@fides/core'
@@ -21,6 +23,8 @@ const services = {
 } as const
 
 const serviceApiKey = process.env.SERVICE_API_KEY
+const authorityPrivateKeyHex = '01'.repeat(32)
+const authorityPrivateKey = Buffer.from(authorityPrivateKeyHex, 'hex')
 
 async function main() {
   console.log('FIDES docker compose smoke')
@@ -54,20 +58,19 @@ async function runAuthorityFlow() {
   const principalDid = `did:fides:docker-principal-${runId}`
   const capabilityId = 'payments.execute'
 
-  const token = {
-    ...createDelegationToken({
-      delegator: principalDid,
-      delegatee: agentDid,
-      capabilities: [capabilityId],
-      constraints: { maxActions: 3, maxSpend: '100.00', allowedContexts: ['docker-smoke'] },
-      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
-      audience: ['agentd'],
-    }),
-    signature: '00'.repeat(64),
-  }
+  const publicKey = await deriveEd25519PublicKeyHex(authorityPrivateKeyHex)
+  const token = await signDelegationToken(createDelegationToken({
+    delegator: principalDid,
+    delegatee: agentDid,
+    capabilities: [capabilityId],
+    constraints: { maxActions: 3, maxSpend: '100.00', allowedContexts: ['docker-smoke'] },
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    audience: ['agentd'],
+  }), authorityPrivateKey)
 
   const sessionResponse = await postJson(`${services.agentd}/v1/sessions`, {
     token,
+    delegatorPublicKey: publicKey,
     capabilityId,
     audience: 'agentd',
     ttlMs: 300_000,
@@ -77,6 +80,7 @@ async function runAuthorityFlow() {
 
   await expectStatus(await postJson(`${services.agentd}/v1/sessions`, {
     token,
+    delegatorPublicKey: publicKey,
     capabilityId,
     audience: 'agentd',
   }), 409, 'rejected replayed delegation nonce')
@@ -114,26 +118,26 @@ async function runAuthorityFlow() {
 
   const revocationResponse = await postJson(`${services.agentd}/v1/revocations`, {
     record: await signedRevocationRecord(agentDid, principalDid),
+    revokerPublicKey: publicKey,
   })
   await expectStatus(revocationResponse, 201, 'recorded agent revocation')
 
   const incidentResponse = await postJson(`${services.agentd}/v1/incidents`, {
     record: await signedIncidentRecord(agentDid, principalDid),
+    reporterPublicKey: publicKey,
   })
   await expectStatus(incidentResponse, 201, 'recorded incident')
 }
 
 async function signedRevocationRecord(did: string, revokedBy: string) {
-  const privateKey = Buffer.from('01'.repeat(32), 'hex')
   return signRevocationRecord(createRevocationRecord({
     did,
     reason: 'principal disabled docker smoke agent',
     revokedBy,
-  }), privateKey)
+  }), authorityPrivateKey)
 }
 
 async function signedIncidentRecord(actor: string, reportedBy: string) {
-  const privateKey = Buffer.from('01'.repeat(32), 'hex')
   return signIncidentRecord(createIncidentRecord({
     actor,
     reportedBy,
@@ -141,7 +145,7 @@ async function signedIncidentRecord(actor: string, reportedBy: string) {
     severity: 'high',
     description: 'Docker smoke incident report',
     capabilitiesRevoked: ['payments.execute'],
-  }), privateKey)
+  }), authorityPrivateKey)
 }
 
 async function assertAgentdUsesPostgres() {

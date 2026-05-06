@@ -737,7 +737,11 @@ function isByte(value: unknown): value is number {
 }
 
 function authoritySignatureVerificationRequired(): boolean {
-  return parseBooleanEnv(process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION)
+  const configured = process.env.AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION
+  if (configured === undefined || configured.trim() === '') {
+    return process.env.NODE_ENV === 'production'
+  }
+  return parseBooleanEnv(configured)
 }
 
 function parseBooleanEnv(value: string | undefined): boolean {

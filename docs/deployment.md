@@ -60,7 +60,7 @@ cp .env.example .env
 | `AGENTD_DB_AUTO_MIGRATE`  | `true`  | no | Runs idempotent authority migrations on startup and records applied ids in `agentd_schema_migrations`. Set `false` when migrations are managed externally. |
 | `AGENTD_DB_POOL_MAX`      | `10`    | no | Agentd authority store connection pool size. Falls back to `DB_POOL_MAX`. |
 | `AGENTD_STATE_STORE_PATH` | _(empty)_ | no | File authority store path. Defaults to `~/.fides/agentd/authority-store.json`. |
-| `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION` | `false` | production recommended | When `true`, agentd rejects delegation, revocation, and incident writes unless the request includes the corresponding signer public key for canonical signature verification. |
+| `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION` | `true` in production, `false` otherwise | no | When `true`, agentd rejects delegation, revocation, and incident writes unless the request includes the corresponding signer public key for canonical signature verification. Set `false` only for transitional deployments that cannot yet send signer public keys. |
 
 ### Registry Store
 
@@ -422,7 +422,7 @@ fides.example.com {
 7. Run `pnpm --filter @fides/discovery-service db:migrate` before setting `DISCOVERY_DB_AUTO_MIGRATE=false`
 8. Run `pnpm --filter @fides/trust-graph db:migrate` before setting `TRUST_GRAPH_DB_AUTO_MIGRATE=false`
 9. Run `pnpm --filter @fides/agentd db:migrate` before setting `AGENTD_DB_AUTO_MIGRATE=false`
-10. Set `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true` once clients send signer public keys with delegated session, revocation, and incident writes
+10. Keep `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true` in production and send signer public keys with delegated session, revocation, and incident writes
 11. Rotate `SERVICE_API_KEY` periodically
 
 ---

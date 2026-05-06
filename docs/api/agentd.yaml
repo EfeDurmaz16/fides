@@ -193,10 +193,10 @@ paths:
       security:
         - ApiKeyAuth: []
       description: |
-        Creates a local SessionGrant from a DelegationToken. When
-        `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`, the request
-        must include `delegatorPublicKey` so agentd can verify the
-        DelegationToken before storing the session.
+        Creates a local SessionGrant from a DelegationToken. In production,
+        or whenever `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`,
+        the request must include `delegatorPublicKey` so agentd can verify
+        the DelegationToken before storing the session.
       requestBody:
         required: true
         content:
@@ -278,8 +278,8 @@ paths:
         - ApiKeyAuth: []
       description: |
         Stores a signed RevocationRecord locally and propagates it to
-        trust-graph. When authority signature verification is required,
-        `revokerPublicKey` must be included.
+        trust-graph. In production, or whenever authority signature
+        verification is required, `revokerPublicKey` must be included.
       requestBody:
         required: true
         content:
@@ -320,8 +320,8 @@ paths:
         - ApiKeyAuth: []
       description: |
         Stores a signed IncidentRecord locally and propagates it to
-        trust-graph. When authority signature verification is required,
-        `reporterPublicKey` must be included.
+        trust-graph. In production, or whenever authority signature
+        verification is required, `reporterPublicKey` must be included.
       requestBody:
         required: true
         content:

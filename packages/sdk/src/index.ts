@@ -65,6 +65,14 @@ export {
   type PlatformPasskeyCredentialDescriptor,
   type PlatformPasskeyCredentialsResponse,
   type PlatformTopologyResponse,
+  type PlatformTrustAnchorDistribution,
+  type PlatformTrustAnchorDistributionEntry,
+  type PlatformTrustAnchorDistributionOptions,
+  type PlatformTrustAnchorDistributionResponse,
+  type PlatformTrustAnchorRecord,
+  type PlatformTrustAnchorResponse,
+  type PlatformTrustAnchorStatus,
+  type PlatformTrustAnchorsResponse,
 } from './platform/client.js'
 
 // Trust module exports

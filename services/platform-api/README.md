@@ -15,15 +15,17 @@ Current scope:
 - Version metadata for platform clients.
 - Topology endpoint that exposes configured service URLs.
 - File-backed passkey credential binding persistence for platform-hosted principals.
+- File-backed governed trust-anchor registry and deterministic distribution bundle.
 
 Not included yet:
 
 - Authenticated agent management.
-- Trust relationship CRUD APIs.
+- General trust relationship CRUD APIs beyond governed trust anchors.
 - Policy management APIs.
 - Analytics and API key management.
 - Live WebAuthn cryptographic verification. The platform API stores bindings
   after a verifier adapter has accepted registration or authentication.
+- Network peering or external trust-anchor governance workflows.
 
 Those higher-level workflows should be added only once their backing service contracts are stable.
 
@@ -95,3 +97,70 @@ Returns a stored passkey credential binding.
 ### `DELETE /v1/passkeys/credentials/:credentialId`
 
 Deletes a stored passkey credential binding.
+
+### `POST /v1/trust-anchors`
+
+Stores or updates a governed trust anchor:
+
+```json
+{
+  "did": "did:fides:anchor",
+  "name": "Example Root Anchor",
+  "publicKey": "0000000000000000000000000000000000000000000000000000000000000000",
+  "attestation": {
+    "payload": { "did": "did:fides:anchor" },
+    "proof": {
+      "type": "Ed25519Signature2024",
+      "created": "2026-01-01T00:00:00.000Z",
+      "verificationMethod": "did:fides:issuer#key-1",
+      "proofPurpose": "assertionMethod",
+      "canonicalizationAlgorithm": "https://fides.dev/canonical-json/v1",
+      "proofValue": "signature"
+    }
+  },
+  "status": "active",
+  "scopes": ["identity.organization"],
+  "issuerDid": "did:fides:issuer",
+  "createdAt": "2026-01-01T00:00:00.000Z"
+}
+```
+
+The API stores public keys as 32-byte hex strings and emits the same shape back
+to operator clients.
+
+### `GET /v1/trust-anchors`
+
+Lists governed trust anchors. Optional `status=active|suspended|revoked`
+filters the response.
+
+### `GET /v1/trust-anchors/distribution`
+
+Returns a deterministic `fides.trust-anchors.v1` distribution bundle containing
+active anchors that pass core trust-anchor policy validation. Optional query
+parameters:
+
+- `issuerDid`
+- `requiredScope`
+- `trustedIssuerDids` as a comma-separated DID list
+
+### `GET /v1/trust-anchors/:did`
+
+Returns one governed trust-anchor record.
+
+### `PATCH /v1/trust-anchors/:did/status`
+
+Updates anchor status:
+
+```json
+{
+  "status": "revoked",
+  "reason": "key compromise"
+}
+```
+
+Revocations automatically receive `revokedAt` when the request omits it.
+
+### `DELETE /v1/trust-anchors/:did`
+
+Hard-deletes a trust-anchor record from local platform storage. Prefer status
+revocation when downstream distribution clients need evidence of removal.

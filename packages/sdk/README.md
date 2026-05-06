@@ -176,6 +176,33 @@ await platform.storePasskeyBinding({
 const credentials = await platform.listPasskeyCredentials('did:fides:principal')
 const binding = await platform.getPasskeyBinding('credential-id')
 await platform.deletePasskeyBinding('credential-id')
+
+await platform.storeTrustAnchor({
+  did: 'did:fides:anchor',
+  name: 'Example Root Anchor',
+  publicKey: '00'.repeat(32),
+  attestation: {
+    payload: { did: 'did:fides:anchor' },
+    proof: {
+      type: 'Ed25519Signature2024',
+      created: new Date().toISOString(),
+      verificationMethod: 'did:fides:issuer#key-1',
+      proofPurpose: 'assertionMethod',
+      canonicalizationAlgorithm: 'https://fides.dev/canonical-json/v1',
+      proofValue: 'signature',
+    },
+  },
+  status: 'active',
+  scopes: ['identity.organization'],
+  issuerDid: 'did:fides:issuer',
+  createdAt: new Date().toISOString(),
+})
+
+const anchors = await platform.listTrustAnchors('active')
+const distribution = await platform.trustAnchorDistribution({
+  requiredScope: 'identity.organization',
+  trustedIssuerDids: ['did:fides:issuer'],
+})
 ```
 
 ## API
@@ -217,6 +244,12 @@ await platform.deletePasskeyBinding('credential-id')
 | `PlatformClient.listPasskeyCredentials(principalDid)` | List a principal's passkey credential descriptors |
 | `PlatformClient.getPasskeyBinding(credentialId)` | Read a stored passkey credential binding, returning `null` when missing |
 | `PlatformClient.deletePasskeyBinding(credentialId)` | Delete a stored passkey credential binding |
+| `PlatformClient.storeTrustAnchor(anchor)` | Store or update a governed trust-anchor record |
+| `PlatformClient.listTrustAnchors(status?)` | List governed trust anchors, optionally filtered by status |
+| `PlatformClient.trustAnchorDistribution(options?)` | Read a deterministic active trust-anchor distribution bundle |
+| `PlatformClient.getTrustAnchor(did)` | Read a governed trust anchor, returning `null` when missing |
+| `PlatformClient.updateTrustAnchorStatus(did, update)` | Suspend, reactivate, or revoke a governed trust anchor |
+| `PlatformClient.deleteTrustAnchor(did)` | Hard-delete a governed trust-anchor record |
 
 ### Trust Levels
 

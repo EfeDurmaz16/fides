@@ -171,7 +171,7 @@ const decision = await evaluateGuard({
 | `@fides/evidence` | Evidence ledger with hash-chained events, Merkle root computation, and privacy levels |
 | `@fides/runtime` | Runtime attestation adapter interfaces, mock attestation, and kill switch (global/agent/capability/principal) |
 | `@fides/discovery` | Discovery provider architecture with priority-based orchestration |
-| `@fides/sdk` | Legacy v1 SDK (Ed25519 identity, RFC 9421 signing, trust graph) |
+| `@fides/sdk` | TypeScript SDK for identity, RFC 9421 signing, trust graph, agentd authority APIs, and hosted registry APIs |
 | `@fides/shared` | Shared types, constants, and utilities |
 | `@fides/cli` | Command-line interface for agent management and diagnostics |
 | `@fides/rust-sdk` | Rust SDK (planned) |
@@ -184,7 +184,7 @@ const decision = await evaluateGuard({
 |---------|-------------|
 | `@fides/discovery-service` | AgentCard resolution via `.well-known` endpoint hosting |
 | `@fides/trust-graph` | Trust edge storage, reputation scoring, and capability-specific trust computation |
-| `@fides/registry-service` | Central agent registration and capability publishing |
+| `@fides/registry-service` | Hosted AgentCard registry with public/private modes, search, metadata, metrics, and durable Postgres storage |
 | `@fides/relay-service` | Message relay for agents behind NAT/firewalls |
 | `@fides/agentd` | Agent daemon for lifecycle management and local policy enforcement |
 | `@fides/platform-api` | Platform metadata API for health, version, and service topology |
@@ -254,7 +254,7 @@ fides/
 │   ├── evidence/          # Evidence ledger (hash chain, Merkle root)
 │   ├── runtime/           # Runtime attestation and kill switch
 │   ├── discovery/         # Discovery provider architecture
-│   ├── sdk/               # Legacy v1 SDK
+│   ├── sdk/               # TypeScript SDK
 │   ├── shared/            # Shared types and constants
 │   ├── cli/               # Command-line interface
 │   └── rust-sdk/          # Rust SDK (planned)

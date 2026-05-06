@@ -5,7 +5,7 @@
 - **Node.js** 22 or later
 - **pnpm** 10 (enabled via `corepack enable`)
 - **Docker** 24+ (for containerized deployment)
-- **PostgreSQL** 16 (for discovery, trust-graph, and production `agentd` authority storage)
+- **PostgreSQL** 16 (for discovery, trust-graph, production registry storage, and production `agentd` authority storage)
 
 ## Services Overview
 
@@ -14,7 +14,7 @@
 | `discovery`  | 3100  | PostgreSQL     | DID resolution, identity registry        |
 | `trust-graph`| 3200  | PostgreSQL     | Web-of-trust scoring                     |
 | `policy-engine` | 3300 | None          | Deterministic policy evaluation          |
-| `registry`   | 7346  | File-based     | AgentCard registry (filesystem)          |
+| `registry`   | 7346  | PostgreSQL or file | AgentCard registry with durable hosted storage |
 | `relay`      | 7347  | In-memory      | Message relay for NAT/firewall traversal |
 | `agentd`     | 7345  | PostgreSQL or file | Local daemon unifying all services and durable authority state |
 | `platform-api` | 3600 | None          | Platform health, version, and topology metadata |
@@ -272,7 +272,7 @@ Expected responses:
 - `discovery`: `{"status":"healthy",...}` — depends on PostgreSQL connectivity
 - `trust-graph`: `{"status":"healthy",...}` — depends on PostgreSQL connectivity
 - `policy-engine`: `{"status":"healthy",...}` — deterministic evaluator is ready
-- `registry`: `{"status":"healthy",...}` — depends on filesystem write access
+- `registry`: `{"status":"healthy",...}` — depends on the configured registry store; inspect `checks.store.kind` for `postgres` or `file`
 - `relay`: `{"status":"healthy",...}` — always healthy (in-memory)
 - `agentd`: `{"status":"healthy",...}` — depends on upstream services and authority store readiness
 - `platform-api`: `{"status":"healthy",...}` — topology metadata endpoint is ready
@@ -544,7 +544,7 @@ trust-graph ────────────────────┤
   (needs PostgreSQL, discovery) │
                                 ├── agentd
 registry ───────────────────────┤   (proxies to all three)
-  (standalone, file-based)      │
+  (PostgreSQL in production)    │
                                 │
 relay ──────────────────────────┘
   (standalone, in-memory)
@@ -556,7 +556,7 @@ policy-engine ──────────────── platform-api
 - `discovery` and `trust-graph` require PostgreSQL
 - `trust-graph` additionally requires `discovery` for identity resolution
 - `policy-engine` is standalone — deterministic policy evaluation
-- `registry` is standalone — stores AgentCards on the filesystem
+- `registry` stores AgentCards in PostgreSQL by default in Docker Compose and can fall back to a local JSON file for development
 - `relay` is standalone — pure in-memory message queue
 - `agentd` is a local proxy that depends on discovery, trust-graph, and registry
 - `platform-api` is standalone metadata over configured service URLs

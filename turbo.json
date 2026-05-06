@@ -6,7 +6,12 @@
       "outputs": ["dist/**"]
     },
     "test": {
-      "dependsOn": ["build"]
+      "dependsOn": ["build"],
+      "env": [
+        "AGENTD_DATABASE_URL",
+        "AGENTD_POSTGRES_TEST_REQUIRED",
+        "DATABASE_URL"
+      ]
     },
     "lint": {
       "dependsOn": ["^build"]

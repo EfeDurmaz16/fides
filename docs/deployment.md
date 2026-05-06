@@ -39,6 +39,12 @@ cp .env.example .env
 | `POSTGRES_DB`     | `fides`                                  | yes      | PostgreSQL database name   |
 | `DB_POOL_MAX`     | `10`                                     | no       | Connection pool size       |
 
+### Discovery Store
+
+| Variable                    | Default | Required | Description |
+| --------------------------- | ------- | -------- | ----------- |
+| `DISCOVERY_DB_AUTO_MIGRATE` | `true`  | no | Runs idempotent discovery migrations on startup and records applied ids plus checksums in `discovery_schema_migrations`. Set `false` when migrations are managed externally. |
+
 ### Agentd Authority Store
 
 | Variable                  | Default | Required | Description |
@@ -398,9 +404,10 @@ fides.example.com {
 4. Enable rate limiting via `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS`
 5. Set `LOG_LEVEL=warn` to reduce noise, use `LOG_FORMAT=json` for log aggregation
 6. Run PostgreSQL with TLS if accessed over untrusted networks
-7. Run `pnpm --filter @fides/agentd db:migrate` before setting `AGENTD_DB_AUTO_MIGRATE=false`
-8. Set `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true` once clients send signer public keys with delegated session, revocation, and incident writes
-9. Rotate `SERVICE_API_KEY` periodically
+7. Run `pnpm --filter @fides/discovery-service db:migrate` before setting `DISCOVERY_DB_AUTO_MIGRATE=false`
+8. Run `pnpm --filter @fides/agentd db:migrate` before setting `AGENTD_DB_AUTO_MIGRATE=false`
+9. Set `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true` once clients send signer public keys with delegated session, revocation, and incident writes
+10. Rotate `SERVICE_API_KEY` periodically
 
 ---
 

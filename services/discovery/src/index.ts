@@ -11,7 +11,7 @@ import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
 import { apiKeyAuth, discoveryScopeForRequest } from './middleware/auth.js'
-import { sql } from './db/client.js'
+import { ensureDiscoveryDatabaseReady, sql } from './db/client.js'
 
 function getCorsOrigin(): string {
   const corsOrigin = process.env.CORS_ORIGIN
@@ -96,6 +96,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   }, 60_000)
 
+  console.log('Preparing discovery database')
+  await ensureDiscoveryDatabaseReady()
   console.log(`Discovery service starting on port ${port}`)
 
   const server = serve({

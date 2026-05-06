@@ -212,6 +212,17 @@ pnpm --filter @fides/agentd db:migrate
 Set `AGENTD_DB_AUTO_MIGRATE=false` when migrations are managed externally. `/health` reports the active authority store kind and readiness.
 Manual and startup migrations record applied ids in `agentd_schema_migrations`; with `AGENTD_DB_AUTO_MIGRATE=false`, `agentd` refuses to start unless the authority tables and migration ledger are present.
 
+For local agentd lifecycle control through the CLI:
+
+```bash
+pnpm --filter @fides/cli fides daemon start --port 7345
+pnpm --filter @fides/cli fides daemon status --agentd-url http://localhost:7345
+pnpm --filter @fides/cli fides daemon status --agentd-url http://localhost:7345 --json
+pnpm --filter @fides/cli fides daemon stop
+```
+
+`daemon start` launches the configured command in the background, writes a pid file to `~/.fides/agentd.pid`, and appends logs to `~/.fides/agentd.log`. Use `--command`, `--args`, `--pid-file`, and `--log-file` when running outside the pnpm workspace layout.
+
 For production agentd mutations through the CLI, export the same API key used by the service:
 
 ```bash

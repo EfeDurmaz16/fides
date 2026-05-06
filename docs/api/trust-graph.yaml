@@ -18,6 +18,7 @@ servers:
 tags:
   - name: Health
   - name: Trust
+  - name: Revocations
   - name: Incidents
   - name: Identities
 
@@ -217,6 +218,55 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /v1/revocations:
+    post:
+      operationId: recordRevocation
+      tags: [Revocations]
+      summary: Record an authority revocation
+      description: |
+        Records a signed authority revocation propagated from agentd and marks
+        active trust edges touching the revoked DID as revoked.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRevocationRequest"
+      responses:
+        "201":
+          description: Revocation recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  revokedEdges:
+                    type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/revocations/{did}:
+    get:
+      operationId: getRevocation
+      tags: [Revocations]
+      summary: Get latest revocation state for a DID
+      parameters:
+        - $ref: "#/components/parameters/DidParam"
+      responses:
+        "200":
+          description: Latest revocation state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevocationState"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /v1/identities/{did}:
     get:
       operationId: getIdentity
@@ -404,6 +454,53 @@ components:
         severity:
           type: string
           enum: [low, medium, high, critical]
+
+    CreateRevocationRequest:
+      type: object
+      required: [record]
+      properties:
+        did:
+          type: string
+        reason:
+          type: string
+        revokedBy:
+          type: string
+        record:
+          $ref: "#/components/schemas/AuthorityRevocationRecord"
+
+    RevocationState:
+      type: object
+      required: [did, revoked]
+      properties:
+        did:
+          type: string
+        revoked:
+          type: boolean
+        record:
+          $ref: "#/components/schemas/AuthorityRevocationRecord"
+
+    AuthorityRevocationRecord:
+      type: object
+      required: [id, did, reason, revokedAt, revokedBy, signature, propagatedTo]
+      properties:
+        id:
+          type: string
+        did:
+          type: string
+        reason:
+          type: string
+        revokedAt:
+          type: string
+          format: date-time
+        revokedBy:
+          type: string
+        signature:
+          type: string
+          description: Hex-encoded Ed25519 signature over the canonical revocation body
+        propagatedTo:
+          type: array
+          items:
+            type: string
 
     Incident:
       type: object

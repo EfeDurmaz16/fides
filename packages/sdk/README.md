@@ -157,6 +157,7 @@ await relay.deleteMessage(accepted.relayId)
 | `AgentdClient.recordSignedIncident(options)` | Create and sign an authority incident before submission |
 | `AgentdClient.listPendingPropagations(limit)` | Inspect due authority propagation retries |
 | `AgentdClient.retryPropagations(limit)` | Replay due authority propagation records |
+| `TrustClient.getRevocation(did)` | Read latest trust-graph authority revocation state |
 | `RegistryClient.register(card)` | Publish an AgentCard to the hosted registry |
 | `RegistryClient.getCard(did)` | Read a public AgentCard, returning `null` when it is missing |
 | `RegistryClient.search(query)` | Search public registry cards |

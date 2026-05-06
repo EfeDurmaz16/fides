@@ -1,4 +1,4 @@
-import { eq, and, isNull, or, gt } from 'drizzle-orm'
+import { eq, and, isNull, or, gt, desc } from 'drizzle-orm'
 import {
   verifyIncidentRecord,
   verifyRevocationRecord,
@@ -404,6 +404,20 @@ export class TrustService {
       .where(eq(reputationScores.did, record.did))
 
     return { id: result[0].id, revokedEdges: Array.isArray(updateResult) ? updateResult.length : 0 }
+  }
+
+  /**
+   * Get the latest propagated authority revocation for a DID.
+   */
+  async getRevocation(db: DbClient, did: string): Promise<RevocationRecord | null> {
+    const rows = await db
+      .select({ record: revocationRecords.record })
+      .from(revocationRecords)
+      .where(eq(revocationRecords.did, did))
+      .orderBy(desc(revocationRecords.createdAt))
+      .limit(1)
+
+    return (rows[0]?.record as RevocationRecord | undefined) ?? null
   }
 
   /**

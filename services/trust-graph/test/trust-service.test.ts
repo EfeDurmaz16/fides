@@ -235,6 +235,37 @@ describe('TrustService', () => {
         record: { ...record, reason: 'tampered reason' },
       })).rejects.toThrow('invalid revocation record signature')
     })
+
+    it('returns the latest stored revocation for a DID', async () => {
+      const record = await signedRevocationRecord()
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            orderBy: vi.fn(() => ({
+              limit: vi.fn(() => Promise.resolve([{ record }])),
+            })),
+          })),
+        })),
+      }))
+
+      await expect(service.getRevocation(mockDb, 'did:fides:agent')).resolves.toMatchObject({
+        did: 'did:fides:agent',
+      })
+    })
+
+    it('returns null when a DID has no revocation', async () => {
+      mockDb.select = vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            orderBy: vi.fn(() => ({
+              limit: vi.fn(() => Promise.resolve([])),
+            })),
+          })),
+        })),
+      }))
+
+      await expect(service.getRevocation(mockDb, 'did:fides:agent')).resolves.toBeNull()
+    })
   })
 
   describe('recordIncident', () => {

@@ -273,4 +273,44 @@ describe('TrustClient', () => {
       client.getPath('did:fides:alice', 'did:fides:bob')
     ).rejects.toThrow(TrustError)
   })
+
+  it('should get trust graph revocation state', async () => {
+    const state = {
+      did: 'did:fides:agent',
+      revoked: true,
+      record: {
+        id: 'rev-1',
+        did: 'did:fides:agent',
+        reason: 'principal revoked authority',
+        revokedAt: '2026-01-01T00:00:00.000Z',
+        revokedBy: 'did:fides:principal',
+        propagatedTo: [],
+        signature: 'deadbeef',
+      },
+    }
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => state,
+    })
+
+    const result = await client.getRevocation('did:fides:agent')
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:3200/v1/revocations/did%3Afides%3Aagent'
+    )
+    expect(result).toEqual(state)
+  })
+
+  it('should throw error on revocation state failure', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: async () => 'Server error',
+    })
+
+    await expect(client.getRevocation('did:fides:agent')).rejects.toThrow(
+      TrustError
+    )
+  })
 })

@@ -1167,8 +1167,10 @@ components:
           type: boolean
         reputationScore:
           type: number
+          description: Non-production simulation input. In production, agentd reads this from trust-graph.
         capabilityScore:
           type: number
+          description: Non-production simulation input. In production, agentd reads this from trust-graph.
         capabilityHighRisk:
           type: boolean
         requiresRuntimeAttestation:

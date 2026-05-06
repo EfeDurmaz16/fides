@@ -682,6 +682,9 @@ describe('Agentd Service Routes', () => {
       process.env.NODE_ENV = 'production'
       process.env.SERVICE_API_KEY = 'agentd-key'
       const did = `did:fides:production-approval-${Date.now()}`
+      mockFetch
+        .mockResolvedValueOnce(await createMockResponse({ score: 0.9 }))
+        .mockResolvedValueOnce(await createMockResponse({ score: 0.8 }))
 
       const res = await app.request('/v1/authorize', {
         method: 'POST',
@@ -700,6 +703,57 @@ describe('Agentd Service Routes', () => {
       expect(data.factors).toEqual(expect.arrayContaining([
         expect.objectContaining({ source: 'approval', factor: 'approval-required' }),
       ]))
+    })
+
+    it('uses trust-graph scores instead of caller-supplied reputation in production authorization', async () => {
+      process.env.NODE_ENV = 'production'
+      process.env.SERVICE_API_KEY = 'agentd-key'
+      const did = `did:fides:production-trust-${Date.now()}`
+      mockFetch
+        .mockResolvedValueOnce(await createMockResponse({ score: 0.05 }))
+        .mockResolvedValueOnce(await createMockResponse({ score: 0.9 }))
+
+      const res = await app.request('/v1/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'agentd-key' },
+        body: JSON.stringify({
+          agentDid: did,
+          capabilityId: 'payments.execute',
+          reputationScore: 0.99,
+          capabilityScore: 0.99,
+        }),
+      })
+
+      expect(res.status).toBe(403)
+      const data = await res.json()
+      expect(data.decision).toBe('deny')
+      expect(data.explanation).toContain('Blocked by trust threshold guard')
+      expect(mockFetch).toHaveBeenCalledWith(`http://localhost:3200/v1/trust/${encodeURIComponent(did)}/score`)
+      expect(mockFetch).toHaveBeenCalledWith(`http://localhost:3200/v1/trust/${encodeURIComponent(did)}/capability/${encodeURIComponent('payments.execute')}`)
+    })
+
+    it('fails closed when production trust-graph score lookup is unavailable', async () => {
+      process.env.NODE_ENV = 'production'
+      process.env.SERVICE_API_KEY = 'agentd-key'
+      const did = `did:fides:production-trust-unavailable-${Date.now()}`
+      mockFetch
+        .mockRejectedValueOnce(new Error('trust graph unavailable'))
+        .mockResolvedValueOnce(await createMockResponse({ score: 0.9 }))
+
+      const res = await app.request('/v1/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'agentd-key' },
+        body: JSON.stringify({
+          agentDid: did,
+          capabilityId: 'payments.execute',
+          reputationScore: 0.99,
+        }),
+      })
+
+      expect(res.status).toBe(503)
+      const data = await res.json()
+      expect(data.decision).toBe('deny')
+      expect(data.explanation).toContain('Trust graph score lookup failed')
     })
 
     it('denies authorization after session revocation', async () => {

@@ -45,6 +45,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-fides}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-fides}
       TRUST_GRAPH_PORT: "3200"
       TRUST_GRAPH_DB_AUTO_MIGRATE: ${TRUST_GRAPH_DB_AUTO_MIGRATE:-true}
+      TRUST_GRAPH_DB_SCHEMA: ${TRUST_GRAPH_DB_SCHEMA:-trust_graph}
       DISCOVERY_URL: http://discovery:3100
       NODE_ENV: production
       CORS_ORIGIN: ${CORS_ORIGIN:-}

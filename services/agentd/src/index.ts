@@ -382,10 +382,19 @@ app.post('/v1/authorize', async (c) => {
   const attestation = body.attestationValid
     ? await teeProvider.attest(body.agentDid)
     : null
+  const scores = await resolveAuthorizationScores(body)
+  if (!scores.ok) {
+    await appendLocalEvidence(body.agentDid, 'authorization.denied', {
+      capabilityId: body.capabilityId,
+      explanation: scores.error,
+      source: 'trust-graph',
+    })
+    return c.json({ decision: 'deny', explanation: scores.error, errors: [scores.error] }, 503)
+  }
 
   const trust = createTrustContext({
-    reputationScore: clampScore((body.reputationScore ?? 0.9) - impact.totalReputationPenalty),
-    capabilityScore: body.capabilityScore,
+    reputationScore: clampScore(scores.reputationScore - impact.totalReputationPenalty),
+    capabilityScore: scores.capabilityScore,
     attestation,
     evidenceChain: await authorityStore.getEvidenceChain(body.agentDid),
     killSwitchEngaged: killSwitch.isEngaged({ type: 'global' }) || killSwitch.isEngaged({ type: 'agent', did: body.agentDid }) || killSwitch.isEngaged({ type: 'capability', id: body.capabilityId }),
@@ -749,6 +758,64 @@ function requestApprovalGranted(body: { approvalGranted?: unknown }): boolean {
     return false
   }
   return body.approvalGranted === true
+}
+
+async function resolveAuthorizationScores(body: {
+  agentDid: string
+  capabilityId: string
+  reputationScore?: unknown
+  capabilityScore?: unknown
+}): Promise<
+  | { ok: true; reputationScore: number; capabilityScore?: number }
+  | { ok: false; error: string }
+> {
+  if (process.env.NODE_ENV !== 'production') {
+    return {
+      ok: true,
+      reputationScore: numericScore(body.reputationScore, 0.9),
+      capabilityScore: optionalNumericScore(body.capabilityScore),
+    }
+  }
+
+  try {
+    const [reputation, capability] = await Promise.all([
+      fetchTrustScore(`${TRUST_GRAPH_URL}/v1/trust/${encodeURIComponent(body.agentDid)}/score`, 'reputation'),
+      fetchTrustScore(
+        `${TRUST_GRAPH_URL}/v1/trust/${encodeURIComponent(body.agentDid)}/capability/${encodeURIComponent(body.capabilityId)}`,
+        'capability'
+      ),
+    ])
+    return {
+      ok: true,
+      reputationScore: reputation,
+      capabilityScore: capability,
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error: `Trust graph score lookup failed: ${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
+}
+
+async function fetchTrustScore(url: string, label: string): Promise<number> {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`${label} score returned HTTP ${response.status}`)
+  }
+  const body = await response.json() as { score?: unknown }
+  if (typeof body.score !== 'number' || !Number.isFinite(body.score)) {
+    throw new Error(`${label} score response is missing numeric score`)
+  }
+  return clampScore(body.score)
+}
+
+function numericScore(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? clampScore(value) : fallback
+}
+
+function optionalNumericScore(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? clampScore(value) : undefined
 }
 
 function parseBooleanEnv(value: string | undefined): boolean {

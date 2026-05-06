@@ -601,6 +601,26 @@ describe('Agentd Service Routes', () => {
       expect(data.errors).toContain('DelegationToken public key is required')
     })
 
+    it('requires a delegator public key by default in production', async () => {
+      process.env.NODE_ENV = 'production'
+      process.env.SERVICE_API_KEY = 'agentd-prod-key'
+      const { token } = await signedDelegationToken(`${TEST_DID}:production-required-signature-session`)
+
+      const res = await app.request('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'agentd-prod-key' },
+        body: JSON.stringify({
+          token,
+          capabilityId: 'payments.execute',
+          audience: 'agentd',
+        }),
+      })
+
+      expect(res.status).toBe(409)
+      const data = await res.json()
+      expect(data.errors).toContain('DelegationToken public key is required')
+    })
+
     it('rejects sessions for missing capabilities and audience mismatches', async () => {
       const missingCapability = await app.request('/v1/sessions', {
         method: 'POST',
@@ -759,6 +779,23 @@ describe('Agentd Service Routes', () => {
       expect(data.error).toContain('revocation public key is required')
     })
 
+    it('requires a revoker public key by default in production', async () => {
+      process.env.NODE_ENV = 'production'
+      process.env.SERVICE_API_KEY = 'agentd-prod-key'
+      const did = `did:fides:production-required-revocation-${Date.now()}`
+      const record = await signedRevocationRecord(did)
+
+      const res = await app.request('/v1/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'agentd-prod-key' },
+        body: JSON.stringify({ record }),
+      })
+
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('revocation public key is required')
+    })
+
     it('audits failed revocation propagation to local evidence', async () => {
       const did = `did:fides:revocation-audit-${Date.now()}`
       mockFetch.mockRejectedValueOnce(new Error('trust graph unavailable'))
@@ -870,6 +907,23 @@ describe('Agentd Service Routes', () => {
       const res = await app.request('/v1/incidents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ record }),
+      })
+
+      expect(res.status).toBe(400)
+      const data = await res.json()
+      expect(data.error).toContain('incident public key is required')
+    })
+
+    it('requires a reporter public key by default in production', async () => {
+      process.env.NODE_ENV = 'production'
+      process.env.SERVICE_API_KEY = 'agentd-prod-key'
+      const did = `did:fides:production-required-incident-${Date.now()}`
+      const record = await signedIncidentRecord(did)
+
+      const res = await app.request('/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'agentd-prod-key' },
         body: JSON.stringify({ record }),
       })
 

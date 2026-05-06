@@ -290,6 +290,7 @@ export interface KillSwitchTarget {
 export interface KillSwitch {
   engage(target: KillSwitchTarget): void
   disengage(target: KillSwitchTarget): void
+  disengageAll(): void
   isEngaged(target: KillSwitchTarget): boolean
 }
 
@@ -309,6 +310,10 @@ export class InMemoryKillSwitch implements KillSwitch {
 
   disengage(target: KillSwitchTarget): void {
     this.state.set(this.key(target), false)
+  }
+
+  disengageAll(): void {
+    this.state.clear()
   }
 
   isEngaged(target: KillSwitchTarget): boolean {

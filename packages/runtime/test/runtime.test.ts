@@ -162,4 +162,20 @@ describe('InMemoryKillSwitch', () => {
     ks.disengage({ type: 'global' })
     expect(ks.isEngaged(agent)).toBe(false)
   })
+
+  it('should disengage every scoped kill switch', () => {
+    const ks = new InMemoryKillSwitch()
+    const agent: KillSwitchTarget = { type: 'agent', did: 'did:fides:alice' }
+    const capability: KillSwitchTarget = { type: 'capability', id: 'payments.execute' }
+
+    ks.engage({ type: 'global' })
+    ks.engage(agent)
+    ks.engage(capability)
+
+    ks.disengageAll()
+
+    expect(ks.isEngaged({ type: 'global' })).toBe(false)
+    expect(ks.isEngaged(agent)).toBe(false)
+    expect(ks.isEngaged(capability)).toBe(false)
+  })
 })

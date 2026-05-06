@@ -1056,10 +1056,23 @@ describe('Agentd Service Routes', () => {
     })
 
     it('disengages all kill switches when no scope specified', async () => {
+      const did = `${TEST_DID}:killswitch-all`
+      const capabilityId = 'payment:refund:killswitch-all'
+
       await app.request('/v1/killswitch/engage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ global: true }),
+      })
+      await app.request('/v1/killswitch/engage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ did }),
+      })
+      await app.request('/v1/killswitch/engage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capabilityId }),
       })
 
       const res = await app.request('/v1/killswitch/disengage', {
@@ -1071,6 +1084,15 @@ describe('Agentd Service Routes', () => {
       const data = await res.json()
       expect(data.engaged).toBe(false)
       expect(data.scope).toBe('all')
+
+      const authRes = await app.request('/v1/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentDid: did, capabilityId }),
+      })
+      expect(authRes.status).toBe(200)
+      const auth = await authRes.json()
+      expect(auth.decision).toBe('allow')
     })
   })
 

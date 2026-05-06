@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "tsx src/migrate.ts"
   },
   "dependencies": {
     "@fides/core": "workspace:*",

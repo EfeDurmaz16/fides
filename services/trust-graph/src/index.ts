@@ -3,7 +3,7 @@ import { serve } from '@hono/node-server'
 import { cors } from 'hono/cors'
 import { bodyLimit } from 'hono/body-limit'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
-import { createDbClient, createRawClient } from './db/client.js'
+import { createDbClient, createRawClient, ensureTrustGraphDatabaseReady } from './db/client.js'
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
@@ -83,6 +83,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   }
 
+  console.log('Preparing trust-graph database')
+  await ensureTrustGraphDatabaseReady(rawSql)
   console.log(`Trust Graph Service starting on port ${port}...`)
   const server = serve({
     fetch: wrappedFetch,

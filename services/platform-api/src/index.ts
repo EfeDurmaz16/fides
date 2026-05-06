@@ -1,0 +1,63 @@
+import { serve } from '@hono/node-server'
+import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
+import { cors } from 'hono/cors'
+
+const app = new Hono()
+const startTime = Date.now()
+
+const SERVICE_PORTS = {
+  discovery: 3100,
+  trustGraph: 3200,
+  policyEngine: 3300,
+  registry: 3400,
+  relay: 3500,
+  agentd: 7345,
+} as const
+
+app.use('*', cors({ origin: getCorsOrigin() }))
+app.use('*', bodyLimit({ maxSize: 1024 * 1024 }))
+
+app.get('/health', (c) => c.json({
+  status: 'healthy',
+  service: 'platform-api',
+  uptime: Math.floor((Date.now() - startTime) / 1000),
+  timestamp: new Date().toISOString(),
+}))
+
+app.get('/v1/version', (c) => c.json({
+  service: 'platform-api',
+  version: '0.1.0',
+  protocol: 'fides-v2',
+}))
+
+app.get('/v1/topology', (c) => c.json({
+  service: 'platform-api',
+  components: {
+    discovery: serviceUrl('DISCOVERY_URL', SERVICE_PORTS.discovery),
+    trustGraph: serviceUrl('TRUST_GRAPH_URL', SERVICE_PORTS.trustGraph),
+    policyEngine: serviceUrl('POLICY_ENGINE_URL', SERVICE_PORTS.policyEngine),
+    registry: serviceUrl('REGISTRY_URL', SERVICE_PORTS.registry),
+    relay: serviceUrl('RELAY_URL', SERVICE_PORTS.relay),
+    agentd: serviceUrl('AGENTD_URL', SERVICE_PORTS.agentd),
+  },
+}))
+
+export { app }
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const port = parseInt(process.env.PLATFORM_API_PORT || process.env.PORT || '3600', 10)
+  console.log(`FIDES platform-api starting on port ${port}`)
+  serve({ fetch: app.fetch, port })
+}
+
+function serviceUrl(envName: string, port: number): string {
+  return process.env[envName] || `http://localhost:${port}`
+}
+
+function getCorsOrigin(): string {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.CORS_ORIGIN || 'https://localhost'
+  }
+  return process.env.CORS_ORIGIN || '*'
+}

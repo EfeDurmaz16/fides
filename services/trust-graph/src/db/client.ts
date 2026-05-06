@@ -7,14 +7,31 @@ const DEV_FALLBACK = 'postgresql://fides:fides@localhost:5432/fides'
 
 function getConnectionString(): string {
   const url = process.env.DATABASE_URL
-  if (url) return url
+  const schemaName = process.env.TRUST_GRAPH_DB_SCHEMA
+  if (url) return withSearchPath(url, schemaName)
 
   if (process.env.NODE_ENV === 'production') {
     throw new Error('DATABASE_URL must be set in production')
   }
 
   console.warn('DATABASE_URL not set — using development fallback')
-  return DEV_FALLBACK
+  return withSearchPath(DEV_FALLBACK, schemaName)
+}
+
+function withSearchPath(connectionString: string, schemaName?: string): string {
+  if (!schemaName) return connectionString
+
+  assertValidSchemaName(schemaName)
+
+  const url = new URL(connectionString)
+  url.searchParams.set('options', `-c search_path=${schemaName},public`)
+  return url.toString()
+}
+
+function assertValidSchemaName(schemaName: string): void {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(schemaName)) {
+    throw new Error('TRUST_GRAPH_DB_SCHEMA must be a simple Postgres identifier')
+  }
 }
 
 const poolConfig = {
@@ -143,6 +160,7 @@ export async function runTrustGraphMigrations(client: postgres.Sql): Promise<voi
   await client`SELECT pg_advisory_lock(hashtext('trust_graph_migrations'))`
 
   try {
+    await ensureConfiguredSchema(client)
     await ensureTrustGraphMigrationLedger(client)
     for (const migration of TRUST_GRAPH_MIGRATIONS) {
       const checksum = trustGraphMigrationChecksum(migration)
@@ -176,6 +194,14 @@ export async function runTrustGraphMigrations(client: postgres.Sql): Promise<voi
   } finally {
     await client`SELECT pg_advisory_unlock(hashtext('trust_graph_migrations'))`
   }
+}
+
+async function ensureConfiguredSchema(client: postgres.Sql): Promise<void> {
+  const schemaName = process.env.TRUST_GRAPH_DB_SCHEMA
+  if (!schemaName) return
+
+  assertValidSchemaName(schemaName)
+  await client.unsafe(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`)
 }
 
 async function ensureTrustGraphMigrationLedger(client: postgres.Sql): Promise<void> {

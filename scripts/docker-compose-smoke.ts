@@ -1,5 +1,8 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { createAttestation } from '../packages/sdk/src/trust/attestation.js'
+import { generateDID } from '../packages/sdk/src/identity/did.js'
+import { generateKeyPair } from '../packages/sdk/src/identity/keypair.js'
 import {
   createDelegationToken,
   createIncidentRecord,
@@ -54,11 +57,17 @@ async function assertPlatformTopology() {
 
 async function runAuthorityFlow() {
   const runId = crypto.randomUUID().slice(0, 8)
-  const agentDid = `did:fides:docker-agent-${runId}`
-  const principalDid = `did:fides:docker-principal-${runId}`
   const capabilityId = 'payments.execute'
 
   const publicKey = await deriveEd25519PublicKeyHex(authorityPrivateKeyHex)
+  const principalDid = generateDID(Buffer.from(publicKey, 'hex'))
+  const agentKey = await generateKeyPair()
+  const agentDid = generateDID(agentKey.publicKey)
+
+  await registerIdentity(principalDid, publicKey, { role: 'principal', smoke: true, runId })
+  await registerIdentity(agentDid, Buffer.from(agentKey.publicKey).toString('hex'), { role: 'agent', smoke: true, runId })
+  await establishTrust(principalDid, agentDid, authorityPrivateKey)
+
   const token = await signDelegationToken(createDelegationToken({
     delegator: principalDid,
     delegatee: agentDid,
@@ -127,6 +136,30 @@ async function runAuthorityFlow() {
     reporterPublicKey: publicKey,
   })
   await expectStatus(incidentResponse, 201, 'recorded incident')
+}
+
+async function registerIdentity(did: string, publicKey: string, metadata: Record<string, unknown>) {
+  const response = await postJson(`${services.discovery}/identities`, {
+    did,
+    publicKey,
+    metadata,
+  })
+  if (response.status === 409) {
+    console.log(`ok discovery identity already exists ${did}`)
+    return
+  }
+  await expectStatus(response, 201, `registered discovery identity ${did}`)
+}
+
+async function establishTrust(issuerDid: string, subjectDid: string, privateKey: Uint8Array) {
+  const attestation = await createAttestation(issuerDid, subjectDid, 90, privateKey)
+  await expectStatus(await postJson(`${services.trustGraph}/v1/trust`, {
+    issuerDid: attestation.issuerDid,
+    subjectDid: attestation.subjectDid,
+    trustLevel: attestation.trustLevel,
+    signature: attestation.signature,
+    payload: attestation.payload,
+  }), 201, 'established trust edge for docker smoke agent')
 }
 
 async function signedRevocationRecord(did: string, revokedBy: string) {

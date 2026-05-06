@@ -60,7 +60,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 | 40 | Domain attestation | Prototype | DNS TXT verifier helper exists in `packages/core/src/domain-verifier.ts`; CLI, agentd, and discovery have Node DNS verification, with discovery persistence for verified identity domains. |
 | 41 | Package registry attestation | Prototype | `PackageAttestationInput`, `PackageAttestationAdapter`, and `PackageRegistryAttestationProvider` validate structured package integrity claims; live npm/PyPI/crates metadata verification is not implemented. |
 | 42 | Wallet attestation | Missing | Deliberately left out of FIDES core; Sardis should own payment/wallet-specific proofing. |
-| 43 | Passkey identity interface | Missing | No WebAuthn/passkey abstraction exists yet. |
+| 43 | Passkey identity interface | Adapter-ready | `packages/core/src/passkey.ts` defines WebAuthn/passkey challenge, credential binding, verification result, and verifier adapter boundaries with local RP/origin/expiry/credential policy checks; live WebAuthn cryptographic verification is external. |
 | 44 | CLI | Prototype | `packages/cli/src/index.ts` plus v2 commands for cards, policy, runtime, killswitch; daemon control is thin. |
 | 45 | Local HTTP API | Prototype | `services/agentd/src/index.ts`; local API tests in `services/agentd/test/routes.test.ts`. |
 | 46 | TypeScript SDK | Implemented | `packages/sdk/src/*`, SDK tests. |
@@ -107,7 +107,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 
 ### Still missing
 
-- Production attestation providers: live Nitro, SGX, SEV, Sigstore/SLSA, GitHub artifact-attestation, email, package registry metadata, and passkey verification.
+- Production attestation providers: live Nitro, SGX, SEV, Sigstore/SLSA, GitHub artifact-attestation, email, package registry metadata, and WebAuthn verifier adapters.
 - Federation registry peering implementation.
 - Real mDNS/libp2p transport.
 - Platform metadata API under `services/platform-api/`.
@@ -115,7 +115,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 ## Remaining Blockers for a Production FIDES v2
 
 1. Durable trust-fabric state: registry, evidence, revocation, and incidents need real storage contracts; sessions now have a file-backed local store but not a production database adapter.
-2. Production attestation providers: the TEE/build/container/package/GitHub providers now have adapter boundaries or local structured verification, but live vendor/API-backed verification and passkeys are still missing; domain and organization verification still depend on DNS/discovery availability.
+2. Production attestation providers: the TEE/build/container/package/GitHub/passkey providers now have adapter boundaries or local structured verification, but live vendor/API-backed verification is still missing; domain and organization verification still depend on DNS/discovery availability.
 3. Federation semantics: registry peering, cross-node revocation conflict handling, and trust-anchor governance need implementation.
 4. Authority separation hardening: identity, trust score, and policy are separated conceptually, but remote invocation execution remains adapter-ready rather than implemented.
 5. Service packaging: platform-api and policy-engine now have standalone service packages, Dockerfiles, compose wiring, and CI image builds; they still need production persistence/auth/metrics beyond health and topology/evaluation routes.
@@ -123,7 +123,7 @@ This document classifies the current status of every required FIDES v2 / Agent T
 ## Next Implementation Slice
 
 1. Add production storage adapters for registry, evidence, revocation, incidents, and session state.
-2. Add live vendor-backed attestation verification for Nitro, SGX, SEV, Sigstore/SLSA, GitHub artifact attestations, email, package registries, and passkeys.
+2. Add live vendor-backed attestation verification for Nitro, SGX, SEV, Sigstore/SLSA, GitHub artifact attestations, email, package registries, and WebAuthn/passkey adapters.
 3. Add service/API persistence for organization-level verification and trust-anchor governance around verified publishers.
 4. Extend the authority path demo into a multi-process demo that starts discovery, trust-graph, registry, relay, policy-engine, agentd, and platform-api.
 5. Add federation peering and cross-node revocation conflict semantics.

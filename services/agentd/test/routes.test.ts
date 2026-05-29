@@ -536,6 +536,24 @@ describe('Agentd Service Routes', () => {
       expect(invocationData.preflight.can_execute).toBe(true)
       expect(invocationData.result.status).toBe('completed')
       expect(invocationData.authorityGranted).toBe(true)
+      expect(invocationData.result.evidence_refs).toHaveLength(2)
+
+      const evidence = await app.request('/evidence')
+      expect(evidence.status).toBe(200)
+      const evidenceData = await evidence.json()
+      expect(evidenceData.valid).toBe(true)
+      expect(evidenceData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          event_id: invocationData.result.evidence_refs[0],
+          type: 'capability.invoked',
+          input_hash: expect.stringMatching(/^sha256:/),
+        }),
+        expect.objectContaining({
+          event_id: invocationData.result.evidence_refs[1],
+          type: 'capability.completed',
+          output_hash: expect.stringMatching(/^sha256:/),
+        }),
+      ]))
     })
 
     it('serves root approval request and decision lifecycle', async () => {
@@ -980,14 +998,52 @@ describe('Agentd Service Routes', () => {
       expect(data.preflight.status).toBe('denied')
     })
 
-    it('serves root evidence verify/export aliases', async () => {
+    it('serves root evidence append, inspect, verify, and export aliases', async () => {
+      const appended = await app.request('/evidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'capability.invoked',
+          actor: 'did:fides:requester:evidence-root',
+          subject: 'did:fides:agent:evidence-root',
+          principal: 'did:fides:principal:evidence-root',
+          capability: 'invoice.reconcile',
+          input: { invoiceId: 'inv_123', secret: 'do-not-store' },
+          decision: 'allow',
+        }),
+      })
+      expect(appended.status).toBe(201)
+      const appendedData = await appended.json()
+      expect(appendedData.authorityGranted).toBe(false)
+      expect(appendedData.event.input_hash).toMatch(/^sha256:/)
+      expect(JSON.stringify(appendedData)).not.toContain('do-not-store')
+
+      const listed = await app.request('/evidence')
+      expect(listed.status).toBe(200)
+      const listedData = await listed.json()
+      expect(listedData.valid).toBe(true)
+      expect(listedData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({ event_id: appendedData.event.event_id }),
+      ]))
+
+      const inspected = await app.request(`/evidence/${encodeURIComponent(appendedData.event.event_id)}`)
+      expect(inspected.status).toBe(200)
+      expect((await inspected.json()).event.event_hash).toBe(appendedData.event.event_hash)
+
       const verify = await app.request('/evidence/verify', { method: 'POST' })
       expect(verify.status).toBe(200)
-      expect((await verify.json()).valid).toBe(true)
+      const verified = await verify.json()
+      expect(verified.valid).toBe(true)
+      expect(verified.count).toBeGreaterThanOrEqual(1)
 
       const exported = await app.request('/evidence/export', { method: 'POST' })
       expect(exported.status).toBe(200)
-      expect((await exported.json()).format).toBe('json')
+      const exportedData = await exported.json()
+      expect(exportedData.format).toBe('json')
+      expect(exportedData.valid).toBe(true)
+      expect(exportedData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({ event_id: appendedData.event.event_id }),
+      ]))
     })
   })
 

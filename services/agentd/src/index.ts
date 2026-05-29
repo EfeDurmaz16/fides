@@ -11,7 +11,16 @@ import { cors } from 'hono/cors'
 import { bodyLimit } from 'hono/body-limit'
 import { resolveTxt } from 'node:dns/promises'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
-import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain } from '@fides/evidence'
+import {
+  appendEvidenceEvent,
+  appendEvidenceEventV2,
+  createEvidenceChain,
+  createEvidenceEventV2,
+  verifyEvidenceChain,
+  verifyEvidenceEventsV2,
+  type EvidenceEventV2,
+  type EvidenceEventV2Input,
+} from '@fides/evidence'
 import { MockTEEProvider as RuntimeMockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateFidesPolicy, evaluatePolicy, type FidesPolicyDecision, type PolicyBundle } from '@fides/policy'
 import { createTrustContext, evaluateGuard } from '@fides/guard'
@@ -119,6 +128,7 @@ const localKillSwitchRules = new Map<string, KillSwitchRule>()
 const localRevocationRecords = new Map<string, RevocationRecordV2>()
 const localIncidentRecords = new Map<string, IncidentRecordV2>()
 const localRuntimeAttestations = new Map<string, RuntimeAttestation>()
+let localEvidenceEvents: EvidenceEventV2[] = []
 interface LocalSessionRecord {
   session: SessionGrantV2
   policy: FidesPolicyDecision
@@ -1052,6 +1062,23 @@ app.post('/sessions', async (c) => {
   })
 
   if (policy.decision !== 'allow' && policy.decision !== 'dry_run_only') {
+    const deniedEvidence = appendRootEvidence({
+      type: 'session.denied',
+      actor: requesterAgentId,
+      subject: targetAgentId,
+      principal: principalId,
+      capability: capabilityId,
+      policy: policy,
+      decision: policy.decision,
+      risk_level: found.capability.riskLevel,
+      privacy_mode: 'hash_only',
+      metadata: {
+        reason_codes: policy.reason_codes,
+        kill_switch: activeKillSwitch?.id,
+        revocation: activeRevocation?.id,
+        incident: activeIncident?.id,
+      },
+    })
     return c.json({
       authorized: false,
       authorityGranted: false,
@@ -1060,6 +1087,7 @@ app.post('/sessions', async (c) => {
       killSwitch: activeKillSwitch,
       revocation: activeRevocation,
       incident: activeIncident,
+      evidenceRefs: [deniedEvidence.event_id],
     }, 409)
   }
 
@@ -1080,6 +1108,21 @@ app.post('/sessions', async (c) => {
     expiresAt,
   })
   localSessionGrants.set(session.session_id, { session, policy, trust })
+  const sessionEvidence = appendRootEvidence({
+    type: 'session.granted',
+    actor: requesterAgentId,
+    subject: targetAgentId,
+    principal: principalId,
+    capability: capabilityId,
+    policy: policy,
+    decision: policy.decision,
+    risk_level: found.capability.riskLevel,
+    privacy_mode: 'hash_only',
+    metadata: {
+      session_id: session.session_id,
+      authority_granted: policy.decision === 'allow',
+    },
+  })
 
   return c.json({
     authorized: true,
@@ -1087,6 +1130,7 @@ app.post('/sessions', async (c) => {
     session,
     policy,
     trust,
+    evidenceRefs: [sessionEvidence.event_id],
   }, 201)
 })
 
@@ -1147,13 +1191,47 @@ app.post('/invoke', async (c) => {
     request,
     policyDecision: record.policy,
   })
+  const invokedEvidence = appendRootEvidence({
+    type: 'capability.invoked',
+    actor: record.session.requester_agent_id,
+    subject: record.session.target_agent_id,
+    principal: record.session.principal_id,
+    capability: record.session.capability,
+    input: body.input ?? {},
+    policy_hash: record.session.policy_hash,
+    decision: record.policy.decision,
+    privacy_mode: 'hash_only',
+    metadata: {
+      session_id: record.session.session_id,
+      invocation_request_id: request.id,
+      dry_run: request.dry_run,
+    },
+  })
+  const status = preflight.can_execute ? 'completed' : preflight.status
+  const completedEvidence = appendRootEvidence({
+    type: preflight.can_execute ? 'capability.completed' : 'capability.failed',
+    actor: record.session.target_agent_id,
+    subject: record.session.requester_agent_id,
+    principal: record.session.principal_id,
+    capability: record.session.capability,
+    output: preflight.can_execute ? { ok: true, capability: record.session.capability } : undefined,
+    policy_hash: record.session.policy_hash,
+    decision: status,
+    privacy_mode: 'hash_only',
+    metadata: {
+      session_id: record.session.session_id,
+      invocation_request_id: request.id,
+      preflight_status: preflight.status,
+      can_execute: preflight.can_execute,
+    },
+  })
   const result = createInvocationResult({
     issuer: record.session.target_agent_id,
     invocationRequestId: request.id,
-    status: preflight.can_execute ? 'completed' : preflight.status,
+    status,
     output: preflight.can_execute ? { ok: true, capability: record.session.capability } : undefined,
     errorCode: preflight.can_execute ? undefined : preflight.reason_codes[0],
-    evidenceRefs: [`evt_${request.id}`],
+    evidenceRefs: [invokedEvidence.event_id, completedEvidence.event_id],
   })
 
   return c.json({
@@ -1741,18 +1819,57 @@ app.get('/.well-known/agents/*', (c) => {
   })
 })
 
+function appendRootEvidence(input: EvidenceEventV2Input): EvidenceEventV2 {
+  const previousHash = localEvidenceEvents.at(-1)?.event_hash ?? '0'
+  const event = createEvidenceEventV2(input, previousHash)
+  localEvidenceEvents = appendEvidenceEventV2(localEvidenceEvents, event)
+  return event
+}
+
+app.post('/evidence', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const type = typeof body.type === 'string' ? body.type : undefined
+  const actor = typeof body.actor === 'string' ? body.actor : undefined
+  if (!type || !actor) {
+    return c.json({ error: 'type and actor are required' }, 400)
+  }
+  const event = appendRootEvidence({
+    type: type as EvidenceEventV2Input['type'],
+    actor,
+    subject: typeof body.subject === 'string' ? body.subject : undefined,
+    principal: typeof body.principal === 'string' ? body.principal : undefined,
+    capability: typeof body.capability === 'string' ? body.capability : undefined,
+    input: body.input,
+    output: body.output,
+    policy: body.policy,
+    decision: typeof body.decision === 'string' ? body.decision : undefined,
+    risk_level: typeof body.riskLevel === 'string' ? body.riskLevel as EvidenceEventV2['risk_level'] : undefined,
+    privacy_mode: body.privacyMode === 'public' || body.privacyMode === 'private' || body.privacyMode === 'redacted' || body.privacyMode === 'hash_only'
+      ? body.privacyMode
+      : 'hash_only',
+    metadata: typeof body.metadata === 'object' && body.metadata !== null ? body.metadata as Record<string, unknown> : undefined,
+  })
+  return c.json({ accepted: true, event, authorityGranted: false }, 201)
+})
+
 app.get('/evidence', (c) => {
+  const valid = verifyEvidenceEventsV2(localEvidenceEvents)
   return c.json({
-    events: [],
-    count: 0,
-    note: 'Use /v1/evidence/:did for local authority evidence chains.',
+    events: localEvidenceEvents,
+    count: localEvidenceEvents.length,
+    valid,
+    lastHash: localEvidenceEvents.at(-1)?.event_hash ?? null,
+    authorityGranted: false,
   })
 })
 
 app.post('/evidence/verify', (c) => {
+  const valid = verifyEvidenceEventsV2(localEvidenceEvents)
   return c.json({
-    valid: true,
-    scope: 'local-authority-store',
+    valid,
+    count: localEvidenceEvents.length,
+    lastHash: localEvidenceEvents.at(-1)?.event_hash ?? null,
+    scope: 'root-local-evidence-ledger',
     checkedAt: new Date().toISOString(),
   })
 })
@@ -1761,9 +1878,19 @@ app.post('/evidence/export', (c) => {
   return c.json({
     format: 'json',
     exportedAt: new Date().toISOString(),
-    events: [],
-    note: 'Per-DID evidence export is available through /v1/evidence/:did.',
+    valid: verifyEvidenceEventsV2(localEvidenceEvents),
+    count: localEvidenceEvents.length,
+    events: localEvidenceEvents,
   })
+})
+
+app.get('/evidence/:eventId', (c) => {
+  const eventId = c.req.param('eventId')
+  const event = localEvidenceEvents.find(item => item.event_id === eventId)
+  if (!event) {
+    return c.json({ error: 'evidence event not found', eventId }, 404)
+  }
+  return c.json({ event, authorityGranted: false })
 })
 
 app.post('/demo/run', (c) => {

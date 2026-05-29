@@ -81,10 +81,16 @@ Current implementation anchors:
 - `POST /dht/find`
 - `POST /demo/run`
 - `POST /simulate/adversarial`
+- `POST /evidence`
+- `GET /evidence`
+- `GET /evidence/:eventId`
 - `POST /evidence/verify`
 - `POST /evidence/export`
 
-The alias endpoints currently provide local mock/demo behavior and should be hardened into durable API routes.
+The root v2 endpoints are local-first daemon surfaces. Registry and relay are
+mock/local providers, while root evidence uses an in-memory hash-chained ledger
+for the current daemon process and should be backed by durable storage before
+production use.
 
 `POST /registry/start`, `POST /registry/publish`, `POST /registry/search`, and
 `GET /registry/index` provide a local mock registry over registered AgentCards.
@@ -94,6 +100,13 @@ presence records only; they set `authorityGranted: false` and do not replace
 policy evaluation or scoped session grants. `GET /.well-known/fides.json`,
 `GET /.well-known/agents.json`, and `GET /.well-known/agents/:id.json` expose
 local well-known metadata for same-host discovery.
+
+`POST /evidence`, `GET /evidence`, `GET /evidence/:eventId`,
+`POST /evidence/verify`, and `POST /evidence/export` expose the root local
+EvidenceEvent ledger. Sensitive inputs and outputs are not stored directly by
+default; the daemon records `sha256:` hashes and metadata under `hash_only`
+privacy unless another privacy mode is explicitly requested. Root evidence is
+tamper-evident inside the process, not yet durable across daemon restarts.
 
 `POST /identities` creates local in-memory identities for the daemon prototype
 and returns only public identity data. Private keys are retained inside the

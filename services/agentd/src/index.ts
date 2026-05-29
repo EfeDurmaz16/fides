@@ -99,6 +99,8 @@ interface LocalIdentityRecord {
 const localIdentities = new Map<string, LocalIdentityRecord>()
 const localAgentCards = new Map<string, AgentCard>()
 const localSignedAgentCards = new Map<string, SignedAgentCard>()
+const localRegistryRecords = new Map<string, Record<string, unknown>>()
+const localRelayRecords = new Map<string, Record<string, unknown>>()
 interface LocalRegisteredAgent {
   agentId: string
   cardId: string
@@ -1516,12 +1518,159 @@ app.post('/dht/publish', async (c) => {
   return c.json({ accepted: true, pointer }, 201)
 })
 
-app.get('/dht/find', (c) => {
-  const capability = c.req.query('capability')
+function findLocalDhtPointers(capability?: string) {
   const pointers = capability
     ? localDhtPointers.filter(pointer => pointer.capability === capability)
     : localDhtPointers
-  return c.json({ capability: capability ?? null, pointers })
+  return { capability: capability ?? null, pointers }
+}
+
+app.get('/dht/find', (c) => {
+  return c.json(findLocalDhtPointers(c.req.query('capability')))
+})
+
+app.post('/dht/find', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const capability = typeof body.capability === 'string' ? body.capability : undefined
+  return c.json(findLocalDhtPointers(capability))
+})
+
+function localRegistryRecordFor(cardId: string, mode: 'public' | 'private' = 'public') {
+  const card = localAgentCards.get(cardId)
+  const registered = card ? localAgents.get(card.identity.did) : undefined
+  if (!card || !registered) {
+    return null
+  }
+  return {
+    id: `reg_${card.id}`,
+    agentId: card.identity.did,
+    cardId: card.id,
+    mode,
+    capabilities: card.capabilities.map(capability => capability.id),
+    signed: localSignedAgentCards.has(card.id),
+    publishedAt: new Date().toISOString(),
+    authorityGranted: false,
+    source: 'agentd-local-registry',
+  }
+}
+
+app.post('/registry/publish', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const cardId = typeof body.agentCardId === 'string'
+    ? body.agentCardId
+    : typeof body.cardId === 'string'
+      ? body.cardId
+      : undefined
+  if (!cardId) {
+    return c.json({ error: 'agentCardId is required' }, 400)
+  }
+  const record = localRegistryRecordFor(cardId, body.mode === 'private' ? 'private' : 'public')
+  if (!record) {
+    return c.json({ error: 'registered local AgentCard not found', cardId }, 404)
+  }
+  localRegistryRecords.set(String(record.id), record)
+  return c.json({ accepted: true, record }, 201)
+})
+
+app.post('/registry/search', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const capability = typeof body.capability === 'string' ? body.capability : undefined
+  const records = Array.from(localRegistryRecords.values()).filter((record) => (
+    !capability || (record.capabilities as string[] | undefined)?.includes(capability)
+  ))
+  return c.json({ capability: capability ?? null, records, authorityGranted: false })
+})
+
+app.get('/registry/index', (c) => {
+  return c.json({
+    mode: 'local_mock_registry',
+    records: Array.from(localRegistryRecords.values()),
+    authorityGranted: false,
+  })
+})
+
+app.post('/relay/register', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const agentId = typeof body.agentId === 'string'
+    ? body.agentId
+    : typeof body.agent_id === 'string'
+      ? body.agent_id
+      : undefined
+  if (!agentId) {
+    return c.json({ error: 'agentId is required' }, 400)
+  }
+  const registered = localAgents.get(agentId)
+  const card = registered ? localAgentCards.get(registered.cardId) : undefined
+  if (!registered || !card) {
+    return c.json({ error: 'registered local agent not found', agentId }, 404)
+  }
+  const record = {
+    id: `relay_${agentId}`,
+    agentId,
+    cardId: registered.cardId,
+    capabilities: card.capabilities.map(capability => capability.id),
+    endpointHints: Array.isArray(body.endpointHints) ? body.endpointHints : [],
+    online: true,
+    registeredAt: new Date().toISOString(),
+    authorityGranted: false,
+    source: 'agentd-local-relay',
+  }
+  localRelayRecords.set(agentId, record)
+  return c.json({ accepted: true, record }, 201)
+})
+
+app.post('/relay/discover', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const capability = typeof body.capability === 'string' ? body.capability : undefined
+  const records = Array.from(localRelayRecords.values()).filter((record) => (
+    !capability || (record.capabilities as string[] | undefined)?.includes(capability)
+  ))
+  return c.json({ capability: capability ?? null, records, authorityGranted: false })
+})
+
+app.get('/.well-known/fides.json', (c) => {
+  return c.json({
+    schema_version: 'fides.well_known.v1',
+    protocol: 'fides.v2',
+    supported_versions: ['fides.v2.0'],
+    endpoints: {
+      agents: '/.well-known/agents.json',
+      registry: '/registry/index',
+      discovery: '/discover',
+    },
+  })
+})
+
+app.get('/.well-known/agents.json', (c) => {
+  return c.json({
+    schema_version: 'fides.well_known.agents.v1',
+    agents: Array.from(localAgents.values()).map(record => ({
+      agentId: record.agentId,
+      cardId: record.cardId,
+      signed: record.signed,
+      cardUrl: `/.well-known/agents/${encodeURIComponent(record.agentId)}.json`,
+      authorityGranted: false,
+    })),
+  })
+})
+
+app.get('/.well-known/agents/*', (c) => {
+  const rawId = c.req.path.slice('/.well-known/agents/'.length).replace(/\.json$/, '')
+  const id = decodeURIComponent(rawId)
+  if (!id) {
+    return c.json({ error: 'agent id is required' }, 400)
+  }
+  const registered = localAgents.get(id)
+  const card = registered ? localAgentCards.get(registered.cardId) : undefined
+  if (!registered || !card) {
+    return c.json({ error: 'registered local agent not found', agentId: id }, 404)
+  }
+  return c.json({
+    agentId: id,
+    card,
+    signed: localSignedAgentCards.get(card.id) ?? null,
+    authorityGranted: false,
+  })
 })
 
 app.get('/evidence', (c) => {

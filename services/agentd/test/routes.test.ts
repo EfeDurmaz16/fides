@@ -824,6 +824,97 @@ describe('Agentd Service Routes', () => {
       expect(data.pointers).toEqual(expect.arrayContaining([
         expect.objectContaining({ agentId: 'did:fides:agent' }),
       ]))
+
+      const postFind = await app.request('/dht/find', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability: 'invoice.reconcile' }),
+      })
+      expect(postFind.status).toBe(200)
+      expect((await postFind.json()).pointers).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agentId: 'did:fides:agent' }),
+      ]))
+    })
+
+    it('serves local registry, relay, and well-known discovery aliases without authority', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Calendar Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: 'calendar.schedule', requiredScopes: ['calendar:write'] }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const publish = await app.request('/registry/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+      expect(publish.status).toBe(201)
+      expect((await publish.json()).record.authorityGranted).toBe(false)
+
+      const search = await app.request('/registry/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability: 'calendar.schedule' }),
+      })
+      expect(search.status).toBe(200)
+      const searchData = await search.json()
+      expect(searchData.authorityGranted).toBe(false)
+      expect(searchData.records).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agentId: identity.did }),
+      ]))
+
+      const index = await app.request('/registry/index')
+      expect(index.status).toBe(200)
+      expect((await index.json()).records).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agentId: identity.did }),
+      ]))
+
+      const relayRegister = await app.request('/relay/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: identity.did }),
+      })
+      expect(relayRegister.status).toBe(201)
+      expect((await relayRegister.json()).record.authorityGranted).toBe(false)
+
+      const relayDiscover = await app.request('/relay/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability: 'calendar.schedule' }),
+      })
+      expect(relayDiscover.status).toBe(200)
+      expect((await relayDiscover.json()).records).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agentId: identity.did }),
+      ]))
+
+      const wellKnown = await app.request('/.well-known/fides.json')
+      expect(wellKnown.status).toBe(200)
+      expect((await wellKnown.json()).endpoints.discovery).toBe('/discover')
+
+      const agents = await app.request('/.well-known/agents.json')
+      expect(agents.status).toBe(200)
+      expect((await agents.json()).agents).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agentId: identity.did, authorityGranted: false }),
+      ]))
+
+      const agentCard = await app.request(`/.well-known/agents/${encodeURIComponent(identity.did)}.json`)
+      expect(agentCard.status).toBe(200)
+      expect((await agentCard.json()).card.id).toBe(identity.did)
     })
 
     it('serves demo and adversarial simulation endpoints', async () => {

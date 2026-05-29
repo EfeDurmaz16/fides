@@ -5,9 +5,86 @@
  * revocation records and incident reports.
  */
 
-import { canonicalDigest } from './canonical-signer.js'
+import { canonicalDigest, signObject, verifyObject, type SignedObject } from './canonical-signer.js'
+import { hashProtocolPayload } from './protocol.js'
 import * as ed from '@noble/ed25519'
 import { bytesToHex } from '@noble/hashes/utils'
+
+export type RevocationTargetType =
+  | 'key'
+  | 'identity'
+  | 'agent'
+  | 'agent_card'
+  | 'capability'
+  | 'session'
+  | 'attestation'
+  | 'publisher'
+
+export type IncidentCategory =
+  | 'policy_violation'
+  | 'data_exfiltration'
+  | 'malicious_output'
+  | 'sandbox_escape'
+  | 'unauthorized_action'
+  | 'prompt_injection_failure'
+  | 'payment_error'
+  | 'suspicious_behavior'
+
+export interface RevocationRecordV2 {
+  schema_version: 'fides.revocation.record.v1'
+  id: string
+  issuer: string
+  target_type: RevocationTargetType
+  target_id: string
+  reason: string
+  status: 'active' | 'superseded' | 'expired'
+  evidence_refs: string[]
+  created_at: string
+  expires_at?: string
+  payload_hash: string
+}
+
+export interface IncidentRecordV2 {
+  schema_version: 'fides.incident.record.v1'
+  id: string
+  reporter: string
+  target_agent_id: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  category: IncidentCategory
+  description: string
+  evidence_refs: string[]
+  resolution_status: 'open' | 'resolved' | 'dismissed' | 'false_positive'
+  trust_penalty: number
+  reputation_penalty: number
+  created_at: string
+  resolved_at?: string
+  payload_hash: string
+}
+
+export interface RevocationInputV2 {
+  issuer: string
+  targetType: RevocationTargetType
+  targetId: string
+  reason: string
+  evidenceRefs?: string[]
+  createdAt?: string
+  expiresAt?: string
+}
+
+export interface IncidentInputV2 {
+  reporter: string
+  targetAgentId: string
+  severity: IncidentRecordV2['severity']
+  category: IncidentCategory
+  description: string
+  evidenceRefs?: string[]
+  trustPenalty?: number
+  reputationPenalty?: number
+  createdAt?: string
+}
+
+export type SignedRevocationRecordV2 = SignedObject<RevocationRecordV2>
+export type SignedIncidentRecordV2 = SignedObject<IncidentRecordV2>
 
 export interface RevocationRecord {
   id: string
@@ -60,6 +137,90 @@ const SEVERITY_PENALTY: Record<string, { trust: number; reputation: number }> = 
   medium: { trust: 0.15, reputation: 0.3 },
   high: { trust: 0.35, reputation: 0.7 },
   critical: { trust: 0.6, reputation: 1.0 },
+}
+
+export function createRevocationRecordV2(input: RevocationInputV2): RevocationRecordV2 {
+  const payload = {
+    schema_version: 'fides.revocation.record.v1' as const,
+    id: crypto.randomUUID(),
+    issuer: input.issuer,
+    target_type: input.targetType,
+    target_id: input.targetId,
+    reason: input.reason,
+    status: 'active' as const,
+    evidence_refs: input.evidenceRefs ?? [],
+    created_at: input.createdAt ?? new Date().toISOString(),
+    expires_at: input.expiresAt,
+  }
+  return {
+    ...payload,
+    payload_hash: hashProtocolPayload(payload),
+  }
+}
+
+export function createIncidentRecordV2(input: IncidentInputV2): IncidentRecordV2 {
+  const penalties = SEVERITY_PENALTY[input.severity] ?? { trust: 0.1, reputation: 0.2 }
+  const payload = {
+    schema_version: 'fides.incident.record.v1' as const,
+    id: crypto.randomUUID(),
+    reporter: input.reporter,
+    target_agent_id: input.targetAgentId,
+    severity: input.severity,
+    category: input.category,
+    description: input.description,
+    evidence_refs: input.evidenceRefs ?? [],
+    resolution_status: 'open' as const,
+    trust_penalty: input.trustPenalty ?? penalties.trust,
+    reputation_penalty: input.reputationPenalty ?? penalties.reputation,
+    created_at: input.createdAt ?? new Date().toISOString(),
+  }
+  return {
+    ...payload,
+    payload_hash: hashProtocolPayload(payload),
+  }
+}
+
+export function resolveIncidentRecordV2(
+  record: IncidentRecordV2,
+  status: Exclude<IncidentRecordV2['resolution_status'], 'open'> = 'resolved'
+): IncidentRecordV2 {
+  const payload = {
+    ...record,
+    resolution_status: status,
+    resolved_at: new Date().toISOString(),
+    payload_hash: undefined,
+  }
+  const { payload_hash: _, ...withoutHash } = payload
+  return {
+    ...record,
+    resolution_status: status,
+    resolved_at: payload.resolved_at,
+    payload_hash: hashProtocolPayload(withoutHash),
+  }
+}
+
+export function signRevocationRecordV2(
+  record: RevocationRecordV2,
+  privateKey: Uint8Array,
+  verificationMethod: string
+): Promise<SignedRevocationRecordV2> {
+  return signObject(record, privateKey, { verificationMethod, proofPurpose: 'assertionMethod' })
+}
+
+export function verifySignedRevocationRecordV2(signed: SignedRevocationRecordV2): Promise<boolean> {
+  return verifyObject(signed)
+}
+
+export function signIncidentRecordV2(
+  record: IncidentRecordV2,
+  privateKey: Uint8Array,
+  verificationMethod: string
+): Promise<SignedIncidentRecordV2> {
+  return signObject(record, privateKey, { verificationMethod, proofPurpose: 'assertionMethod' })
+}
+
+export function verifySignedIncidentRecordV2(signed: SignedIncidentRecordV2): Promise<boolean> {
+  return verifyObject(signed)
 }
 
 /**

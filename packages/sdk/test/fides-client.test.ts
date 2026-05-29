@@ -27,6 +27,8 @@ describe('FidesClient', () => {
     await client.reputation.update({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.policy.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.sessions.request({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
+    await client.sessions.get('sess_1')
+    await client.sessions.verify('sess_1')
     await client.invoke({ sessionId: 'sess_1', input: { invoiceId: 'inv_123' } })
 
     expect(calls.map(call => call.url)).toEqual([
@@ -39,9 +41,24 @@ describe('FidesClient', () => {
       'http://localhost:4817/reputation/update',
       'http://localhost:4817/policy/evaluate',
       'http://localhost:4817/sessions',
+      'http://localhost:4817/sessions/sess_1',
+      'http://localhost:4817/sessions/sess_1/verify',
       'http://localhost:4817/invoke',
     ])
-    expect(calls.every(call => call.init?.method === 'POST')).toBe(true)
+    expect(calls.map(call => call.init?.method)).toEqual([
+      'POST',
+      'POST',
+      'POST',
+      'POST',
+      'POST',
+      'POST',
+      'POST',
+      'POST',
+      'POST',
+      'GET',
+      'POST',
+      'POST',
+    ])
   })
 
   it('uses the root identity API served by local agentd', async () => {

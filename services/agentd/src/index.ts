@@ -13,7 +13,7 @@ import { resolveTxt } from 'node:dns/promises'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
 import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
-import { evaluateFidesPolicy, evaluatePolicy, type PolicyBundle } from '@fides/policy'
+import { evaluateFidesPolicy, evaluatePolicy, type FidesPolicyDecision, type PolicyBundle } from '@fides/policy'
 import { createTrustContext, evaluateGuard } from '@fides/guard'
 import {
   aggregateIncidentImpact,
@@ -24,8 +24,12 @@ import {
   computeTrustResult,
   createCapabilityDescriptor,
   createIncidentRecordV2,
+  createInvocationRequest,
+  createInvocationResult,
   createPrincipalIdentity,
   createPublisherIdentity,
+  createSessionGrantV2,
+  hashProtocolPayload,
   signAgentCard,
   validateAgentCard,
   verifySignedAgentCard,
@@ -42,6 +46,7 @@ import {
   type PublisherIdentity,
   type ReputationRecord,
   type RevocationRecord,
+  type SessionGrantV2,
   type SignedAgentCard,
   type TrustResult,
 } from '@fides/core'
@@ -89,6 +94,12 @@ interface LocalRegisteredAgent {
 const localAgents = new Map<string, LocalRegisteredAgent>()
 const localTrustResults = new Map<string, TrustResult>()
 const localReputationRecords = new Map<string, ReputationRecord>()
+interface LocalSessionRecord {
+  session: SessionGrantV2
+  policy: FidesPolicyDecision
+  trust: TrustResult
+}
+const localSessionGrants = new Map<string, LocalSessionRecord>()
 const fullDemoSteps = [
   'initialize_daemon',
   'create_principal_identity',
@@ -350,6 +361,21 @@ app.use('/reputation/*', async (c, next) => {
   return auth(c, next)
 })
 app.use('/policy/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/sessions', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/sessions/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/invoke', async (c, next) => {
   if (c.req.method === 'GET') return next()
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
@@ -776,6 +802,158 @@ app.post('/policy/evaluate', async (c) => {
     authorityGranted: false,
     requiresSessionGrant: policy.decision === 'allow',
     explanation: 'Policy decisions do not execute capabilities. Allowed decisions require a scoped SessionGrant before invocation.',
+  })
+})
+
+app.post('/sessions', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const targetAgentId = typeof body.targetAgentId === 'string'
+    ? body.targetAgentId
+    : typeof body.agentId === 'string'
+      ? body.agentId
+      : typeof body.agent_id === 'string'
+        ? body.agent_id
+        : undefined
+  const capabilityId = typeof body.capability === 'string'
+    ? body.capability
+    : typeof body.capabilityId === 'string'
+      ? body.capabilityId
+      : undefined
+
+  if (!targetAgentId || !capabilityId) {
+    return c.json({ error: 'agentId and capability are required' }, 400)
+  }
+
+  const found = findLocalCapability(targetAgentId, capabilityId)
+  if (!found) {
+    return c.json({ error: 'registered agent capability not found', agentId: targetAgentId, capability: capabilityId }, 404)
+  }
+
+  const trust = computeLocalTrustResult(targetAgentId, capabilityId)
+  if (!trust) {
+    return c.json({ error: 'trust result unavailable', agentId: targetAgentId, capability: capabilityId }, 404)
+  }
+
+  const requestedScopes = Array.isArray(body.requestedScopes) ? body.requestedScopes.map(String) : []
+  const policy = evaluateFidesPolicy({
+    principalId: typeof body.principalId === 'string' ? body.principalId : 'did:fides:principal:local',
+    requesterAgentId: typeof body.requesterAgentId === 'string' ? body.requesterAgentId : 'did:fides:requester:local',
+    targetAgentId,
+    capability: found.capability,
+    trustResult: trust,
+    requestedScopes,
+    runtimeAttestationValid: typeof body.runtimeAttestationValid === 'boolean' ? body.runtimeAttestationValid : undefined,
+    approvalGranted: typeof body.approvalGranted === 'boolean' ? body.approvalGranted : undefined,
+  })
+
+  if (policy.decision !== 'allow' && policy.decision !== 'dry_run_only') {
+    return c.json({
+      authorized: false,
+      authorityGranted: false,
+      policy,
+      trust,
+    }, 409)
+  }
+
+  const expiresAt = typeof body.expiresAt === 'string'
+    ? body.expiresAt
+    : new Date(Date.now() + 60 * 60 * 1000).toISOString()
+  const session = createSessionGrantV2({
+    requesterAgentId: typeof body.requesterAgentId === 'string' ? body.requesterAgentId : 'did:fides:requester:local',
+    targetAgentId,
+    principalId: typeof body.principalId === 'string' ? body.principalId : 'did:fides:principal:local',
+    capability: capabilityId,
+    scopes: requestedScopes,
+    constraints: typeof body.constraints === 'object' && body.constraints !== null ? body.constraints as Record<string, unknown> : {},
+    policyHash: hashProtocolPayload(policy),
+    trustResultHash: hashProtocolPayload(trust),
+    audience: Array.isArray(body.audience) ? body.audience.map(String) : [targetAgentId],
+    issuer: 'did:fides:agentd:local',
+    expiresAt,
+  })
+  localSessionGrants.set(session.session_id, { session, policy, trust })
+
+  return c.json({
+    authorized: true,
+    authorityGranted: policy.decision === 'allow',
+    session,
+    policy,
+    trust,
+  }, 201)
+})
+
+app.get('/sessions/:id', (c) => {
+  const record = localSessionGrants.get(c.req.param('id'))
+  if (!record) {
+    return c.json({ error: 'session not found' }, 404)
+  }
+  return c.json({ session: record.session, policy: record.policy, trust: record.trust })
+})
+
+app.post('/sessions/:id/verify', (c) => {
+  const record = localSessionGrants.get(c.req.param('id'))
+  if (!record) {
+    return c.json({ valid: false, error: 'session not found' }, 404)
+  }
+
+  return c.json({
+    valid: new Date(record.session.expires_at).getTime() > Date.now(),
+    session: record.session,
+  })
+})
+
+app.post('/invoke', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const sessionId = typeof body.sessionId === 'string'
+    ? body.sessionId
+    : typeof body.session_id === 'string'
+      ? body.session_id
+      : undefined
+  if (!sessionId) {
+    return c.json({ error: 'sessionId is required' }, 400)
+  }
+
+  const record = localSessionGrants.get(sessionId)
+  if (!record) {
+    return c.json({ error: 'session not found', sessionId }, 404)
+  }
+
+  if (new Date(record.session.expires_at).getTime() <= Date.now()) {
+    return c.json({ error: 'session expired', sessionId, authorityGranted: false }, 409)
+  }
+
+  const found = findLocalCapability(record.session.target_agent_id, record.session.capability)
+  if (!found) {
+    return c.json({ error: 'registered agent capability not found', sessionId, authorityGranted: false }, 404)
+  }
+
+  const request = createInvocationRequest({
+    issuer: record.session.requester_agent_id,
+    sessionGrant: record.session,
+    input: body.input ?? {},
+    dryRun: typeof body.dryRun === 'boolean' ? body.dryRun : false,
+    inputSchema: found.capability.inputSchema,
+    outputSchema: found.capability.outputSchema,
+  })
+  const preflight = evaluateInvocationPreflight({
+    request,
+    policyDecision: record.policy,
+  })
+  const result = createInvocationResult({
+    issuer: record.session.target_agent_id,
+    invocationRequestId: request.id,
+    status: preflight.can_execute ? 'completed' : preflight.status,
+    output: preflight.can_execute ? { ok: true, capability: record.session.capability } : undefined,
+    errorCode: preflight.can_execute ? undefined : preflight.reason_codes[0],
+    evidenceRefs: [`evt_${request.id}`],
+  })
+
+  return c.json({
+    authorityGranted: preflight.can_execute,
+    session: record.session,
+    request,
+    preflight,
+    result,
   })
 })
 

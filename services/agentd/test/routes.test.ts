@@ -438,6 +438,67 @@ describe('Agentd Service Routes', () => {
       expect(policyData.requiresSessionGrant).toBe(true)
     })
 
+    it('issues root scoped sessions and invokes capabilities through policy preflight', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Invoice Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{
+            id: 'invoice.reconcile',
+            riskLevel: 'medium',
+            requiredScopes: ['invoice:read'],
+          }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const session = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: 'did:fides:requester',
+          agentId: identity.did,
+          capability: 'invoice.reconcile',
+          requestedScopes: ['invoice:read'],
+        }),
+      })
+      expect(session.status).toBe(201)
+      const sessionData = await session.json()
+      expect(sessionData.authorityGranted).toBe(true)
+      expect(sessionData.session.capability).toBe('invoice.reconcile')
+
+      const fetched = await app.request(`/sessions/${sessionData.session.session_id}`)
+      expect(fetched.status).toBe(200)
+      expect((await fetched.json()).session.session_id).toBe(sessionData.session.session_id)
+
+      const invocation = await app.request('/invoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: sessionData.session.session_id,
+          input: { invoiceId: 'inv_123' },
+        }),
+      })
+      expect(invocation.status).toBe(200)
+      const invocationData = await invocation.json()
+      expect(invocationData.preflight.can_execute).toBe(true)
+      expect(invocationData.result.status).toBe('completed')
+      expect(invocationData.authorityGranted).toBe(true)
+    })
+
     it('serves local DHT publish and find endpoints', async () => {
       const publish = await app.request('/dht/publish', {
         method: 'POST',

@@ -81,6 +81,17 @@ const policy = await client.policy.evaluate({
   capability: 'invoice.reconcile',
   requestedScopes: ['invoice:read'],
 })
+const session = await client.sessions.request({
+  principalId: 'did:fides:principal',
+  requesterAgentId: 'did:fides:requester',
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
+})
+const invocation = await client.invoke({
+  sessionId: session.session.session_id,
+  input: { invoiceId: 'inv_123' },
+})
 ```
 
 The local identity API returns public identity data only; it does not return
@@ -88,6 +99,8 @@ private keys. AgentCard signing uses the daemon-held local identity key.
 Registration and discovery produce candidate records only; discovery does not
 grant authority to invoke the agent. Trust and reputation are capability-scoped
 signals; policy decisions still require scoped session grants before invocation.
+Root session and invocation helpers use the local daemon preflight path and are
+currently in-memory.
 
 ```typescript
 import { AgentdClient } from '@fides/sdk'

@@ -26,6 +26,10 @@ Current implementation anchors:
 - `POST /reputation/update`
 - `GET /reputation/:agentId`
 - `POST /policy/evaluate`
+- `POST /sessions`
+- `GET /sessions/:id`
+- `POST /sessions/:id/verify`
+- `POST /invoke`
 - `POST /v1/policy/evaluate`
 - `POST /v1/sessions`
 - `GET /v1/sessions/:id`
@@ -81,3 +85,10 @@ candidate, trust result, requested scopes, and runtime/revocation/incident
 flags. Trust and reputation are signals only; policy decisions still do not
 execute capabilities and allowed decisions require a scoped SessionGrant before
 invocation.
+
+`POST /sessions` issues a local `SessionGrant` only after policy allows or
+limits the action to dry-run. `POST /invoke` verifies the session, runs the
+policy preflight path, validates the capability context, and returns an
+`InvocationResult`. The current root implementation is in-memory and intended
+for local daemon DX; durable storage and signed invocation results remain
+follow-up hardening work.

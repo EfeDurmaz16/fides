@@ -45,6 +45,17 @@ const policy = await client.policy.evaluate({
   capability: 'invoice.reconcile',
   requestedScopes: ['invoice:read'],
 })
+const session = await client.sessions.request({
+  principalId: 'did:fides:principal',
+  requesterAgentId: 'did:fides:requester',
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
+})
+const invocation = await client.invoke({
+  sessionId: session.session.session_id,
+  input: { invoiceId: 'inv_123' },
+})
 ```
 
 `identity.createAgent`, `identity.list`, and `identity.show` target the root
@@ -54,4 +65,5 @@ endpoints and use daemon-held local identity keys for signing. Agent
 registration and discovery return candidates only; `authorityGranted` remains
 `false`. Trust and reputation APIs return capability-scoped signals, and policy
 evaluation explains the decision but still requires session grant issuance
-before invocation. Advanced authority flows can use `AgentdClient`.
+before invocation. Session request and invocation helpers use the same root
+local daemon API. Advanced authority flows can use `AgentdClient`.

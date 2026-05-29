@@ -777,11 +777,18 @@ app.post('/discover', async (c) => {
       capability,
       signed: localSignedAgentCards.has(record.cardId),
       authorityGranted: false,
+      resolution: {
+        mode: 'local_agent_card',
+        urlRequired: false,
+        authorityGranted: false,
+        hint: 'Local discovery resolves from daemon-held AgentCards; endpoint URLs are optional transport metadata.',
+      },
       descriptor,
       card,
       reasons: [
         'candidate_matched_capability',
         'discovery_does_not_grant_authority',
+        'url_not_required_for_local_discovery',
       ],
     }]
   })

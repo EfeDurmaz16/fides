@@ -329,6 +329,7 @@ describe('Agentd Service Routes', () => {
         body: JSON.stringify({
           identity,
           capabilities: [{ id: 'invoice.reconcile', requiredScopes: ['invoice:read'] }],
+          endpoints: [],
         }),
       })
       await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
@@ -360,8 +361,14 @@ describe('Agentd Service Routes', () => {
           agentId: identity.did,
           capability: 'invoice.reconcile',
           signed: true,
+          resolution: expect.objectContaining({
+            mode: 'local_agent_card',
+            urlRequired: false,
+            authorityGranted: false,
+          }),
         }),
       ]))
+      expect(discoveredData.candidates[0].reasons).toContain('url_not_required_for_local_discovery')
     })
 
     it('evaluates root trust, reputation, and policy for a registered local candidate', async () => {

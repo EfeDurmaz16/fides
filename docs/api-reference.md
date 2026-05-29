@@ -92,7 +92,10 @@ candidate. `GET /agents` and `GET /agents/:id` expose local registration state
 and the associated AgentCard. `POST /discover` searches registered local agents
 by capability. Discovery responses always include `authorityGranted: false`;
 discovery is candidate resolution only, and invocation authority still requires
-policy evaluation and scoped session grants.
+policy evaluation and scoped session grants. Local discovery does not require
+an endpoint URL; daemon-held AgentCards can resolve by capability with
+`resolution.urlRequired: false`. Endpoint URLs remain optional transport
+metadata, not authority.
 
 `POST /trust/evaluate` computes a local capability-scoped trust result for a
 registered candidate. `POST /reputation/update` stores capability-specific

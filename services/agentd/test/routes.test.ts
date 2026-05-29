@@ -724,6 +724,80 @@ describe('Agentd Service Routes', () => {
       expect((await resolved.json()).record.resolution_status).toBe('resolved')
     })
 
+    it('serves root runtime attestations and uses valid attestations for high-risk session issuance', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Attested Payment Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: 'payments.prepare', riskLevel: 'high', requiredScopes: ['payments:prepare'] }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const withoutAttestation = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: 'did:fides:requester',
+          agentId: identity.did,
+          capability: 'payments.prepare',
+          requestedScopes: ['payments:prepare'],
+        }),
+      })
+      expect(withoutAttestation.status).toBe(409)
+      expect((await withoutAttestation.json()).policy.reason_codes).toContain('HIGH_RISK_REQUIRES_ATTESTATION_OR_APPROVAL')
+
+      const attestation = await app.request('/attestations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: identity.did,
+          codeHash: `sha256:${'a'.repeat(64)}`,
+          runtimeHash: `sha256:${'b'.repeat(64)}`,
+          policyHash: `sha256:${'c'.repeat(64)}`,
+        }),
+      })
+      expect(attestation.status).toBe(201)
+      const attestationData = await attestation.json()
+      expect(attestationData.attestation.agent_id).toBe(identity.did)
+
+      const shown = await app.request(`/attestations/${attestationData.attestation.attestation_id}`)
+      expect(shown.status).toBe(200)
+      expect((await shown.json()).attestation.provider).toBe('mock-tee')
+
+      const verified = await app.request(`/attestations/${attestationData.attestation.attestation_id}/verify`, { method: 'POST' })
+      expect(verified.status).toBe(200)
+      expect((await verified.json()).valid).toBe(true)
+
+      const session = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: 'did:fides:requester',
+          agentId: identity.did,
+          capability: 'payments.prepare',
+          requestedScopes: ['payments:prepare'],
+          attestationId: attestationData.attestation.attestation_id,
+        }),
+      })
+      expect(session.status).toBe(201)
+      expect((await session.json()).policy.reason_codes).toContain('POLICY_ALLOWED')
+    })
+
     it('serves local DHT publish and find endpoints', async () => {
       const publish = await app.request('/dht/publish', {
         method: 'POST',

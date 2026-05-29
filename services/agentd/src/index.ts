@@ -12,7 +12,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { resolveTxt } from 'node:dns/promises'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
 import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain } from '@fides/evidence'
-import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
+import { MockTEEProvider as RuntimeMockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateFidesPolicy, evaluatePolicy, type FidesPolicyDecision, type PolicyBundle } from '@fides/policy'
 import { createTrustContext, evaluateGuard } from '@fides/guard'
 import {
@@ -35,6 +35,7 @@ import {
   createSessionGrantV2,
   hashProtocolPayload,
   isKillSwitchRuleActive,
+  MockTEEProvider as CoreMockTEEProvider,
   resolveIncidentRecordV2,
   signAgentCard,
   validateAgentCard,
@@ -57,6 +58,7 @@ import {
   type ReputationRecord,
   type RevocationRecord,
   type RevocationRecordV2,
+  type RuntimeAttestation,
   type SessionGrantV2,
   type SignedAgentCard,
   type TrustResult,
@@ -81,7 +83,8 @@ const REGISTRY_URL = process.env.REGISTRY_URL || 'http://localhost:7346'
 const TRUST_GRAPH_SERVICE_ID = 'trust-graph'
 const PROPAGATION_MAX_ATTEMPTS = parseInt(process.env.AGENTD_PROPAGATION_MAX_ATTEMPTS || '5', 10)
 
-const teeProvider = new MockTEEProvider()
+const teeProvider = new RuntimeMockTEEProvider()
+const runtimeAttestationProvider = new CoreMockTEEProvider()
 const killSwitch = new InMemoryKillSwitch()
 const authorityStore = createAuthorityStore()
 const localDhtPointers: Array<Record<string, unknown>> = []
@@ -110,6 +113,7 @@ const localApprovalDecisions = new Map<string, ApprovalDecision>()
 const localKillSwitchRules = new Map<string, KillSwitchRule>()
 const localRevocationRecords = new Map<string, RevocationRecordV2>()
 const localIncidentRecords = new Map<string, IncidentRecordV2>()
+const localRuntimeAttestations = new Map<string, RuntimeAttestation>()
 interface LocalSessionRecord {
   session: SessionGrantV2
   policy: FidesPolicyDecision
@@ -344,6 +348,13 @@ function activeLocalIncidentFor(agentId: string): IncidentRecordV2 | undefined {
   })
 }
 
+async function verifyLocalRuntimeAttestation(attestationId: string | undefined, agentId: string): Promise<boolean | undefined> {
+  if (!attestationId) return undefined
+  const attestation = localRuntimeAttestations.get(attestationId)
+  if (!attestation || attestation.agent_id !== agentId) return false
+  return runtimeAttestationProvider.verify(attestation)
+}
+
 // Global middleware stack
 app.use('*', metricsMiddleware(collector))
 app.use('*', logger())
@@ -483,7 +494,17 @@ app.use('/incidents/*', async (c, next) => {
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
 })
-app.post('*', rateLimitMiddleware({ maxRequests: 100, windowMs: 60_000 }))
+app.use('/attestations', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/attestations/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.post('*', rateLimitMiddleware({ maxRequests: process.env.NODE_ENV === 'test' ? 1000 : 100, windowMs: 60_000 }))
 app.get('*', rateLimitMiddleware({ maxRequests: 300, windowMs: 60_000 }))
 app.use('*', bodyLimit({ maxSize: 1024 * 1024 }))
 
@@ -954,6 +975,9 @@ app.post('/sessions', async (c) => {
     requesterAgentId,
   })
   const activeIncident = activeLocalIncidentFor(targetAgentId)
+  const runtimeAttestationValid = typeof body.runtimeAttestationValid === 'boolean'
+    ? body.runtimeAttestationValid
+    : await verifyLocalRuntimeAttestation(typeof body.attestationId === 'string' ? body.attestationId : undefined, targetAgentId)
   const policy = evaluateFidesPolicy({
     principalId,
     requesterAgentId,
@@ -964,7 +988,7 @@ app.post('/sessions', async (c) => {
     killSwitchActive: activeKillSwitch !== undefined,
     revocationActive: activeRevocation !== undefined,
     incidentsActive: activeIncident !== undefined,
-    runtimeAttestationValid: typeof body.runtimeAttestationValid === 'boolean' ? body.runtimeAttestationValid : undefined,
+    runtimeAttestationValid,
     approvalGranted: typeof body.approvalGranted === 'boolean' ? body.approvalGranted : undefined,
   })
 
@@ -1390,6 +1414,76 @@ app.post('/incidents/:id/resolve', async (c) => {
   const resolved = resolveIncidentRecordV2(record, status)
   localIncidentRecords.set(id, resolved)
   return c.json({ record: resolved })
+})
+
+app.post('/attestations', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const agentId = typeof body.agentId === 'string'
+    ? body.agentId
+    : typeof body.agent_id === 'string'
+      ? body.agent_id
+      : undefined
+  if (!agentId) {
+    return c.json({ error: 'agentId is required' }, 400)
+  }
+
+  const codeHash = typeof body.codeHash === 'string'
+    ? body.codeHash
+    : typeof body.code_hash === 'string'
+      ? body.code_hash
+      : undefined
+  const runtimeHash = typeof body.runtimeHash === 'string'
+    ? body.runtimeHash
+    : typeof body.runtime_hash === 'string'
+      ? body.runtime_hash
+      : undefined
+  const policyHash = typeof body.policyHash === 'string'
+    ? body.policyHash
+    : typeof body.policy_hash === 'string'
+      ? body.policy_hash
+      : undefined
+  if (!codeHash || !runtimeHash || !policyHash) {
+    return c.json({ error: 'codeHash, runtimeHash, and policyHash are required' }, 400)
+  }
+
+  const attestation = await runtimeAttestationProvider.issue({
+    agentId,
+    codeHash,
+    runtimeHash,
+    policyHash,
+    enclaveMeasurement: typeof body.enclaveMeasurement === 'string'
+      ? body.enclaveMeasurement
+      : typeof body.enclave_measurement === 'string'
+        ? body.enclave_measurement
+        : undefined,
+    expiresAt: typeof body.expiresAt === 'string'
+      ? body.expiresAt
+      : typeof body.expires_at === 'string'
+        ? body.expires_at
+        : undefined,
+  })
+  localRuntimeAttestations.set(attestation.attestation_id, attestation)
+
+  return c.json({ attestation }, 201)
+})
+
+app.get('/attestations/:id', (c) => {
+  const id = c.req.param('id')
+  const attestation = localRuntimeAttestations.get(id)
+  if (!attestation) {
+    return c.json({ error: 'attestation not found', id }, 404)
+  }
+  return c.json({ attestation })
+})
+
+app.post('/attestations/:id/verify', async (c) => {
+  const id = c.req.param('id')
+  const attestation = localRuntimeAttestations.get(id)
+  if (!attestation) {
+    return c.json({ id, valid: false, error: 'attestation not found' }, 404)
+  }
+  const valid = await runtimeAttestationProvider.verify(attestation)
+  return c.json({ id, valid, attestation })
 })
 
 // ─── FIDES v2 Local API Aliases ───────────────────────────────────

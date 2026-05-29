@@ -44,6 +44,9 @@ Current implementation anchors:
 - `GET /incidents`
 - `GET /incidents/:id`
 - `POST /incidents/:id/resolve`
+- `POST /attestations`
+- `GET /attestations/:id`
+- `POST /attestations/:id/verify`
 - `POST /v1/policy/evaluate`
 - `POST /v1/sessions`
 - `GET /v1/sessions/:id`
@@ -121,3 +124,8 @@ publishers. Active matching revocations override normal policy and block root
 session issuance. `POST /incidents` records an open incident against a target
 agent; open incidents require policy review for matching session requests until
 resolved with `POST /incidents/:id/resolve`.
+
+`POST /attestations` issues a local FIDES v2 runtime attestation through the
+MockTEE provider. `POST /attestations/:id/verify` verifies provider, expiry,
+and hash shape. Root `POST /sessions` can consume a valid `attestationId` as
+runtime attestation evidence for high-risk capability policy.

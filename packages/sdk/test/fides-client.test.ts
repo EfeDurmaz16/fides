@@ -40,6 +40,9 @@ describe('FidesClient', () => {
     await client.incidents.list()
     await client.incidents.get('inc_1')
     await client.incidents.resolve('inc_1', { status: 'resolved' })
+    await client.attestations.create({ agentId: 'did:fides:agent', codeHash: 'sha256:test' })
+    await client.attestations.get('att_1')
+    await client.attestations.verify('att_1')
     await client.sessions.request({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.sessions.get('sess_1')
     await client.sessions.verify('sess_1')
@@ -68,6 +71,9 @@ describe('FidesClient', () => {
       'http://localhost:4817/incidents',
       'http://localhost:4817/incidents/inc_1',
       'http://localhost:4817/incidents/inc_1/resolve',
+      'http://localhost:4817/attestations',
+      'http://localhost:4817/attestations/att_1',
+      'http://localhost:4817/attestations/att_1/verify',
       'http://localhost:4817/sessions',
       'http://localhost:4817/sessions/sess_1',
       'http://localhost:4817/sessions/sess_1/verify',
@@ -94,6 +100,9 @@ describe('FidesClient', () => {
       'GET',
       'POST',
       'GET',
+      'GET',
+      'POST',
+      'POST',
       'GET',
       'POST',
       'POST',

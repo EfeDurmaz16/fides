@@ -114,6 +114,13 @@ const incident = await client.incidents.report({
   description: 'Attempted invocation outside delegated authority.',
 })
 await client.incidents.resolve(incident.record.id, { status: 'resolved' })
+const attestation = await client.attestations.create({
+  agentId: identity.identity.did,
+  codeHash: `sha256:${'a'.repeat(64)}`,
+  runtimeHash: `sha256:${'b'.repeat(64)}`,
+  policyHash: `sha256:${'c'.repeat(64)}`,
+})
+await client.attestations.verify(attestation.attestation.attestation_id)
 const session = await client.sessions.request({
   principalId: 'did:fides:principal',
   requesterAgentId: 'did:fides:requester',
@@ -136,7 +143,9 @@ Root session and invocation helpers use the local daemon preflight path and are
 currently in-memory. Approval and kill switch helpers expose local authority
 controls, with active kill switch rules overriding normal policy. Revocation
 and incident helpers expose local governance records that feed root session
-policy decisions.
+policy decisions. Runtime attestation helpers issue and verify local MockTEE
+attestations that can satisfy high-risk session policy when passed as an
+`attestationId`.
 
 ```typescript
 import { AgentdClient } from '@fides/sdk'

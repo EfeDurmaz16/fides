@@ -73,6 +73,12 @@ export class FidesClient {
     resolve: (recordId: string, body: Record<string, unknown> = {}) => this.post(`/incidents/${encodeURIComponent(recordId)}/resolve`, body),
   }
 
+  readonly attestations = {
+    create: (body: Record<string, unknown>) => this.post('/attestations', body),
+    get: (attestationId: string) => this.get(`/attestations/${encodeURIComponent(attestationId)}`),
+    verify: (attestationId: string) => this.post(`/attestations/${encodeURIComponent(attestationId)}/verify`, {}),
+  }
+
   readonly sessions = {
     request: (body: Record<string, unknown>) => this.post('/sessions', body),
     verify: (sessionId: string) => this.post(`/sessions/${encodeURIComponent(sessionId)}/verify`, {}),

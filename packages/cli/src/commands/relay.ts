@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { getJson, postJson, printResult } from './authority-utils.js'
+import { getJson, parseList as parseCommaList, postJson, printResult } from './authority-utils.js'
 
 export function createRelayCommand(): Command {
   const cmd = new Command('relay')
@@ -41,12 +41,16 @@ export function createRelayCommand(): Command {
   cmd.command('discover')
     .description('Discover local mock relay presence by capability')
     .requiredOption('--capability <capability>', 'Capability ID')
+    .option('--supported-versions <versions>', 'Comma-separated FIDES protocol versions supported by the requester')
+    .option('--required-versions <versions>', 'Comma-separated FIDES protocol versions required by the requester')
     .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
     .option('--json', 'Print JSON only')
     .action(async (options) => {
       try {
         const result = await postJson(`${baseUrl(options.agentdUrl)}/relay/discover`, {
           capability: options.capability,
+          ...(options.supportedVersions ? { supported_versions: parseCommaList(options.supportedVersions) } : {}),
+          ...(options.requiredVersions ? { required_versions: parseCommaList(options.requiredVersions) } : {}),
         })
         printResult('Relay discovery records:', result, options)
       } catch (error) {

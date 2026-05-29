@@ -7,15 +7,29 @@ export function createDhtCommand(): Command {
 
   cmd.command('publish')
     .description('Publish an AgentCard pointer to the local DHT service')
-    .argument('<agent-card>', 'AgentCard path or URL')
+    .argument('[agent-card]', 'AgentCard path or URL for external/unresolved pointers')
     .option('--capability <capability>', 'Capability ID for the pointer')
+    .option('--agent-id <agent-id>', 'Registered local agent DID for signed local pointer publish')
+    .option('--agent-card-id <agent-card-id>', 'Registered local AgentCard ID for signed local pointer publish')
+    .option('--agent-card-url <url>', 'Optional AgentCard URL; omitted local records use local://agent-cards/<card-id>')
+    .option('--expires-at <iso>', 'Pointer expiry timestamp')
     .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
     .option('--json', 'Print JSON only')
     .action(async (agentCard, options) => {
       try {
+        if (!options.capability) {
+          throw new Error('--capability is required')
+        }
+        if (!agentCard && !options.agentId && !options.agentCardId) {
+          throw new Error('provide an AgentCard path/URL, --agent-id, or --agent-card-id')
+        }
         const result = await postJson(`${baseUrl(options.agentdUrl)}/dht/publish`, {
-          agentCard,
           capability: options.capability,
+          ...(agentCard ? { agentCard } : {}),
+          ...(options.agentId ? { agentId: options.agentId } : {}),
+          ...(options.agentCardId ? { agentCardId: options.agentCardId } : {}),
+          ...(options.agentCardUrl ? { agentCardUrl: options.agentCardUrl } : {}),
+          ...(options.expiresAt ? { expiresAt: options.expiresAt } : {}),
         })
         printResult('DHT pointer published:', result, options)
       } catch (error) {

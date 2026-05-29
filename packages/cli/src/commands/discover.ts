@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { DiscoveryClient, TrustClient } from '@fides/sdk';
 import { loadConfig } from '../utils/config.js';
 import { error, info, formatScore } from '../utils/output.js';
-import { postJson, printResult } from './authority-utils.js';
+import { parseList, postJson, printResult } from './authority-utils.js';
 
 const DISCOVERY_PROVIDERS = ['local', 'well-known', 'registry', 'relay', 'dht'] as const
 type DiscoveryProviderName = typeof DISCOVERY_PROVIDERS[number]
@@ -17,6 +17,8 @@ export function createDiscoverCommand(): Command {
     .option('--provider <provider>', 'Discovery provider: local, well-known, registry, relay, dht, all', 'local')
     .option('--all-providers', 'Query all local agentd discovery providers')
     .option('--constraints <json>', 'Discovery constraints as a JSON object')
+    .option('--supported-versions <versions>', 'Comma-separated FIDES protocol versions supported by the requester')
+    .option('--required-versions <versions>', 'Comma-separated FIDES protocol versions required by the requester')
     .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
     .option('--json', 'Print JSON only')
     .action(async (input, options) => {
@@ -45,6 +47,8 @@ async function discoverCapability(
     provider?: string
     allProviders?: boolean
     constraints?: string
+    supportedVersions?: string
+    requiredVersions?: string
     agentdUrl: string
     json?: boolean
   }
@@ -57,6 +61,8 @@ async function discoverCapability(
     ...(intent ? { intent } : {}),
     capability: options.capability,
     ...(constraints ? { constraints } : {}),
+    ...(options.supportedVersions ? { supported_versions: parseList(options.supportedVersions) } : {}),
+    ...(options.requiredVersions ? { required_versions: parseList(options.requiredVersions) } : {}),
   }
   const results = await Promise.all(providers.map(async (provider) => {
     const path = provider === 'local' ? '/discover/local' : `/discover/${provider}`

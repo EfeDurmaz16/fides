@@ -448,6 +448,10 @@ describe('CLI Commands', () => {
         'registry',
         '--constraints',
         '{"tenant":"acme"}',
+        '--supported-versions',
+        'fides.v2.0,fides.v2.1',
+        '--required-versions',
+        'fides.v2.0',
         '--agentd-url',
         'http://agentd.test/',
         '--json',
@@ -461,6 +465,8 @@ describe('CLI Commands', () => {
             intent: 'reconcile invoices',
             capability: 'invoice.reconcile',
             constraints: { tenant: 'acme' },
+            supported_versions: ['fides.v2.0', 'fides.v2.1'],
+            required_versions: ['fides.v2.0'],
           }),
         })
       );
@@ -1115,6 +1121,10 @@ describe('CLI Commands', () => {
         'discover',
         '--capability',
         'invoice.reconcile',
+        '--supported-versions',
+        'fides.v2.0',
+        '--required-versions',
+        'fides.v2.0',
         '--agentd-url',
         'http://agentd.test/',
         '--json',
@@ -1141,7 +1151,11 @@ describe('CLI Commands', () => {
         'http://agentd.test/relay/discover',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ capability: 'invoice.reconcile' }),
+          body: JSON.stringify({
+            capability: 'invoice.reconcile',
+            supported_versions: ['fides.v2.0'],
+            required_versions: ['fides.v2.0'],
+          }),
         })
       );
     });
@@ -1175,6 +1189,10 @@ describe('CLI Commands', () => {
         'search',
         '--capability',
         'invoice.reconcile',
+        '--supported-versions',
+        'fides.v2.0',
+        '--required-versions',
+        'fides.v2.0',
         '--agentd-url',
         'http://agentd.test/',
         '--json',
@@ -1198,7 +1216,49 @@ describe('CLI Commands', () => {
         'http://agentd.test/registry/search',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ capability: 'invoice.reconcile' }),
+          body: JSON.stringify({
+            capability: 'invoice.reconcile',
+            supported_versions: ['fides.v2.0'],
+            required_versions: ['fides.v2.0'],
+          }),
+        })
+      );
+    });
+
+    it('dht publish supports signed local pointer inputs without an AgentCard URL', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        accepted: true,
+        pointer: {
+          capability: 'invoice.reconcile',
+          agentId: 'did:fides:agent',
+          signed: true,
+          authorityGranted: false,
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDhtCommand } = await import('../src/commands/dht.js');
+      const cmd = createDhtCommand();
+
+      await cmd.parseAsync([
+        'publish',
+        '--capability',
+        'invoice.reconcile',
+        '--agent-id',
+        'did:fides:agent',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/dht/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            capability: 'invoice.reconcile',
+            agentId: 'did:fides:agent',
+          }),
         })
       );
     });

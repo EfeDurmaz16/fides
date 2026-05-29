@@ -1,5 +1,5 @@
 import { Command } from 'commander'
-import { getJson, postJson, printResult } from './authority-utils.js'
+import { getJson, parseList, postJson, printResult } from './authority-utils.js'
 
 export function createRegistryCommand(): Command {
   const cmd = new Command('registry')
@@ -41,12 +41,16 @@ export function createRegistryCommand(): Command {
   cmd.command('search')
     .description('Search local mock registry records by capability')
     .requiredOption('--capability <capability>', 'Capability ID')
+    .option('--supported-versions <versions>', 'Comma-separated FIDES protocol versions supported by the requester')
+    .option('--required-versions <versions>', 'Comma-separated FIDES protocol versions required by the requester')
     .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
     .option('--json', 'Print JSON only')
     .action(async (options) => {
       try {
         const result = await postJson(`${baseUrl(options.agentdUrl)}/registry/search`, {
           capability: options.capability,
+          ...(options.supportedVersions ? { supported_versions: parseList(options.supportedVersions) } : {}),
+          ...(options.requiredVersions ? { required_versions: parseList(options.requiredVersions) } : {}),
         })
         printResult('Registry records:', result, options)
       } catch (error) {

@@ -6,6 +6,7 @@ Current implementation anchors:
 
 - `packages/core/src/delegation.ts`
 - `packages/core/src/session-store.ts`
+- `packages/core/src/invocation.ts`
 
 ## SessionGrant Fields
 
@@ -26,3 +27,12 @@ Current implementation anchors:
 - canonical signature
 
 Replay protection is required through nonce tracking.
+
+## Invocation Binding
+
+An invocation must bind to a scoped `SessionGrant`. The root local daemon
+creates an `InvocationRequest`, performs policy preflight, emits hash-only
+evidence events, creates an `InvocationResult`, and signs that result with the
+target agent identity using the canonical object signing model. The signed
+result is evidence that the target agent identity produced the invocation
+outcome; it still does not bypass policy, revocation, or evidence verification.

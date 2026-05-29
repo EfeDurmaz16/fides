@@ -768,6 +768,10 @@ describe('Agentd Service Routes', () => {
       expect(invocationData.result.status).toBe('completed')
       expect(invocationData.authorityGranted).toBe(true)
       expect(invocationData.result.evidence_refs).toHaveLength(2)
+      expect(invocationData.signedResult.payload).toEqual(invocationData.result)
+      expect(invocationData.signedResult.proof.proofPurpose).toBe('capabilityInvocation')
+      expect(invocationData.signedResult.proof.verificationMethod).toBe(identity.did)
+      expect(invocationData.signedResultVerified).toBe(true)
 
       const evidence = await app.request('/evidence')
       expect(evidence.status).toBe(200)

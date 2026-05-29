@@ -1,4 +1,11 @@
-import { isErrorEnvelope, type ErrorEnvelope } from '@fides/core'
+import {
+  isErrorEnvelope,
+  type ErrorEnvelope,
+  type InvocationRequest,
+  type InvocationResult,
+  type SessionGrantV2,
+  type SignedInvocationResult,
+} from '@fides/core'
 
 export interface FidesClientOptions {
   daemonUrl: string
@@ -70,6 +77,23 @@ export interface FidesDhtPublishRequest {
   agentCard?: string
   agentCardUrl?: string
   expiresAt?: string
+}
+
+export interface FidesInvocationRequest {
+  sessionId?: string
+  session_id?: string
+  input?: unknown
+  dryRun?: boolean
+}
+
+export interface FidesInvocationResponse {
+  authorityGranted: boolean
+  session: SessionGrantV2
+  request: InvocationRequest
+  preflight: Record<string, unknown>
+  result: InvocationResult
+  signedResult?: SignedInvocationResult
+  signedResultVerified?: boolean
 }
 
 export class FidesClientError extends Error {
@@ -215,8 +239,8 @@ export class FidesClient {
 
   constructor(private readonly options: FidesClientOptions) {}
 
-  invoke(body: Record<string, unknown>): Promise<unknown> {
-    return this.post('/invoke', body)
+  invoke(body: FidesInvocationRequest): Promise<FidesInvocationResponse> {
+    return this.post('/invoke', body) as Promise<FidesInvocationResponse>
   }
 
   private async get(path: string): Promise<unknown> {

@@ -146,6 +146,8 @@ export {
   type FidesRegistryPublishRequest,
   type FidesRelayRegisterRequest,
   type FidesDhtPublishRequest,
+  type FidesInvocationRequest,
+  type FidesInvocationResponse,
 } from './fides-client.js'
 
 // Integration exports

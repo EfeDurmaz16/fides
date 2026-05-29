@@ -55,8 +55,10 @@ import {
   signAgentCard,
   signDHTPointerRecord,
   signRegistryIndexRecord,
+  signInvocationResult,
   validateAgentCard,
   verifyDHTPointerRecord,
+  verifySignedInvocationResult,
   verifySignedRegistryIndexRecord,
   verifySignedAgentCard,
   verifyDelegationTokenSignature,
@@ -1605,6 +1607,11 @@ app.post('/invoke', async (c) => {
     errorCode: preflight.can_execute ? undefined : preflight.reason_codes[0],
     evidenceRefs: [invokedEvidence.event_id, completedEvidence.event_id],
   })
+  const targetIdentity = localIdentities.get(record.session.target_agent_id)
+  const signedResult = targetIdentity
+    ? await signInvocationResult(result, Buffer.from(targetIdentity.privateKeyHex, 'hex'), record.session.target_agent_id)
+    : undefined
+  const signedResultVerified = signedResult ? await verifySignedInvocationResult(signedResult) : false
 
   return c.json({
     authorityGranted: preflight.can_execute,
@@ -1612,6 +1619,8 @@ app.post('/invoke', async (c) => {
     request,
     preflight,
     result,
+    signedResult,
+    signedResultVerified,
   })
 })
 

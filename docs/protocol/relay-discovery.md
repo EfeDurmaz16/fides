@@ -6,6 +6,7 @@ Current implementation anchors:
 
 - `packages/discovery/src/relay-provider.ts`
 - `services/relay/src/index.ts`
+- `services/agentd/src/index.ts`
 - `packages/sdk/src/relay/client.ts`
 
 ## Relay Provides
@@ -14,6 +15,17 @@ Current implementation anchors:
 - rendezvous
 - endpoint hints
 - signed AgentCard references
+
+The local daemon relay alias builds relay records from registered local
+AgentCards. When the card has been signed, the relay record includes:
+
+- `agentCardUrl`, using a local `local://agent-cards/<card-id>` reference
+- `agentCardHash`, the canonical AgentCard hash
+- `signedAgentCard`, indicating whether the daemon has a signed AgentCard
+- `agentCardProof`, the canonical AgentCard proof metadata
+
+These fields let a caller resolve and verify the AgentCard after rendezvous.
+They do not make the relay a trust anchor.
 
 ## Relay Must Not Provide
 

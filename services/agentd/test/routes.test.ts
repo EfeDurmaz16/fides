@@ -1338,10 +1338,22 @@ describe('Agentd Service Routes', () => {
       const relayRegister = await app.request('/relay/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: identity.did }),
+        body: JSON.stringify({ agentId: identity.did, endpointHints: ['local://calendar-agent'] }),
       })
       expect(relayRegister.status).toBe(201)
-      expect((await relayRegister.json()).record.authorityGranted).toBe(false)
+      const relayRegistration = await relayRegister.json()
+      expect(relayRegistration.record).toMatchObject({
+        agentId: identity.did,
+        agentCardUrl: `local://agent-cards/${encodeURIComponent(identity.did)}`,
+        signedAgentCard: true,
+        endpointHints: ['local://calendar-agent'],
+        authorityGranted: false,
+      })
+      expect(relayRegistration.record.agentCardHash).toMatch(/^sha256:/)
+      expect(relayRegistration.record.agentCardProof).toMatchObject({
+        type: 'Ed25519Signature2024',
+        verificationMethod: identity.did,
+      })
 
       const relayDiscover = await app.request('/relay/discover', {
         method: 'POST',
@@ -1350,7 +1362,11 @@ describe('Agentd Service Routes', () => {
       })
       expect(relayDiscover.status).toBe(200)
       expect((await relayDiscover.json()).records).toEqual(expect.arrayContaining([
-        expect.objectContaining({ agentId: identity.did }),
+        expect.objectContaining({
+          agentId: identity.did,
+          agentCardHash: expect.stringMatching(/^sha256:/),
+          signedAgentCard: true,
+        }),
       ]))
 
       const discoverRelay = await app.request('/discover/relay', {
@@ -1363,7 +1379,12 @@ describe('Agentd Service Routes', () => {
         provider: 'relay',
         authorityGranted: false,
         records: expect.arrayContaining([
-          expect.objectContaining({ agentId: identity.did }),
+          expect.objectContaining({
+            agentId: identity.did,
+            agentCardHash: expect.stringMatching(/^sha256:/),
+            signedAgentCard: true,
+            versionNegotiation: expect.objectContaining({ compatible: true }),
+          }),
         ]),
       })
 

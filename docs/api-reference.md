@@ -103,9 +103,12 @@ production hardening.
 `POST /registry/start`, `POST /registry/publish`, `POST /registry/search`, and
 `GET /registry/index` provide a local mock registry over registered AgentCards.
 `POST /relay/start`, `POST /relay/register`, and `POST /relay/discover` provide
-local mock relay presence and rendezvous. Both surfaces return candidates or
-presence records only; they set `authorityGranted: false` and do not replace
-policy evaluation or scoped session grants. `GET /.well-known/fides.json`,
+local mock relay presence and rendezvous. Relay records for locally signed
+AgentCards include `agentCardUrl`, `agentCardHash`, `signedAgentCard`, and
+`agentCardProof` so callers can resolve and verify the card after rendezvous.
+Both surfaces return candidates or presence records only; they set
+`authorityGranted: false` and do not replace policy evaluation or scoped session
+grants. `GET /.well-known/fides.json`,
 `GET /.well-known/agents.json`, and `GET /.well-known/agents/:id.json` expose
 local well-known metadata for same-host discovery.
 

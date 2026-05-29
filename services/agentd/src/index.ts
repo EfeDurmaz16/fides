@@ -2111,6 +2111,30 @@ function localRegistryRecordFor(cardId: string, mode: 'public' | 'private' = 'pu
   }
 }
 
+function localRelayRecordFor(agentId: string, endpointHints: unknown[] = []) {
+  const registered = localAgents.get(agentId)
+  const card = registered ? localAgentCards.get(registered.cardId) : undefined
+  if (!registered || !card) {
+    return null
+  }
+  const signedCard = localSignedAgentCards.get(card.id)
+  return {
+    id: `relay_${agentId}`,
+    agentId,
+    cardId: registered.cardId,
+    capabilities: card.capabilities.map(capability => capability.id),
+    endpointHints,
+    online: true,
+    agentCardUrl: `local://agent-cards/${encodeURIComponent(card.id)}`,
+    agentCardHash: hashAgentCard(card),
+    signedAgentCard: Boolean(signedCard),
+    agentCardProof: signedCard?.proof ?? null,
+    registeredAt: new Date().toISOString(),
+    authorityGranted: false,
+    source: 'agentd-local-relay',
+  }
+}
+
 app.post('/registry/publish', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const cardId = typeof body.agentCardId === 'string'
@@ -2197,21 +2221,12 @@ app.post('/relay/register', async (c) => {
   if (!agentId) {
     return c.json({ error: 'agentId is required' }, 400)
   }
-  const registered = localAgents.get(agentId)
-  const card = registered ? localAgentCards.get(registered.cardId) : undefined
-  if (!registered || !card) {
-    return c.json({ error: 'registered local agent not found', agentId }, 404)
-  }
-  const record = {
-    id: `relay_${agentId}`,
+  const record = localRelayRecordFor(
     agentId,
-    cardId: registered.cardId,
-    capabilities: card.capabilities.map(capability => capability.id),
-    endpointHints: Array.isArray(body.endpointHints) ? body.endpointHints : [],
-    online: true,
-    registeredAt: new Date().toISOString(),
-    authorityGranted: false,
-    source: 'agentd-local-relay',
+    Array.isArray(body.endpointHints) ? body.endpointHints : []
+  )
+  if (!record) {
+    return c.json({ error: 'registered local agent not found', agentId }, 404)
   }
   localRelayRecords.set(agentId, record)
   return c.json({ accepted: true, record }, 201)
@@ -2448,18 +2463,8 @@ async function runLocalFullDemo() {
 
   const registryRecord = localRegistryRecordFor(invoice.card.id)
   if (registryRecord) localRegistryRecords.set(String(registryRecord.id), registryRecord)
-  const relayRecord = {
-    id: `relay_${calendar.card.identity.did}`,
-    agentId: calendar.card.identity.did,
-    cardId: calendar.card.id,
-    capabilities: calendar.card.capabilities.map(capability => capability.id),
-    endpointHints: ['local://calendar-agent'],
-    online: true,
-    registeredAt: new Date().toISOString(),
-    authorityGranted: false,
-    source: 'agentd-local-relay',
-  }
-  localRelayRecords.set(calendar.card.identity.did, relayRecord)
+  const relayRecord = localRelayRecordFor(calendar.card.identity.did, ['local://calendar-agent'])
+  if (relayRecord) localRelayRecords.set(calendar.card.identity.did, relayRecord)
   const dhtPointer = {
     id: crypto.randomUUID(),
     capability: paymentCapability.id,

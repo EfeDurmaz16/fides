@@ -132,6 +132,16 @@ const invocation = await client.invoke({
   sessionId: session.session.session_id,
   input: { invoiceId: 'inv_123' },
 })
+const evidence = await client.evidence.append({
+  type: 'capability.invoked',
+  actor: 'did:fides:requester',
+  subject: identity.identity.did,
+  capability: 'invoice.reconcile',
+  input: { invoiceId: 'inv_123' },
+})
+await client.evidence.inspect(evidence.event.event_id)
+await client.evidence.verify()
+await client.evidence.export()
 ```
 
 The local identity API returns public identity data only; it does not return
@@ -145,7 +155,9 @@ controls, with active kill switch rules overriding normal policy. Revocation
 and incident helpers expose local governance records that feed root session
 policy decisions. Runtime attestation helpers issue and verify local MockTEE
 attestations that can satisfy high-risk session policy when passed as an
-`attestationId`.
+`attestationId`. Evidence helpers append hash-only events by default, inspect
+individual events, verify the root hash chain, and export the current local
+ledger.
 
 ```typescript
 import { AgentdClient } from '@fides/sdk'

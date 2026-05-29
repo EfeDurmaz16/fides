@@ -116,6 +116,16 @@ const invocation = await client.invoke({
   sessionId: session.session.session_id,
   input: { invoiceId: 'inv_123' },
 })
+const evidence = await client.evidence.append({
+  type: 'capability.invoked',
+  actor: 'did:fides:requester',
+  subject: identity.identity.did,
+  capability: 'invoice.reconcile',
+  input: { invoiceId: 'inv_123' },
+})
+await client.evidence.inspect(evidence.event.event_id)
+await client.evidence.verify()
+await client.evidence.export()
 ```
 
 `identity.createAgent`, `identity.list`, and `identity.show` target the root

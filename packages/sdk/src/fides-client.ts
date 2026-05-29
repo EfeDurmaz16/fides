@@ -115,7 +115,9 @@ export class FidesClient {
   }
 
   readonly evidence = {
+    append: (body: Record<string, unknown>) => this.post('/evidence', body),
     list: () => this.get('/evidence'),
+    inspect: (eventId: string) => this.get(`/evidence/${encodeURIComponent(eventId)}`),
     verify: () => this.post('/evidence/verify', {}),
     export: () => this.post('/evidence/export', {}),
   }

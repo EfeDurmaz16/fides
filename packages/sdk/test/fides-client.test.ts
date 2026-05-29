@@ -64,7 +64,9 @@ describe('FidesClient', () => {
     await client.wellKnown.fides()
     await client.wellKnown.agents()
     await client.wellKnown.agent('did:fides:agent')
+    await client.evidence.append({ type: 'capability.invoked', actor: 'did:fides:agent' })
     await client.evidence.list()
+    await client.evidence.inspect('evt_1')
     await client.evidence.verify()
     await client.evidence.export()
     await client.demo.run()
@@ -115,6 +117,8 @@ describe('FidesClient', () => {
       'http://localhost:4817/.well-known/agents.json',
       'http://localhost:4817/.well-known/agents/did%3Afides%3Aagent.json',
       'http://localhost:4817/evidence',
+      'http://localhost:4817/evidence',
+      'http://localhost:4817/evidence/evt_1',
       'http://localhost:4817/evidence/verify',
       'http://localhost:4817/evidence/export',
       'http://localhost:4817/demo/run',
@@ -163,6 +167,8 @@ describe('FidesClient', () => {
       'POST',
       'GET',
       'GET',
+      'GET',
+      'POST',
       'GET',
       'GET',
       'POST',

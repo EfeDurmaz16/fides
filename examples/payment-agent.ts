@@ -14,7 +14,7 @@
 import { createIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { classifyCapabilityRisk } from '@fides/core'
-import { evaluatePolicy } from '@fides/policy'
+import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
 import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, buildMerkleRoot } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateGuard, createTrustContext } from '@fides/guard'
@@ -105,7 +105,7 @@ async function main() {
   }
 
   const validation = validateAgentCard(agentCard)
-  console.log(`  Name: ${agentCard.identity.metadata.name}`)
+  console.log(`  Name: ${agentCard.identity.metadata!.name}`)
   console.log(`  Capabilities: ${agentCard.capabilities.map(c => c.id).join(', ')}`)
   console.log(`  Valid: ${validation.valid}`)
   if (!validation.valid) {
@@ -157,7 +157,7 @@ async function main() {
   localDiscovery.registerCard(agentCard)
   const resolved = await localDiscovery.resolve(paymentAgent.did)
   console.log(`  Registered: ${resolved ? 'yes' : 'no'}`)
-  console.log(`  Resolved: ${resolved?.identity.metadata.name}`)
+  console.log(`  Resolved: ${resolved?.identity.metadata!.name}`)
   console.log()
 
   // ─── Step 6: Policy Evaluation ───────────────────────────────
@@ -200,7 +200,7 @@ async function main() {
       },
     ],
     defaultAction: 'deny' as const,
-  }
+  } satisfies PolicyBundle
 
   // Scenario 1: High trust, normal payment
   const normalResult = evaluatePolicy(paymentPolicy, {

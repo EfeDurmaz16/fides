@@ -17,7 +17,7 @@ import {
   type AgentCard,
   type CapabilityDescriptor,
 } from '@fides/core'
-import { evaluatePolicy } from '@fides/policy'
+import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
 import { createEvidenceChain, appendEvidenceEvent, buildMerkleRoot, verifyEvidenceChain } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateGuard, createTrustContext } from '@fides/guard'
@@ -116,7 +116,7 @@ async function demo() {
       },
     ],
     defaultAction: 'deny' as const,
-  }
+  } satisfies PolicyBundle
   console.log(`  High trust: ${evaluatePolicy(policy, { requestCount: 10, reputationScore: 0.9 }).decision}`)
   console.log(`  Rate limited: ${evaluatePolicy(policy, { requestCount: 200, reputationScore: 0.9 }).decision}`)
 

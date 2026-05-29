@@ -14,7 +14,7 @@
 import { createIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { classifyCapabilityRisk } from '@fides/core'
-import { evaluatePolicy } from '@fides/policy'
+import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
 import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, buildMerkleRoot } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateGuard, createTrustContext } from '@fides/guard'
@@ -161,9 +161,9 @@ async function main() {
     updatedAt: new Date().toISOString(),
   }
 
-  console.log(`  Calendar: ${calendarCard.identity.metadata.name} (${calendarCard.capabilities.length} caps)`)
-  console.log(`  Payment:  ${paymentCard.identity.metadata.name} (${paymentCard.capabilities.length} caps)`)
-  console.log(`  Invoice:  ${invoiceCard.identity.metadata.name} (${invoiceCard.capabilities.length} caps)`)
+  console.log(`  Calendar: ${calendarCard.identity.metadata!.name} (${calendarCard.capabilities.length} caps)`)
+  console.log(`  Payment:  ${paymentCard.identity.metadata!.name} (${paymentCard.capabilities.length} caps)`)
+  console.log(`  Invoice:  ${invoiceCard.identity.metadata!.name} (${invoiceCard.capabilities.length} caps)`)
   console.log()
 
   // ─── Step 3: Register All Providers with Local Discovery ─────
@@ -182,9 +182,9 @@ async function main() {
   const discoveredPayment = await localDiscovery.resolve(paymentAgent.did)
   const discoveredInvoice = await localDiscovery.resolve(invoiceAgent.did)
 
-  console.log(`  Discovered calendar: ${discoveredCalendar ? discoveredCalendar.identity.metadata.name : 'NOT FOUND'}`)
-  console.log(`  Discovered payment:  ${discoveredPayment ? discoveredPayment.identity.metadata.name : 'NOT FOUND'}`)
-  console.log(`  Discovered invoice:  ${discoveredInvoice ? discoveredInvoice.identity.metadata.name : 'NOT FOUND'}`)
+  console.log(`  Discovered calendar: ${discoveredCalendar ? discoveredCalendar.identity.metadata!.name : 'NOT FOUND'}`)
+  console.log(`  Discovered payment:  ${discoveredPayment ? discoveredPayment.identity.metadata!.name : 'NOT FOUND'}`)
+  console.log(`  Discovered invoice:  ${discoveredInvoice ? discoveredInvoice.identity.metadata!.name : 'NOT FOUND'}`)
 
   // List all available agents
   const allAgents = localDiscovery.list()
@@ -232,7 +232,7 @@ async function main() {
     const minRequired = card?.policies[0]?.minTrustScore ?? 0
     const meetsThreshold = score >= minRequired
     const status = meetsThreshold ? '✅ PASS' : '❌ FAIL'
-    console.log(`  ${card?.identity.metadata.name}: score=${score.toFixed(2)}, required=${minRequired.toFixed(2)} ${status}`)
+    console.log(`  ${card?.identity.metadata!.name}: score=${score.toFixed(2)}, required=${minRequired.toFixed(2)} ${status}`)
   }
   console.log()
 
@@ -265,7 +265,7 @@ async function main() {
       },
     ],
     defaultAction: 'deny' as const,
-  }
+  } satisfies PolicyBundle
 
   const evidenceChain = createEvidenceChain()
   const teeProvider = new MockTEEProvider()
@@ -277,7 +277,7 @@ async function main() {
 
   // 1a. Discover
   const calendarProvider = await localDiscovery.resolve(calendarAgent.did)
-  console.log(`  │ 1a. Discovered: ${calendarProvider?.identity.metadata.name}`)
+  console.log(`  │ 1a. Discovered: ${calendarProvider?.identity.metadata!.name}`)
 
   // 1b. Check trust
   const calendarTrustScore = trustScores[calendarAgent.did] ?? 0
@@ -334,7 +334,7 @@ async function main() {
   console.log(`  │`)
 
   const paymentProvider = await localDiscovery.resolve(paymentAgent.did)
-  console.log(`  │ 2a. Discovered: ${paymentProvider?.identity.metadata.name}`)
+  console.log(`  │ 2a. Discovered: ${paymentProvider?.identity.metadata!.name}`)
 
   const paymentTrustScore = trustScores[paymentAgent.did] ?? 0
   const paymentMeetsTrust = paymentTrustScore >= (paymentProvider?.policies[0]?.minTrustScore ?? 0)
@@ -386,7 +386,7 @@ async function main() {
   console.log(`  │`)
 
   const invoiceProvider = await localDiscovery.resolve(invoiceAgent.did)
-  console.log(`  │ 3a. Discovered: ${invoiceProvider?.identity.metadata.name}`)
+  console.log(`  │ 3a. Discovered: ${invoiceProvider?.identity.metadata!.name}`)
 
   const invoiceTrustScore = trustScores[invoiceAgent.did] ?? 0
   const invoiceMeetsTrust = invoiceTrustScore >= (invoiceProvider?.policies[0]?.minTrustScore ?? 0)

@@ -52,6 +52,8 @@ export interface AgentIdentity {
   keyType: 'Ed25519'
   /** ISO 8601 timestamp of identity creation */
   createdAt: string
+  /** Local display/application metadata used by examples and cards. */
+  metadata?: Record<string, unknown>
   /** Trust anchors claimed or verified for this agent. */
   trustAnchors?: IdentityTrustAnchor[]
   /** The publisher that created this agent (optional) */

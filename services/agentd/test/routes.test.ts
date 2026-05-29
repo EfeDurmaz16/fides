@@ -141,6 +141,20 @@ describe('Agentd Service Routes', () => {
       expect(data.error).toContain('SERVICE_API_KEY is required in production')
     })
 
+    it('fails closed for root identity creation in production when API key is not configured', async () => {
+      process.env.NODE_ENV = 'production'
+      delete process.env.SERVICE_API_KEY
+
+      const res = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Blocked Agent' }),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('SERVICE_API_KEY is required in production')
+    })
+
     it('enforces scoped agentd API keys when configured', async () => {
       process.env.AGENTD_API_KEYS = JSON.stringify([
         { key: 'evidence-key', scopes: ['agentd:evidence:write'] },
@@ -224,6 +238,33 @@ describe('Agentd Service Routes', () => {
   })
 
   describe('FIDES v2 local API aliases', () => {
+    it('creates, lists, and shows local identities without returning private keys', async () => {
+      const created = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Calendar Agent' }),
+      })
+      expect(created.status).toBe(201)
+      const createdData = await created.json()
+      expect(createdData.identity.did).toMatch(/^did:fides:/)
+      expect(createdData.privateKeyHex).toBeUndefined()
+      expect(createdData.identity.metadata.name).toBe('Calendar Agent')
+
+      const listed = await app.request('/identities')
+      expect(listed.status).toBe(200)
+      const listedData = await listed.json()
+      expect(listedData.identities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ did: createdData.identity.did, type: 'agent' }),
+      ]))
+      expect(JSON.stringify(listedData)).not.toContain('privateKeyHex')
+
+      const shown = await app.request(`/identities/${encodeURIComponent(createdData.identity.did)}`)
+      expect(shown.status).toBe(200)
+      const shownData = await shown.json()
+      expect(shownData.identity.did).toBe(createdData.identity.did)
+      expect(shownData.privateKeyHex).toBeUndefined()
+    })
+
     it('serves local DHT publish and find endpoints', async () => {
       const publish = await app.request('/dht/publish', {
         method: 'POST',

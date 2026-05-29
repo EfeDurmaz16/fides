@@ -19,17 +19,23 @@ import {
   aggregateIncidentImpact,
   authorizeDelegation,
   authorizeSessionInvocation,
+  createAgentIdentity,
   computeCapabilityReputation,
   computeTrustResult,
   createCapabilityDescriptor,
   createIncidentRecordV2,
+  createPrincipalIdentity,
+  createPublisherIdentity,
   verifyDelegationTokenSignature,
   verifyDomainDid,
   evaluateInvocationPreflight,
   verifyIncidentRecord,
   verifyRevocationRecord,
+  type AgentIdentity,
   type IncidentRecord,
   type DelegationToken,
+  type PrincipalIdentity,
+  type PublisherIdentity,
   type RevocationRecord,
 } from '@fides/core'
 import { createAuthorityStore } from './storage.js'
@@ -56,6 +62,15 @@ const teeProvider = new MockTEEProvider()
 const killSwitch = new InMemoryKillSwitch()
 const authorityStore = createAuthorityStore()
 const localDhtPointers: Array<Record<string, unknown>> = []
+type LocalIdentityType = 'agent' | 'publisher' | 'principal'
+interface LocalIdentityRecord {
+  type: LocalIdentityType
+  identity: AgentIdentity | PublisherIdentity | PrincipalIdentity
+  publicKeyHex: string
+  privateKeyHex: string
+  createdAt: string
+}
+const localIdentities = new Map<string, LocalIdentityRecord>()
 const fullDemoSteps = [
   'initialize_daemon',
   'create_principal_identity',
@@ -107,6 +122,77 @@ function getCorsOrigin(): string {
   return corsOrigin || '*'
 }
 
+function bytesToHex(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString('hex')
+}
+
+async function createLocalIdentity(
+  type: LocalIdentityType,
+  input: { name?: string; domain?: string }
+): Promise<LocalIdentityRecord> {
+  if (type === 'agent') {
+    const issued = await createAgentIdentity()
+    return {
+      type,
+      identity: {
+        ...issued.identity,
+        metadata: { name: input.name ?? 'Agent' },
+      },
+      publicKeyHex: bytesToHex(issued.publicKey),
+      privateKeyHex: bytesToHex(issued.privateKey),
+      createdAt: issued.identity.createdAt,
+    }
+  }
+
+  if (type === 'publisher') {
+    const issued = await createPublisherIdentity({
+      name: input.name ?? 'Publisher',
+      ...(input.domain !== undefined && { domain: input.domain }),
+      publisherType: input.domain ? 'domain_verified' : 'self_signed',
+      verificationMethod: input.domain ? 'dns' : 'self_signed',
+      verified: false,
+    })
+    return {
+      type,
+      identity: issued.identity,
+      publicKeyHex: bytesToHex(issued.publicKey),
+      privateKeyHex: bytesToHex(issued.privateKey),
+      createdAt: new Date().toISOString(),
+    }
+  }
+
+  const issued = await createPrincipalIdentity({
+    type: 'individual',
+    displayName: input.name ?? 'Principal',
+    ...(input.domain !== undefined && { domain: input.domain }),
+    verificationMethod: input.domain ? 'dns' : 'self_signed',
+    verified: false,
+  })
+  return {
+    type,
+    identity: issued.identity,
+    publicKeyHex: bytesToHex(issued.publicKey),
+    privateKeyHex: bytesToHex(issued.privateKey),
+    createdAt: new Date().toISOString(),
+  }
+}
+
+function safeIdentitySummary(record: LocalIdentityRecord): Record<string, unknown> {
+  return {
+    type: record.type,
+    did: record.identity.did,
+    publicKeyHex: record.publicKeyHex,
+    createdAt: record.createdAt,
+  }
+}
+
+function safeIdentityRecord(record: LocalIdentityRecord): Record<string, unknown> {
+  return {
+    ...safeIdentitySummary(record),
+    identity: record.identity,
+  }
+}
+
 // Global middleware stack
 app.use('*', metricsMiddleware(collector))
 app.use('*', logger())
@@ -137,6 +223,16 @@ app.use('/demo/*', async (c, next) => {
   return auth(c, next)
 })
 app.use('/simulate/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/identities', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/identities/*', async (c, next) => {
   if (c.req.method === 'GET') return next()
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
@@ -193,6 +289,37 @@ app.get('/health', async (c) => {
       detail: authority.detail,
     },
   }, allOk ? 200 : 503)
+})
+
+// ─── Root FIDES v2 Identity API ──────────────────────────────────
+app.post('/identities', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const type = body.type
+  if (type !== 'agent' && type !== 'publisher' && type !== 'principal') {
+    return c.json({ error: 'type must be agent, publisher, or principal' }, 400)
+  }
+
+  const record = await createLocalIdentity(type, {
+    name: typeof body.name === 'string' ? body.name : undefined,
+    domain: typeof body.domain === 'string' ? body.domain : undefined,
+  })
+  localIdentities.set(record.identity.did, record)
+  return c.json(safeIdentityRecord(record), 201)
+})
+
+app.get('/identities', (c) => {
+  return c.json({
+    identities: Array.from(localIdentities.values()).map(safeIdentitySummary),
+  })
+})
+
+app.get('/identities/:id', (c) => {
+  const id = c.req.param('id')
+  const record = localIdentities.get(id)
+  if (!record) {
+    return c.json({ error: 'identity not found', id }, 404)
+  }
+  return c.json(safeIdentityRecord(record))
 })
 
 // ─── FIDES v2 Local API Aliases ───────────────────────────────────

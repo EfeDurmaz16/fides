@@ -10,6 +10,9 @@ Current implementation anchors:
 ## Stable Local Endpoints
 
 - `GET /health`
+- `POST /identities`
+- `GET /identities`
+- `GET /identities/:id`
 - `POST /v1/policy/evaluate`
 - `POST /v1/sessions`
 - `GET /v1/sessions/:id`
@@ -36,3 +39,9 @@ Current implementation anchors:
 - `POST /evidence/export`
 
 The alias endpoints currently provide local mock/demo behavior and should be hardened into durable API routes.
+
+`POST /identities` creates local in-memory identities for the daemon prototype
+and returns only public identity data. Private keys are retained inside the
+daemon process and are not returned by `POST /identities`, `GET /identities`, or
+`GET /identities/:id`. This route is protected by the same production API-key
+fail-closed behavior as other mutating `agentd` routes.

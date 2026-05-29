@@ -39,4 +39,37 @@ describe('FidesClient', () => {
     ])
     expect(calls.every(call => call.init?.method === 'POST')).toBe(true)
   })
+
+  it('uses the root identity API served by local agentd', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init })
+      if (String(url).endsWith('/identities') && init?.method === 'GET') {
+        return new Response(JSON.stringify({ identities: [{ did: 'did:fides:agent', type: 'agent' }] }), { status: 200 })
+      }
+      if (String(url).endsWith('/identities/did%3Afides%3Aagent')) {
+        return new Response(JSON.stringify({ identity: { did: 'did:fides:agent' } }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ identity: { did: 'did:fides:agent' } }), { status: 201 })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345', apiKey: 'sdk-key' })
+
+    await expect(client.identity.createAgent({ name: 'Calendar Agent' })).resolves.toMatchObject({
+      identity: { did: 'did:fides:agent' },
+    })
+    await expect(client.identity.list()).resolves.toMatchObject({
+      identities: [{ did: 'did:fides:agent', type: 'agent' }],
+    })
+    await expect(client.identity.show('did:fides:agent')).resolves.toMatchObject({
+      identity: { did: 'did:fides:agent' },
+    })
+
+    expect(calls.map(call => call.url)).toEqual([
+      'http://localhost:7345/identities',
+      'http://localhost:7345/identities',
+      'http://localhost:7345/identities/did%3Afides%3Aagent',
+    ])
+    expect((calls[0].init?.headers as Headers).get('X-API-Key')).toBe('sdk-key')
+  })
 })

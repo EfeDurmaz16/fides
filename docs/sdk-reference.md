@@ -14,7 +14,9 @@ import { FidesClient } from '@fides/sdk'
 
 const client = new FidesClient({ daemonUrl: 'http://localhost:4817' })
 
-const identity = await client.identity.createAgent()
+const identity = await client.identity.createAgent({ name: 'Invoice Agent' })
+const identities = await client.identity.list()
+const sameIdentity = await client.identity.show(identity.identity.did)
 const card = await client.cards.create({
   name: 'Invoice Agent',
   capabilities: [{ id: 'invoice.reconcile', riskClass: 'medium' }],
@@ -24,4 +26,6 @@ await client.agents.register(card as Record<string, unknown>)
 const results = await client.discovery.find({ capability: 'invoice.reconcile' })
 ```
 
-The facade is intentionally thin. Advanced authority flows can use `AgentdClient`.
+`identity.createAgent`, `identity.list`, and `identity.show` target the root
+`agentd` identity API. The API does not return private keys. The facade is
+intentionally thin. Advanced authority flows can use `AgentdClient`.

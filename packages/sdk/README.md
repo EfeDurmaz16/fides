@@ -42,6 +42,21 @@ const score = await fides.getReputation('did:fides:...')
 
 ## agentd Client
 
+High-level local daemon facade:
+
+```typescript
+import { FidesClient } from '@fides/sdk'
+
+const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+
+const identity = await client.identity.createAgent({ name: 'Invoice Agent' })
+const identities = await client.identity.list()
+const sameIdentity = await client.identity.show(identity.identity.did)
+```
+
+The local identity API returns public identity data only; it does not return
+private keys.
+
 ```typescript
 import { AgentdClient } from '@fides/sdk'
 

@@ -102,6 +102,10 @@ production hardening.
 
 `POST /registry/start`, `POST /registry/publish`, `POST /registry/search`, and
 `GET /registry/index` provide a local mock registry over registered AgentCards.
+Registry records for locally signed AgentCards include `agentCardUrl`,
+`agentCardHash`, `registryIndexRecord`, `registryIndexProof`, and
+`registryIndexVerified`; search and discovery verify signed local registry index
+records before returning them.
 `POST /relay/start`, `POST /relay/register`, and `POST /relay/discover` provide
 local mock relay presence and rendezvous. Relay records for locally signed
 AgentCards include `agentCardUrl`, `agentCardHash`, `signedAgentCard`, and

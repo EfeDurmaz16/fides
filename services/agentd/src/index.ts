@@ -40,6 +40,7 @@ import {
   createKillSwitchRule,
   createDelegationToken,
   createDHTPointerRecord,
+  createRegistryIndexRecord,
   createPrincipalIdentity,
   createPublisherIdentity,
   createRevocationRecordV2,
@@ -52,8 +53,10 @@ import {
   resolveIncidentRecordV2,
   signAgentCard,
   signDHTPointerRecord,
+  signRegistryIndexRecord,
   validateAgentCard,
   verifyDHTPointerRecord,
+  verifySignedRegistryIndexRecord,
   verifySignedAgentCard,
   verifyDelegationTokenSignature,
   verifyDomainDid,
@@ -77,6 +80,7 @@ import {
   type RevocationRecordV2,
   type RuntimeAttestation,
   type SessionGrantV2,
+  type SignedRegistryIndexRecord,
   type SignedAgentCard,
   type TrustResult,
   type VersionNegotiationRecord,
@@ -2092,12 +2096,26 @@ app.post('/discover/dht', async (c) => {
   })
 })
 
-function localRegistryRecordFor(cardId: string, mode: 'public' | 'private' = 'public') {
+async function localRegistryRecordFor(cardId: string, mode: 'public' | 'private' = 'public') {
   const card = localAgentCards.get(cardId)
   const registered = card ? localAgents.get(card.identity.did) : undefined
+  const identity = card ? localIdentities.get(card.identity.did) : undefined
   if (!card || !registered) {
     return null
   }
+  const registryIndexRecord = createRegistryIndexRecord({
+    issuer: card.identity.did,
+    mode,
+    agentCardId: card.id,
+    agentId: card.identity.did,
+    capabilityIds: card.capabilities.map(capability => capability.id),
+    agentCardHash: hashAgentCard(card),
+    registryUrl: 'local://registry',
+    supportedVersions: card.protocolVersions?.length ? card.protocolVersions : ['fides.v2.0'],
+  })
+  const signedRegistryIndexRecord = identity
+    ? await signRegistryIndexRecord(registryIndexRecord, Buffer.from(identity.privateKeyHex, 'hex'), card.identity.did)
+    : null
   return {
     id: `reg_${card.id}`,
     agentId: card.identity.did,
@@ -2105,10 +2123,51 @@ function localRegistryRecordFor(cardId: string, mode: 'public' | 'private' = 'pu
     mode,
     capabilities: card.capabilities.map(capability => capability.id),
     signed: localSignedAgentCards.has(card.id),
+    agentCardUrl: `local://agent-cards/${encodeURIComponent(card.id)}`,
+    agentCardHash: registryIndexRecord.agent_card_hash,
+    registryIndexRecord,
+    signedRegistryIndexRecord,
+    registryIndexProof: signedRegistryIndexRecord?.proof ?? null,
+    registryIndexVerified: signedRegistryIndexRecord ? await verifySignedRegistryIndexRecord(signedRegistryIndexRecord) : false,
     publishedAt: new Date().toISOString(),
     authorityGranted: false,
     source: 'agentd-local-registry',
   }
+}
+
+function signedRegistryIndexFor(record: Record<string, unknown>): SignedRegistryIndexRecord | undefined {
+  const signed = record.signedRegistryIndexRecord
+  if (!signed || typeof signed !== 'object') return undefined
+  const candidate = signed as Partial<SignedRegistryIndexRecord>
+  if (!candidate.payload || !candidate.proof) return undefined
+  return candidate as SignedRegistryIndexRecord
+}
+
+async function filterVerifiedLocalRegistryRecords(records: Array<Record<string, unknown>>) {
+  const verifiedRecords: Array<Record<string, unknown>> = []
+  const rejectedRecords: Array<Record<string, unknown>> = []
+  for (const record of records) {
+    const signed = signedRegistryIndexFor(record)
+    if (!signed) {
+      verifiedRecords.push({ ...record, registryIndexVerification: 'not_checked_unsigned_record' })
+      continue
+    }
+    const valid = await verifySignedRegistryIndexRecord(signed)
+    const enriched = { ...record, registryIndexVerified: valid }
+    if (!valid) {
+      rejectedRecords.push({
+        ...enriched,
+        authorityGranted: false,
+        reasons: [
+          'registry_index_signature_invalid',
+          'discovery_does_not_grant_authority',
+        ],
+      })
+      continue
+    }
+    verifiedRecords.push(enriched)
+  }
+  return { records: verifiedRecords, rejectedRecords }
 }
 
 function localRelayRecordFor(agentId: string, endpointHints: unknown[] = []) {
@@ -2145,7 +2204,7 @@ app.post('/registry/publish', async (c) => {
   if (!cardId) {
     return c.json({ error: 'agentCardId is required' }, 400)
   }
-  const record = localRegistryRecordFor(cardId, body.mode === 'private' ? 'private' : 'public')
+  const record = await localRegistryRecordFor(cardId, body.mode === 'private' ? 'private' : 'public')
   if (!record) {
     return c.json({ error: 'registered local AgentCard not found', cardId }, 404)
   }
@@ -2159,11 +2218,15 @@ app.post('/registry/search', async (c) => {
   const matched = Array.from(localRegistryRecords.values()).filter((record) => (
     !capability || (record.capabilities as string[] | undefined)?.includes(capability)
   ))
-  const filtered = filterVersionCompatibleProviderRecords(body, matched)
+  const verified = await filterVerifiedLocalRegistryRecords(matched)
+  const filtered = filterVersionCompatibleProviderRecords(body, verified.records)
   return c.json({
     capability: capability ?? null,
     records: filtered.records,
-    [filtered.rejectedKey]: filtered.rejected,
+    rejectedRecords: [
+      ...verified.rejectedRecords,
+      ...filtered.rejected,
+    ],
     authorityGranted: false,
   })
 })
@@ -2174,12 +2237,16 @@ app.post('/discover/registry', async (c) => {
   const matched = Array.from(localRegistryRecords.values()).filter((record) => (
     !capability || (record.capabilities as string[] | undefined)?.includes(capability)
   ))
-  const filtered = filterVersionCompatibleProviderRecords(body, matched)
+  const verified = await filterVerifiedLocalRegistryRecords(matched)
+  const filtered = filterVersionCompatibleProviderRecords(body, verified.records)
   return c.json({
     provider: 'registry',
     capability: capability ?? null,
     records: filtered.records,
-    [filtered.rejectedKey]: filtered.rejected,
+    rejectedRecords: [
+      ...verified.rejectedRecords,
+      ...filtered.rejected,
+    ],
     authorityGranted: false,
     explanation: 'Registry discovery returns registry records only; registration does not grant invocation authority.',
   })
@@ -2461,7 +2528,7 @@ async function runLocalFullDemo() {
   const invoice = await createDemoAgent({ name: 'Invoice Agent', capability: invoiceCapability, publisher: publisher.identity as PublisherIdentity })
   const payment = await createDemoAgent({ name: 'Payment Agent', capability: paymentCapability, publisher: publisher.identity as PublisherIdentity })
 
-  const registryRecord = localRegistryRecordFor(invoice.card.id)
+  const registryRecord = await localRegistryRecordFor(invoice.card.id)
   if (registryRecord) localRegistryRecords.set(String(registryRecord.id), registryRecord)
   const relayRecord = localRelayRecordFor(calendar.card.identity.did, ['local://calendar-agent'])
   if (relayRecord) localRelayRecords.set(calendar.card.identity.did, relayRecord)

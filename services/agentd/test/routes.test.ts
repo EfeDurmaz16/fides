@@ -1293,7 +1293,26 @@ describe('Agentd Service Routes', () => {
         body: JSON.stringify({ agentCardId: identity.did }),
       })
       expect(publish.status).toBe(201)
-      expect((await publish.json()).record.authorityGranted).toBe(false)
+      const publishedRegistry = await publish.json()
+      expect(publishedRegistry.record).toMatchObject({
+        agentId: identity.did,
+        agentCardUrl: `local://agent-cards/${encodeURIComponent(identity.did)}`,
+        registryIndexVerified: true,
+        authorityGranted: false,
+        registryIndexRecord: expect.objectContaining({
+          schema_version: 'fides.registry.index.v1',
+          issuer: identity.did,
+          agent_card_id: identity.did,
+          agent_id: identity.did,
+          capability_ids: ['calendar.schedule'],
+          registry_url: 'local://registry',
+        }),
+      })
+      expect(publishedRegistry.record.agentCardHash).toMatch(/^sha256:/)
+      expect(publishedRegistry.record.registryIndexProof).toMatchObject({
+        type: 'Ed25519Signature2024',
+        verificationMethod: identity.did,
+      })
 
       const search = await app.request('/registry/search', {
         method: 'POST',
@@ -1304,7 +1323,11 @@ describe('Agentd Service Routes', () => {
       const searchData = await search.json()
       expect(searchData.authorityGranted).toBe(false)
       expect(searchData.records).toEqual(expect.arrayContaining([
-        expect.objectContaining({ agentId: identity.did }),
+        expect.objectContaining({
+          agentId: identity.did,
+          registryIndexVerified: true,
+          agentCardHash: expect.stringMatching(/^sha256:/),
+        }),
       ]))
 
       const discoverRegistry = await app.request('/discover/registry', {
@@ -1317,14 +1340,22 @@ describe('Agentd Service Routes', () => {
         provider: 'registry',
         authorityGranted: false,
         records: expect.arrayContaining([
-          expect.objectContaining({ agentId: identity.did }),
+          expect.objectContaining({
+            agentId: identity.did,
+            registryIndexVerified: true,
+            agentCardHash: expect.stringMatching(/^sha256:/),
+          }),
         ]),
       })
 
       const index = await app.request('/registry/index')
       expect(index.status).toBe(200)
       expect((await index.json()).records).toEqual(expect.arrayContaining([
-        expect.objectContaining({ agentId: identity.did }),
+        expect.objectContaining({
+          agentId: identity.did,
+          registryIndexVerified: true,
+          registryIndexRecord: expect.objectContaining({ schema_version: 'fides.registry.index.v1' }),
+        }),
       ]))
 
       const registryStart = await app.request('/registry/start', { method: 'POST' })

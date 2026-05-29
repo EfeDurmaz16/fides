@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { isValidFidesDid, identityDisplayName } from '../src/identity.js'
+import {
+  createAgentIdentity,
+  createIdentity,
+  createPrincipalIdentity,
+  createPublisherIdentity,
+  didFromPublicKey,
+  identityDisplayName,
+  isValidFidesDid,
+  publicKeyFromDid,
+  validateIdentityKeyBinding,
+} from '../src/identity.js'
 import type { AgentIdentity, PrincipalIdentity, PublisherIdentity } from '../src/identity.js'
 
 describe('Identity v2', () => {
@@ -11,6 +21,65 @@ describe('Identity v2', () => {
     it('should reject invalid DID', () => {
       expect(isValidFidesDid('did:other:abc')).toBe(false)
       expect(isValidFidesDid('')).toBe(false)
+    })
+  })
+
+  describe('cryptographic issuance', () => {
+    it('creates an agent identity whose DID is bound to the Ed25519 public key', async () => {
+      const issued = await createAgentIdentity({
+        trustAnchors: [
+          { type: 'github', value: 'EfeDurmaz16', verified: true, verifiedAt: '2026-05-29T00:00:00.000Z' },
+        ],
+      })
+
+      expect(issued.privateKey).toBeInstanceOf(Uint8Array)
+      expect(issued.privateKey.length).toBe(32)
+      expect(issued.publicKey.length).toBe(32)
+      expect(issued.identity.did).toBe(didFromPublicKey(issued.publicKey))
+      expect(validateIdentityKeyBinding(issued.identity)).toBe(true)
+      expect(issued.identity.trustAnchors?.[0]).toMatchObject({ type: 'github', verified: true })
+    })
+
+    it('round-trips public keys through did:fides identifiers', async () => {
+      const issued = await createAgentIdentity()
+
+      expect(publicKeyFromDid(issued.identity.did)).toEqual(issued.identity.publicKey)
+    })
+
+    it('creates publisher identities with explicit publisher type', async () => {
+      const issued = await createPublisherIdentity({
+        name: 'Example Publisher',
+        publisherType: 'domain_verified',
+        verificationMethod: 'dns',
+        verified: true,
+        domain: 'example.com',
+      })
+
+      expect(issued.identity.publisherType).toBe('domain_verified')
+      expect(issued.identity.verificationMethod).toBe('dns')
+      expect(issued.identity.domain).toBe('example.com')
+      expect(isValidFidesDid(issued.identity.did)).toBe(true)
+    })
+
+    it('creates domainless principal identities', async () => {
+      const issued = await createPrincipalIdentity({
+        type: 'individual',
+        displayName: 'Alice',
+        verificationMethod: 'self_signed',
+      })
+
+      expect(issued.identity.displayName).toBe('Alice')
+      expect(issued.identity.domain).toBeUndefined()
+      expect(issued.identity.verificationMethod).toBe('self_signed')
+      expect(isValidFidesDid(issued.identity.did)).toBe(true)
+    })
+
+    it('keeps deprecated createIdentity compatible while decoding real did keys', async () => {
+      const issued = await createAgentIdentity()
+      const identity = createIdentity(issued.identity.did, 'agent')
+
+      expect(identity.publicKey).toEqual(issued.identity.publicKey)
+      expect(validateIdentityKeyBinding(identity)).toBe(true)
     })
   })
 

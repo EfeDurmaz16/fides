@@ -39,16 +39,20 @@ import {
   createInvocationResult,
   createKillSwitchRule,
   createDelegationToken,
+  createDHTPointerRecord,
   createPrincipalIdentity,
   createPublisherIdentity,
   createRevocationRecordV2,
   createSessionGrantV2,
+  hashAgentCard,
   hashProtocolPayload,
   isKillSwitchRuleActive,
   MockTEEProvider as CoreMockTEEProvider,
   resolveIncidentRecordV2,
   signAgentCard,
+  signDHTPointerRecord,
   validateAgentCard,
+  verifyDHTPointerRecord,
   verifySignedAgentCard,
   verifyDelegationTokenSignature,
   verifyDomainDid,
@@ -2390,57 +2394,332 @@ app.post('/demo/run', async (c) => {
   })
 })
 
-app.post('/simulate/adversarial', (c) => {
+async function runLocalAdversarialSimulation() {
+  const principal = await createLocalIdentity('principal', { name: 'Simulation Principal' })
+  const publisher = await createLocalIdentity('publisher', { name: 'Simulation Publisher' })
+  const requester = await createLocalIdentity('agent', { name: 'Simulation Requester' })
+  localIdentities.set(principal.identity.did, principal)
+  localIdentities.set(publisher.identity.did, publisher)
+  localIdentities.set(requester.identity.did, requester)
+
   const capability = createCapabilityDescriptor({
     id: 'payments.execute',
+    riskLevel: 'critical',
     requiredScopes: ['payments:execute'],
     supportedControls: ['human_approval', 'runtime_attestation', 'policy_proof'],
+    supportsHumanApproval: true,
+    supportsPolicyProof: true,
   })
-  const incident = createIncidentRecordV2({
-    reporter: 'did:fides:principal',
-    targetAgentId: 'did:fides:malicious-agent',
-    severity: 'critical',
-    category: 'unauthorized_action',
-    description: 'Agent attempted to launder payment execution as a low-risk calendar action.',
-    evidenceRefs: ['evt_malicious_1'],
+  const launderingCapability = createCapabilityDescriptor({
+    id: 'calendar.schedule',
+    riskLevel: 'low',
+    requiredScopes: ['calendar:write'],
+    supportedControls: ['dry_run'],
+    supportsDryRun: true,
   })
-  const reputation = computeCapabilityReputation({
-    agentId: 'did:fides:malicious-agent',
+  const malicious = await createDemoAgent({
+    name: 'Adversarial Payment Agent',
+    capability,
+    publisher: publisher.identity as PublisherIdentity,
+  })
+
+  const scenarioEvents: Record<string, string> = {}
+  const recordScenario = (
+    name: string,
+    decision: string,
+    evidenceInput: Omit<EvidenceEventV2Input, 'type' | 'actor' | 'subject' | 'principal' | 'capability' | 'decision' | 'privacy_mode' | 'metadata'>
+  ) => {
+    const event = appendRootEvidence({
+      type: 'policy.evaluated',
+      actor: requester.identity.did,
+      subject: malicious.card.identity.did,
+      principal: principal.identity.did,
+      capability: capability.id,
+      decision,
+      privacy_mode: 'hash_only',
+      metadata: { simulation: 'adversarial', scenario: name },
+      ...evidenceInput,
+    })
+    scenarioEvents[name] = event.event_id
+    return event
+  }
+
+  const fakeAgentTrust = computeTrustResult({
+    agentId: 'did:fides:fake-agent',
+    capability,
+    components: {
+      identity: 0,
+      publisher: 0,
+      trustAnchors: 0,
+      capabilityFit: 0.2,
+      evidence: 0,
+      policyCompliance: 0,
+      runtimeSafety: 0,
+      peerAttestation: 0,
+      incidentPenalty: 0.4,
+      noveltyPenalty: 1,
+      contextBoundaryPenalty: 0.5,
+    },
+  })
+  const fakeAgentPolicy = evaluateFidesPolicy({
+    principalId: principal.identity.did,
+    requesterAgentId: requester.identity.did,
+    targetAgentId: 'did:fides:fake-agent',
+    capability,
+    trustResult: fakeAgentTrust,
+    requestedScopes: ['payments:execute'],
+  })
+  recordScenario('fake_agent', fakeAgentPolicy.decision, { policy: fakeAgentPolicy, risk_level: capability.riskLevel })
+
+  const fakePublisherReputation = computeCapabilityReputation({
+    agentId: malicious.card.identity.did,
     publisherId: 'did:fides:fake-publisher',
     capability: capability.id,
     successfulInvocations: 0,
-    failedInvocations: 4,
+    failedInvocations: 2,
     incidentCount: 1,
-    publisherWeight: 0.1,
-    contextBoundaryMismatch: true,
+    publisherWeight: 0,
   })
-  const trust = computeTrustResult({
-    agentId: 'did:fides:malicious-agent',
+  const fakePublisherTrust = computeTrustResult({
+    agentId: malicious.card.identity.did,
     capability,
-    evidenceRefs: incident.evidence_refs,
+    components: {
+      identity: 0.8,
+      publisher: 0,
+      trustAnchors: 0,
+      capabilityFit: 0.7,
+      evidence: 0.1,
+      policyCompliance: 0.1,
+      runtimeSafety: 0,
+      peerAttestation: 0,
+      incidentPenalty: fakePublisherReputation.incident_count,
+      noveltyPenalty: 0.8,
+      contextBoundaryPenalty: 0,
+    },
+  })
+  recordScenario('fake_publisher', 'trust_penalty', { output: fakePublisherTrust, risk_level: capability.riskLevel })
+
+  const validPointer = await signDHTPointerRecord(createDHTPointerRecord({
+    capability: capability.id,
+    agentId: malicious.card.identity.did,
+    agentCardUrl: `local://agent-cards/${malicious.card.id}`,
+    agentCardHash: hashAgentCard(malicious.card),
+    publisherId: publisher.identity.did,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  }), Buffer.from(publisher.privateKeyHex, 'hex'), publisher.identity.did)
+  const maliciousPointer = { ...validPointer, capability: 'payments.refund' }
+  const maliciousPointerResult = await verifyDHTPointerRecord(maliciousPointer, {
+    card: malicious.card,
+    verificationMethod: publisher.identity.did,
+  })
+  recordScenario('malicious_dht_pointer', maliciousPointerResult.valid ? 'accepted' : 'rejected', {
+    output: maliciousPointerResult,
+    risk_level: capability.riskLevel,
+  })
+
+  const tamperedSignedCard: SignedAgentCard = {
+    ...malicious.signed,
+    payload: {
+      ...malicious.signed.payload,
+      capabilities: [createCapabilityDescriptor({
+        id: 'payments.execute',
+        riskLevel: 'critical',
+        requiredScopes: [],
+      })],
+    },
+  }
+  const tamperedAgentCardValid = await verifySignedAgentCard(tamperedSignedCard)
+  recordScenario('tampered_agent_card', tamperedAgentCardValid ? 'accepted' : 'signature_rejected', {
+    output: { valid: tamperedAgentCardValid },
+    risk_level: capability.riskLevel,
+  })
+
+  const expiredRuntimeAttestation = await runtimeAttestationProvider.issue({
+    agentId: malicious.card.identity.did,
+    codeHash: `sha256:${'1'.repeat(64)}`,
+    runtimeHash: `sha256:${'2'.repeat(64)}`,
+    policyHash: `sha256:${'3'.repeat(64)}`,
+    expiresAt: new Date(Date.now() - 60_000).toISOString(),
+  })
+  const expiredRuntimeAttestationValid = await runtimeAttestationProvider.verify(expiredRuntimeAttestation)
+  const expiredAttestationPolicy = evaluateFidesPolicy({
+    principalId: principal.identity.did,
+    requesterAgentId: requester.identity.did,
+    targetAgentId: malicious.card.identity.did,
+    capability,
+    trustResult: computeLocalTrustResult(malicious.card.identity.did, capability.id)!,
+    requestedScopes: ['payments:execute'],
+    runtimeAttestationValid: expiredRuntimeAttestationValid,
+  })
+  recordScenario('expired_runtime_attestation', expiredAttestationPolicy.decision, {
+    policy: expiredAttestationPolicy,
+    output: { valid: expiredRuntimeAttestationValid, attestation_id: expiredRuntimeAttestation.attestation_id },
+    risk_level: capability.riskLevel,
+  })
+
+  const revocation = createRevocationRecordV2({
+    issuer: principal.identity.did,
+    targetType: 'agent',
+    targetId: malicious.card.identity.did,
+    reason: 'Adversarial simulation revoked malicious agent.',
+    evidenceRefs: [scenarioEvents.tampered_agent_card],
+  })
+  localRevocationRecords.set(revocation.id, revocation)
+  const revokedPolicy = evaluateFidesPolicy({
+    principalId: principal.identity.did,
+    requesterAgentId: requester.identity.did,
+    targetAgentId: malicious.card.identity.did,
+    capability,
+    trustResult: computeLocalTrustResult(malicious.card.identity.did, capability.id)!,
+    requestedScopes: ['payments:execute'],
+    revocationActive: true,
+  })
+  recordScenario('revoked_agent', revokedPolicy.decision, {
+    policy: revokedPolicy,
+    output: revocation,
+    risk_level: capability.riskLevel,
+  })
+
+  const collusiveTrust = computeTrustResult({
+    agentId: malicious.card.identity.did,
+    capability,
     components: {
       identity: 0.2,
       publisher: 0.1,
       trustAnchors: 0,
       capabilityFit: 0.4,
-      evidence: 0.1,
+      evidence: 0,
       policyCompliance: 0,
       runtimeSafety: 0,
-      peerAttestation: 0.1,
-      incidentPenalty: incident.trust_penalty,
-      noveltyPenalty: 0.4,
-      contextBoundaryPenalty: reputation.context_boundary_penalty,
+      peerAttestation: 1,
+      incidentPenalty: 0.5,
+      noveltyPenalty: 0.7,
+      contextBoundaryPenalty: 0.2,
     },
   })
+  recordScenario('collusive_trust_attestations', 'peer_signal_downweighted', {
+    output: collusiveTrust,
+    risk_level: capability.riskLevel,
+  })
+
+  const contextReputation = computeCapabilityReputation({
+    agentId: malicious.card.identity.did,
+    publisherId: publisher.identity.did,
+    capability: launderingCapability.id,
+    successfulInvocations: 4,
+    failedInvocations: 3,
+    incidentCount: 1,
+    publisherWeight: 0.1,
+    contextBoundaryMismatch: true,
+  })
+  const contextTrust = computeTrustResult({
+    agentId: malicious.card.identity.did,
+    capability: launderingCapability,
+    components: {
+      identity: 0.8,
+      publisher: 0.2,
+      trustAnchors: 0.1,
+      capabilityFit: 0.3,
+      evidence: contextReputation.score,
+      policyCompliance: 0.1,
+      runtimeSafety: 0.2,
+      peerAttestation: 0.1,
+      incidentPenalty: 0.4,
+      noveltyPenalty: 0.2,
+      contextBoundaryPenalty: contextReputation.context_boundary_penalty,
+    },
+  })
+  recordScenario('context_laundering', 'context_boundary_penalty', {
+    output: { reputation: contextReputation, trust: contextTrust },
+    risk_level: launderingCapability.riskLevel,
+  })
+
+  const highRiskPolicy = evaluateFidesPolicy({
+    principalId: principal.identity.did,
+    requesterAgentId: requester.identity.did,
+    targetAgentId: malicious.card.identity.did,
+    capability,
+    trustResult: computeTrustResult({
+      agentId: malicious.card.identity.did,
+      capability,
+      components: {
+        identity: 1,
+        publisher: 0.8,
+        trustAnchors: 0.8,
+        capabilityFit: 1,
+        evidence: 0.8,
+        policyCompliance: 0.8,
+        runtimeSafety: 0.2,
+        peerAttestation: 0.4,
+        incidentPenalty: 0,
+        noveltyPenalty: 0,
+        contextBoundaryPenalty: 0,
+      },
+    }),
+    requestedScopes: ['payments:execute'],
+  })
+  recordScenario('high_risk_capability_abuse', highRiskPolicy.decision, {
+    policy: highRiskPolicy,
+    risk_level: capability.riskLevel,
+  })
+
+  const firstEvidence = createEvidenceEventV2({
+    type: 'capability.invoked',
+    actor: requester.identity.did,
+    subject: malicious.card.identity.did,
+    principal: principal.identity.did,
+    capability: capability.id,
+    input: { amount: 1000 },
+    privacy_mode: 'hash_only',
+  }, '0')
+  const brokenEvidence = {
+    ...createEvidenceEventV2({
+      type: 'capability.completed',
+      actor: malicious.card.identity.did,
+      subject: requester.identity.did,
+      principal: principal.identity.did,
+      capability: capability.id,
+      output: { status: 'forged' },
+      privacy_mode: 'hash_only',
+    }, firstEvidence.event_hash),
+    prev_event_hash: 'sha256:forged-previous',
+  }
+  const brokenEvidenceChainValid = verifyEvidenceEventsV2([firstEvidence, brokenEvidence])
+  recordScenario('broken_evidence_chain', brokenEvidenceChainValid ? 'verified' : 'evidence_verification_failed', {
+    output: { valid: brokenEvidenceChainValid },
+    risk_level: capability.riskLevel,
+  })
+
+  const incident = createIncidentRecordV2({
+    reporter: principal.identity.did,
+    targetAgentId: malicious.card.identity.did,
+    severity: 'critical',
+    category: 'unauthorized_action',
+    description: 'Agent attempted to launder payment execution as a low-risk calendar action.',
+    evidenceRefs: Object.values(scenarioEvents),
+  })
+  localIncidentRecords.set(incident.id, incident)
+  const incidentEvidence = appendRootEvidence({
+    type: 'incident.reported',
+    actor: principal.identity.did,
+    subject: malicious.card.identity.did,
+    principal: principal.identity.did,
+    capability: capability.id,
+    decision: 'reported',
+    risk_level: capability.riskLevel,
+    privacy_mode: 'hash_only',
+    metadata: { simulation: 'adversarial', incident_id: incident.id },
+  })
+
   const preflight = evaluateInvocationPreflight({
     request: {
       schema_version: 'fides.invocation.request.v1',
       id: 'inv_req_malicious',
-      issuer: 'did:fides:requester',
+      issuer: requester.identity.did,
       session_id: 'missing-session',
-      requester_agent_id: 'did:fides:requester',
-      target_agent_id: 'did:fides:malicious-agent',
-      principal_id: 'did:fides:principal',
+      requester_agent_id: requester.identity.did,
+      target_agent_id: malicious.card.identity.did,
+      principal_id: principal.identity.did,
       capability: capability.id,
       scopes: ['payments:execute'],
       dry_run: false,
@@ -2448,43 +2727,52 @@ app.post('/simulate/adversarial', (c) => {
       issued_at: new Date().toISOString(),
       payload_hash: 'sha256:payload',
     },
-    policyDecision: {
-      decision: 'deny',
-      reason_codes: ['REVOCATION_ACTIVE', 'TRUST_BELOW_THRESHOLD'],
-    },
+    policyDecision: revokedPolicy,
   })
 
-  return c.json({
-    status: 'detected',
-    detections: [
-      'fake_agent',
-      'fake_publisher',
-      'malicious_dht_pointer',
-      'tampered_agent_card',
-      'expired_runtime_attestation',
-      'revoked_agent',
-      'collusive_trust_attestations',
-      'context_laundering',
-      'high_risk_capability_abuse',
-      'broken_evidence_chain',
-    ],
-    scenarios: [
-      { name: 'fake_agent', detected: true, outcome: 'policy_denied' },
-      { name: 'fake_publisher', detected: true, outcome: 'trust_penalty' },
-      { name: 'malicious_dht_pointer', detected: true, outcome: 'pointer_rejected' },
-      { name: 'tampered_agent_card', detected: true, outcome: 'signature_rejected' },
-      { name: 'expired_runtime_attestation', detected: true, outcome: 'approval_required_or_denied' },
-      { name: 'revoked_agent', detected: true, outcome: 'revocation_denied' },
-      { name: 'collusive_trust_attestations', detected: true, outcome: 'peer_signal_downweighted' },
-      { name: 'context_laundering', detected: true, outcome: 'context_boundary_penalty' },
-      { name: 'high_risk_capability_abuse', detected: true, outcome: 'approval_required' },
-      { name: 'broken_evidence_chain', detected: true, outcome: 'evidence_verification_failed' },
-    ],
+  const scenarios = [
+    { name: 'fake_agent', detected: fakeAgentPolicy.decision === 'risk_limit' || fakeAgentPolicy.decision === 'dry_run_only', outcome: 'policy_limited', evidenceRef: scenarioEvents.fake_agent, policy: fakeAgentPolicy, trust: fakeAgentTrust },
+    { name: 'fake_publisher', detected: fakePublisherTrust.band === 'unknown' || fakePublisherTrust.band === 'low', outcome: 'trust_penalty', evidenceRef: scenarioEvents.fake_publisher, reputation: fakePublisherReputation, trust: fakePublisherTrust },
+    { name: 'malicious_dht_pointer', detected: !maliciousPointerResult.valid, outcome: 'pointer_rejected', evidenceRef: scenarioEvents.malicious_dht_pointer, errors: maliciousPointerResult.errors },
+    { name: 'tampered_agent_card', detected: !tamperedAgentCardValid, outcome: 'signature_rejected', evidenceRef: scenarioEvents.tampered_agent_card },
+    { name: 'expired_runtime_attestation', detected: !expiredRuntimeAttestationValid && expiredAttestationPolicy.decision === 'require_approval', outcome: 'approval_required_or_denied', evidenceRef: scenarioEvents.expired_runtime_attestation, policy: expiredAttestationPolicy },
+    { name: 'revoked_agent', detected: revokedPolicy.decision === 'deny', outcome: 'revocation_denied', evidenceRef: scenarioEvents.revoked_agent, policy: revokedPolicy },
+    { name: 'collusive_trust_attestations', detected: collusiveTrust.band === 'unknown' || collusiveTrust.band === 'low', outcome: 'peer_signal_downweighted', evidenceRef: scenarioEvents.collusive_trust_attestations, trust: collusiveTrust },
+    { name: 'context_laundering', detected: contextTrust.risk_flags.includes('context_boundary'), outcome: 'context_boundary_penalty', evidenceRef: scenarioEvents.context_laundering, reputation: contextReputation, trust: contextTrust },
+    { name: 'high_risk_capability_abuse', detected: highRiskPolicy.decision === 'require_approval', outcome: 'approval_required', evidenceRef: scenarioEvents.high_risk_capability_abuse, policy: highRiskPolicy },
+    { name: 'broken_evidence_chain', detected: !brokenEvidenceChainValid, outcome: 'evidence_verification_failed', evidenceRef: scenarioEvents.broken_evidence_chain },
+  ]
+
+  return {
+    status: scenarios.every(scenario => scenario.detected) ? 'detected' : 'partial',
+    mode: 'local-first',
+    detections: scenarios.map(scenario => scenario.name),
+    scenarios,
     incident,
-    reputation,
-    trust,
+    revocation,
     preflight,
-  })
+    evidence: {
+      scenarioEvents,
+      incidentEvidenceRef: incidentEvidence.event_id,
+      rootChainValid: verifyEvidenceEventsV2(localEvidenceEvents),
+      rootEventCount: localEvidenceEvents.length,
+      brokenEvidenceChainValid,
+    },
+    authority: {
+      discoveryGrantsAuthority: false,
+      policyBeforeExecution: true,
+      evidenceProduced: Object.keys(scenarioEvents).length === scenarios.length,
+    },
+    limitations: [
+      'Simulation uses local daemon state and mock provider primitives.',
+      'DHT, relay, and registry transport behavior is not networked in this harness.',
+    ],
+  }
+}
+
+app.post('/simulate/adversarial', async (c) => {
+  const result = await runLocalAdversarialSimulation()
+  return c.json(result)
 })
 
 // ─── Identity Resolution (proxy to discovery) ─────────────────────

@@ -1124,7 +1124,12 @@ describe('Agentd Service Routes', () => {
       expect(data.scenarios.map((scenario: any) => scenario.name)).toContain('tampered_agent_card')
       expect(data.scenarios.every((scenario: any) => scenario.detected)).toBe(true)
       expect(data.detections).toContain('context_laundering')
-      expect(data.trust.band).toBe('unknown')
+      expect(data.scenarios.find((scenario: any) => scenario.name === 'fake_agent').policy.decision).toBe('dry_run_only')
+      expect(data.scenarios.find((scenario: any) => scenario.name === 'malicious_dht_pointer').errors).toContain('DHT pointer signature is invalid')
+      expect(data.scenarios.find((scenario: any) => scenario.name === 'tampered_agent_card').outcome).toBe('signature_rejected')
+      expect(data.scenarios.find((scenario: any) => scenario.name === 'broken_evidence_chain').outcome).toBe('evidence_verification_failed')
+      expect(data.evidence.rootChainValid).toBe(true)
+      expect(data.evidence.brokenEvidenceChainValid).toBe(false)
       expect(data.preflight.status).toBe('denied')
     })
 

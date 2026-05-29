@@ -187,6 +187,27 @@ describe('Agentd Service Routes', () => {
       expect((await res.json()).error).toContain('SERVICE_API_KEY is required in production')
     })
 
+    it('fails closed for root discovery and delegation mutations in production when API key is not configured', async () => {
+      process.env.NODE_ENV = 'production'
+      delete process.env.SERVICE_API_KEY
+
+      const requests = [
+        app.request('/delegations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ delegator: 'did:fides:principal', delegatee: TEST_DID, capabilities: ['invoice.reconcile'] }),
+        }),
+        app.request('/registry/start', { method: 'POST' }),
+        app.request('/relay/start', { method: 'POST' }),
+      ]
+
+      const responses = await Promise.all(requests)
+      for (const res of responses) {
+        expect(res.status).toBe(503)
+        expect((await res.json()).error).toContain('SERVICE_API_KEY is required in production')
+      }
+    })
+
     it('enforces scoped agentd API keys when configured', async () => {
       process.env.AGENTD_API_KEYS = JSON.stringify([
         { key: 'evidence-key', scopes: ['agentd:evidence:write'] },

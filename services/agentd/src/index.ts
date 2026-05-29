@@ -389,6 +389,16 @@ app.use('/dht/*', async (c, next) => {
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
 })
+app.use('/registry/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/relay/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
 app.use('/evidence', async (c, next) => {
   if (c.req.method === 'GET') return next()
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
@@ -455,6 +465,11 @@ app.use('/reputation/*', async (c, next) => {
   return auth(c, next)
 })
 app.use('/policy/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/delegations', async (c, next) => {
   if (c.req.method === 'GET') return next()
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)

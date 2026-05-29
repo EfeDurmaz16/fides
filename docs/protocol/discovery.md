@@ -26,11 +26,12 @@ Current implementation anchors:
 
 The current implementation supports capability-query providers and candidate explanations. Trust/policy/evidence integration remains an incremental hardening area.
 
-Root `agentd` local and well-known discovery now apply protocol version
-negotiation before returning candidates. A query can send `supported_versions`
-and `required_versions`; each matching AgentCard contributes its
-`protocolVersions`. Compatible candidates include a `versionNegotiation` record.
-Incompatible matches are filtered out of `candidates` and returned in
-`rejectedCandidates` with a `VERSION_INCOMPATIBLE` error envelope. This keeps
-discovery useful for explainability without treating an incompatible candidate
-as invokable.
+Root `agentd` local, well-known, registry, relay, and locally resolvable DHT
+discovery now apply protocol version negotiation before returning provider
+results. A query can send `supported_versions` and `required_versions`; each
+matching local AgentCard contributes its `protocolVersions`. Compatible
+candidates, records, and pointers include a `versionNegotiation` record.
+Incompatible matches are filtered out of the active result set and returned in
+`rejectedCandidates`, `rejectedRecords`, or `rejectedPointers` with a
+`VERSION_INCOMPATIBLE` error envelope. This keeps discovery useful for
+explainability without treating an incompatible candidate as invokable.

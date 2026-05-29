@@ -964,6 +964,69 @@ function discoveryVersionNegotiation(
   })
 }
 
+function localCardForProviderRecord(record: Record<string, unknown>): AgentCard | undefined {
+  const cardId = typeof record.cardId === 'string'
+    ? record.cardId
+    : typeof record.card_id === 'string'
+      ? record.card_id
+      : undefined
+  if (cardId) {
+    const card = localAgentCards.get(cardId)
+    if (card) return card
+  }
+
+  const agentId = typeof record.agentId === 'string'
+    ? record.agentId
+    : typeof record.agent_id === 'string'
+      ? record.agent_id
+      : undefined
+  const registered = agentId ? localAgents.get(agentId) : undefined
+  return registered ? localAgentCards.get(registered.cardId) : undefined
+}
+
+function filterVersionCompatibleProviderRecords(
+  body: Record<string, unknown>,
+  records: Array<Record<string, unknown>>,
+  rejectedKey = 'rejectedRecords'
+): { records: Array<Record<string, unknown>>; rejected: Array<Record<string, unknown>>; rejectedKey: string } {
+  const rejected: Array<Record<string, unknown>> = []
+  const compatible: Array<Record<string, unknown>> = []
+  for (const record of records) {
+    const card = localCardForProviderRecord(record)
+    if (!card) {
+      compatible.push({ ...record, protocolCompatibility: 'not_checked_card_unresolved' })
+      continue
+    }
+
+    const versionNegotiation = discoveryVersionNegotiation(body, card)
+    if (!versionNegotiation.compatible) {
+      rejected.push({
+        ...record,
+        authorityGranted: false,
+        versionNegotiation,
+        reasons: [
+          'provider_record_matched_capability',
+          'protocol_version_incompatible',
+          'discovery_does_not_grant_authority',
+        ],
+      })
+      continue
+    }
+
+    compatible.push({
+      ...record,
+      versionNegotiation,
+      reasons: [
+        'provider_record_matched_capability',
+        'protocol_version_compatible',
+        'discovery_does_not_grant_authority',
+      ],
+    })
+  }
+
+  return { records: compatible, rejected, rejectedKey }
+}
+
 function localDiscoveryResult(body: Record<string, unknown>, provider = 'local') {
   const capability = typeof body.capability === 'string' ? body.capability : undefined
   if (!capability) {
@@ -1901,9 +1964,17 @@ app.post('/dht/find', async (c) => {
 app.post('/discover/dht', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const capability = typeof body.capability === 'string' ? body.capability : undefined
+  const found = findLocalDhtPointers(capability)
+  const filtered = filterVersionCompatibleProviderRecords(
+    body,
+    found.pointers as Array<Record<string, unknown>>,
+    'rejectedPointers'
+  )
   return c.json({
     provider: 'dht',
-    ...findLocalDhtPointers(capability),
+    capability: found.capability,
+    pointers: filtered.records,
+    [filtered.rejectedKey]: filtered.rejected,
     authorityGranted: false,
     explanation: 'DHT discovery returns signed pointer candidates only; trust, policy, and session grants are evaluated separately.',
   })
@@ -1949,22 +2020,30 @@ app.post('/registry/publish', async (c) => {
 app.post('/registry/search', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const capability = typeof body.capability === 'string' ? body.capability : undefined
-  const records = Array.from(localRegistryRecords.values()).filter((record) => (
+  const matched = Array.from(localRegistryRecords.values()).filter((record) => (
     !capability || (record.capabilities as string[] | undefined)?.includes(capability)
   ))
-  return c.json({ capability: capability ?? null, records, authorityGranted: false })
+  const filtered = filterVersionCompatibleProviderRecords(body, matched)
+  return c.json({
+    capability: capability ?? null,
+    records: filtered.records,
+    [filtered.rejectedKey]: filtered.rejected,
+    authorityGranted: false,
+  })
 })
 
 app.post('/discover/registry', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const capability = typeof body.capability === 'string' ? body.capability : undefined
-  const records = Array.from(localRegistryRecords.values()).filter((record) => (
+  const matched = Array.from(localRegistryRecords.values()).filter((record) => (
     !capability || (record.capabilities as string[] | undefined)?.includes(capability)
   ))
+  const filtered = filterVersionCompatibleProviderRecords(body, matched)
   return c.json({
     provider: 'registry',
     capability: capability ?? null,
-    records,
+    records: filtered.records,
+    [filtered.rejectedKey]: filtered.rejected,
     authorityGranted: false,
     explanation: 'Registry discovery returns registry records only; registration does not grant invocation authority.',
   })
@@ -2029,22 +2108,30 @@ app.post('/relay/register', async (c) => {
 app.post('/relay/discover', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const capability = typeof body.capability === 'string' ? body.capability : undefined
-  const records = Array.from(localRelayRecords.values()).filter((record) => (
+  const matched = Array.from(localRelayRecords.values()).filter((record) => (
     !capability || (record.capabilities as string[] | undefined)?.includes(capability)
   ))
-  return c.json({ capability: capability ?? null, records, authorityGranted: false })
+  const filtered = filterVersionCompatibleProviderRecords(body, matched)
+  return c.json({
+    capability: capability ?? null,
+    records: filtered.records,
+    [filtered.rejectedKey]: filtered.rejected,
+    authorityGranted: false,
+  })
 })
 
 app.post('/discover/relay', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const capability = typeof body.capability === 'string' ? body.capability : undefined
-  const records = Array.from(localRelayRecords.values()).filter((record) => (
+  const matched = Array.from(localRelayRecords.values()).filter((record) => (
     !capability || (record.capabilities as string[] | undefined)?.includes(capability)
   ))
+  const filtered = filterVersionCompatibleProviderRecords(body, matched)
   return c.json({
     provider: 'relay',
     capability: capability ?? null,
-    records,
+    records: filtered.records,
+    [filtered.rejectedKey]: filtered.rejected,
     authorityGranted: false,
     explanation: 'Relay discovery returns presence records only; relay presence is not authority.',
   })

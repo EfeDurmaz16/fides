@@ -23,6 +23,7 @@ Current implementation anchors:
 4. Reject with `VERSION_INCOMPATIBLE` when no overlap exists.
 
 Version compatibility is a discovery filter. It does not grant authority.
-In root `agentd` local discovery, incompatible AgentCards are excluded from
-`candidates` and surfaced as `rejectedCandidates` so callers can explain why a
-capability match was not usable.
+In root `agentd` discovery, incompatible local AgentCards are excluded from
+active local, well-known, registry, relay, and locally resolvable DHT results.
+They are surfaced as `rejectedCandidates`, `rejectedRecords`, or
+`rejectedPointers` so callers can explain why a capability match was not usable.

@@ -506,6 +506,102 @@ describe('Agentd Service Routes', () => {
       expect(data.authorityGranted).toBe(false)
     })
 
+    it('filters registry relay and dht discovery records with incompatible protocol versions', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Legacy Provider Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: 'legacy.provider', requiredScopes: ['legacy:read'] }],
+          endpoints: [],
+          protocolVersions: ['fides.v1'],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+      await app.request('/registry/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+      await app.request('/relay/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: identity.did }),
+      })
+      await app.request('/dht/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          capability: 'legacy.provider',
+          agentId: identity.did,
+          agentCardUrl: 'local://legacy-provider-card',
+        }),
+      })
+
+      for (const path of ['/registry/search', '/discover/registry', '/relay/discover', '/discover/relay']) {
+        const response = await app.request(path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            capability: 'legacy.provider',
+            supported_versions: ['fides.v2.0'],
+            required_versions: ['fides.v2.0'],
+          }),
+        })
+        expect(response.status).toBe(200)
+        const data = await response.json()
+        expect(data.records).toEqual([])
+        expect(data.rejectedRecords).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            agentId: identity.did,
+            versionNegotiation: expect.objectContaining({
+              compatible: false,
+              errors: expect.arrayContaining([
+                expect.objectContaining({ code: 'VERSION_INCOMPATIBLE' }),
+              ]),
+            }),
+          }),
+        ]))
+        expect(data.authorityGranted).toBe(false)
+      }
+
+      const dht = await app.request('/discover/dht', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          capability: 'legacy.provider',
+          supported_versions: ['fides.v2.0'],
+          required_versions: ['fides.v2.0'],
+        }),
+      })
+      expect(dht.status).toBe(200)
+      const dhtData = await dht.json()
+      expect(dhtData.pointers).toEqual([])
+      expect(dhtData.rejectedPointers).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          agentId: identity.did,
+          versionNegotiation: expect.objectContaining({
+            compatible: false,
+            errors: expect.arrayContaining([
+              expect.objectContaining({ code: 'VERSION_INCOMPATIBLE' }),
+            ]),
+          }),
+        }),
+      ]))
+      expect(dhtData.authorityGranted).toBe(false)
+    })
+
     it('evaluates root trust, reputation, and policy for a registered local candidate', async () => {
       const identityResponse = await app.request('/identities', {
         method: 'POST',

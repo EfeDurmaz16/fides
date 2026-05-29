@@ -26,6 +26,11 @@ describe('FidesClient', () => {
     await client.trust.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.reputation.update({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.policy.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
+    await client.delegations.create({
+      delegator: 'did:fides:principal',
+      delegatee: 'did:fides:requester',
+      capabilities: ['invoice.reconcile'],
+    })
     await client.approvals.create({ agentId: 'did:fides:agent', capability: 'payments.prepare' })
     await client.approvals.list()
     await client.approvals.approve('approval_1', { approverId: 'did:fides:approver' })
@@ -46,6 +51,22 @@ describe('FidesClient', () => {
     await client.sessions.request({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.sessions.get('sess_1')
     await client.sessions.verify('sess_1')
+    await client.registry.publish({ agentCardId: 'did:fides:agent' })
+    await client.registry.search({ capability: 'invoice.reconcile' })
+    await client.registry.index()
+    await client.relay.register({ agentId: 'did:fides:agent' })
+    await client.relay.discover({ capability: 'invoice.reconcile' })
+    await client.dht.start()
+    await client.dht.publish({ capability: 'invoice.reconcile', agentId: 'did:fides:agent' })
+    await client.dht.find({ capability: 'invoice.reconcile' })
+    await client.wellKnown.fides()
+    await client.wellKnown.agents()
+    await client.wellKnown.agent('did:fides:agent')
+    await client.evidence.list()
+    await client.evidence.verify()
+    await client.evidence.export()
+    await client.demo.run()
+    await client.simulate.adversarial()
     await client.invoke({ sessionId: 'sess_1', input: { invoiceId: 'inv_123' } })
 
     expect(calls.map(call => call.url)).toEqual([
@@ -57,6 +78,7 @@ describe('FidesClient', () => {
       'http://localhost:4817/trust/evaluate',
       'http://localhost:4817/reputation/update',
       'http://localhost:4817/policy/evaluate',
+      'http://localhost:4817/delegations',
       'http://localhost:4817/approvals',
       'http://localhost:4817/approvals',
       'http://localhost:4817/approvals/approval_1/approve',
@@ -77,9 +99,26 @@ describe('FidesClient', () => {
       'http://localhost:4817/sessions',
       'http://localhost:4817/sessions/sess_1',
       'http://localhost:4817/sessions/sess_1/verify',
+      'http://localhost:4817/registry/publish',
+      'http://localhost:4817/registry/search',
+      'http://localhost:4817/registry/index',
+      'http://localhost:4817/relay/register',
+      'http://localhost:4817/relay/discover',
+      'http://localhost:4817/dht/start',
+      'http://localhost:4817/dht/publish',
+      'http://localhost:4817/dht/find',
+      'http://localhost:4817/.well-known/fides.json',
+      'http://localhost:4817/.well-known/agents.json',
+      'http://localhost:4817/.well-known/agents/did%3Afides%3Aagent.json',
+      'http://localhost:4817/evidence',
+      'http://localhost:4817/evidence/verify',
+      'http://localhost:4817/evidence/export',
+      'http://localhost:4817/demo/run',
+      'http://localhost:4817/simulate/adversarial',
       'http://localhost:4817/invoke',
     ])
     expect(calls.map(call => call.init?.method)).toEqual([
+      'POST',
       'POST',
       'POST',
       'POST',
@@ -107,6 +146,22 @@ describe('FidesClient', () => {
       'POST',
       'POST',
       'GET',
+      'POST',
+      'POST',
+      'POST',
+      'GET',
+      'POST',
+      'POST',
+      'POST',
+      'POST',
+      'POST',
+      'GET',
+      'GET',
+      'GET',
+      'GET',
+      'POST',
+      'POST',
+      'POST',
       'POST',
       'POST',
     ])

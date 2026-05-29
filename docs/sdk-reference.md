@@ -45,6 +45,12 @@ const policy = await client.policy.evaluate({
   capability: 'invoice.reconcile',
   requestedScopes: ['invoice:read'],
 })
+await client.delegations.create({
+  delegator: 'did:fides:principal',
+  delegatee: 'did:fides:requester',
+  capabilities: ['invoice.reconcile'],
+  audience: [identity.identity.did],
+})
 const approval = await client.approvals.create({
   principalId: 'did:fides:principal',
   requesterAgentId: 'did:fides:requester',
@@ -85,6 +91,18 @@ const attestation = await client.attestations.create({
   policyHash: `sha256:${'c'.repeat(64)}`,
 })
 await client.attestations.verify(attestation.attestation.attestation_id)
+await client.registry.publish({ agentCardId: identity.identity.did })
+await client.registry.search({ capability: 'invoice.reconcile' })
+await client.relay.register({ agentId: identity.identity.did })
+await client.relay.discover({ capability: 'invoice.reconcile' })
+await client.dht.publish({
+  capability: 'invoice.reconcile',
+  agentId: identity.identity.did,
+  agentCardUrl: 'local://invoice-agent-card',
+})
+await client.dht.find({ capability: 'invoice.reconcile' })
+await client.wellKnown.fides()
+await client.wellKnown.agents()
 const session = await client.sessions.request({
   principalId: 'did:fides:principal',
   requesterAgentId: 'did:fides:requester',
@@ -105,11 +123,15 @@ endpoints and use daemon-held local identity keys for signing. Agent
 registration and discovery return candidates only; `authorityGranted` remains
 `false`. Trust and reputation APIs return capability-scoped signals, and policy
 evaluation explains the decision but still requires session grant issuance
-before invocation. Session request and invocation helpers use the same root
+before invocation. Delegation helpers create unsigned local DelegationToken
+intents; they do not grant invocation authority without signing, policy, and a
+scoped SessionGrant. Session request and invocation helpers use the same root
 local daemon API. Approval and kill switch helpers expose local authority
 controls, with kill switch rules overriding normal policy while active.
 Revocation and incident helpers expose local governance records that feed root
 session policy decisions. Runtime attestation helpers issue and verify local
 MockTEE attestations that can satisfy high-risk session policy when passed as
-an `attestationId`.
+an `attestationId`. Registry, relay, DHT, and well-known helpers expose the
+local mock discovery surfaces. They return candidate records or pointers only;
+they do not convert discovery into authority.
 Advanced authority flows can use `AgentdClient`.

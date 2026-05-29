@@ -47,6 +47,10 @@ export class FidesClient {
     evaluate: (body: Record<string, unknown>) => this.post('/policy/evaluate', body),
   }
 
+  readonly delegations = {
+    create: (body: Record<string, unknown>) => this.post('/delegations', body),
+  }
+
   readonly approvals = {
     create: (body: Record<string, unknown>) => this.post('/approvals', body),
     list: () => this.get('/approvals'),
@@ -83,6 +87,43 @@ export class FidesClient {
     request: (body: Record<string, unknown>) => this.post('/sessions', body),
     verify: (sessionId: string) => this.post(`/sessions/${encodeURIComponent(sessionId)}/verify`, {}),
     get: (sessionId: string) => this.get(`/sessions/${encodeURIComponent(sessionId)}`),
+  }
+
+  readonly registry = {
+    publish: (body: Record<string, unknown>) => this.post('/registry/publish', body),
+    search: (body: Record<string, unknown>) => this.post('/registry/search', body),
+    index: () => this.get('/registry/index'),
+  }
+
+  readonly relay = {
+    register: (body: Record<string, unknown>) => this.post('/relay/register', body),
+    discover: (body: Record<string, unknown>) => this.post('/relay/discover', body),
+  }
+
+  readonly dht = {
+    start: () => this.post('/dht/start', {}),
+    publish: (body: Record<string, unknown>) => this.post('/dht/publish', body),
+    find: (body: Record<string, unknown>) => this.post('/dht/find', body),
+  }
+
+  readonly wellKnown = {
+    fides: () => this.get('/.well-known/fides.json'),
+    agents: () => this.get('/.well-known/agents.json'),
+    agent: (agentId: string) => this.get(`/.well-known/agents/${encodeURIComponent(agentId)}.json`),
+  }
+
+  readonly evidence = {
+    list: () => this.get('/evidence'),
+    verify: () => this.post('/evidence/verify', {}),
+    export: () => this.post('/evidence/export', {}),
+  }
+
+  readonly demo = {
+    run: () => this.post('/demo/run', {}),
+  }
+
+  readonly simulate = {
+    adversarial: () => this.post('/simulate/adversarial', {}),
   }
 
   constructor(private readonly options: FidesClientOptions) {}

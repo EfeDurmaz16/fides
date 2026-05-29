@@ -65,12 +65,29 @@ await client.agents.register({ agentCardId: identity.identity.did })
 const agents = await client.agents.list()
 const candidateAgent = await client.agents.inspect(identity.identity.did)
 const candidates = await client.discovery.find({ capability: 'invoice.reconcile' })
+const trust = await client.trust.evaluate({
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+})
+const reputation = await client.reputation.update({
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+  successfulInvocations: 3,
+})
+const policy = await client.policy.evaluate({
+  principalId: 'did:fides:principal',
+  requesterAgentId: 'did:fides:requester',
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
+})
 ```
 
 The local identity API returns public identity data only; it does not return
 private keys. AgentCard signing uses the daemon-held local identity key.
 Registration and discovery produce candidate records only; discovery does not
-grant authority to invoke the agent.
+grant authority to invoke the agent. Trust and reputation are capability-scoped
+signals; policy decisions still require scoped session grants before invocation.
 
 ```typescript
 import { AgentdClient } from '@fides/sdk'

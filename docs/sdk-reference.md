@@ -29,6 +29,22 @@ await client.agents.register({ agentCardId: identity.identity.did })
 await client.agents.list()
 await client.agents.inspect(identity.identity.did)
 const results = await client.discovery.find({ capability: 'invoice.reconcile' })
+const trust = await client.trust.evaluate({
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+})
+const reputation = await client.reputation.update({
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+  successfulInvocations: 3,
+})
+const policy = await client.policy.evaluate({
+  principalId: 'did:fides:principal',
+  requesterAgentId: 'did:fides:requester',
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
+})
 ```
 
 `identity.createAgent`, `identity.list`, and `identity.show` target the root
@@ -36,5 +52,6 @@ const results = await client.discovery.find({ capability: 'invoice.reconcile' })
 intentionally thin. The AgentCard helpers target root `agentd` AgentCard
 endpoints and use daemon-held local identity keys for signing. Agent
 registration and discovery return candidates only; `authorityGranted` remains
-`false` until policy evaluation and session grant issuance. Advanced authority
-flows can use `AgentdClient`.
+`false`. Trust and reputation APIs return capability-scoped signals, and policy
+evaluation explains the decision but still requires session grant issuance
+before invocation. Advanced authority flows can use `AgentdClient`.

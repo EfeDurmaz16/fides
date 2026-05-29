@@ -21,6 +21,11 @@ Current implementation anchors:
 - `GET /agents`
 - `GET /agents/:id`
 - `POST /discover`
+- `POST /trust/evaluate`
+- `GET /trust/:agentId`
+- `POST /reputation/update`
+- `GET /reputation/:agentId`
+- `POST /policy/evaluate`
 - `POST /v1/policy/evaluate`
 - `POST /v1/sessions`
 - `GET /v1/sessions/:id`
@@ -67,3 +72,12 @@ and the associated AgentCard. `POST /discover` searches registered local agents
 by capability. Discovery responses always include `authorityGranted: false`;
 discovery is candidate resolution only, and invocation authority still requires
 policy evaluation and scoped session grants.
+
+`POST /trust/evaluate` computes a local capability-scoped trust result for a
+registered candidate. `POST /reputation/update` stores capability-specific
+reputation signals, and `GET /reputation/:agentId` returns those local records.
+`POST /policy/evaluate` runs the FIDES v2 policy evaluator against the local
+candidate, trust result, requested scopes, and runtime/revocation/incident
+flags. Trust and reputation are signals only; policy decisions still do not
+execute capabilities and allowed decisions require a scoped SessionGrant before
+invocation.

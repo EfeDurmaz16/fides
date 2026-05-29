@@ -364,6 +364,80 @@ describe('Agentd Service Routes', () => {
       ]))
     })
 
+    it('evaluates root trust, reputation, and policy for a registered local candidate', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Calendar Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{
+            id: 'calendar.schedule',
+            riskLevel: 'low',
+            requiredScopes: ['calendar:write'],
+          }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const trust = await app.request('/trust/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: identity.did, capability: 'calendar.schedule' }),
+      })
+      expect(trust.status).toBe(200)
+      const trustData = await trust.json()
+      expect(trustData.trust.agent_id).toBe(identity.did)
+      expect(trustData.trust.capability).toBe('calendar.schedule')
+      expect(trustData.authorityGranted).toBe(false)
+
+      const reputation = await app.request('/reputation/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: identity.did,
+          capability: 'calendar.schedule',
+          successfulInvocations: 3,
+          failedInvocations: 1,
+        }),
+      })
+      expect(reputation.status).toBe(200)
+      expect((await reputation.json()).reputation.capability).toBe('calendar.schedule')
+
+      const reputationRecord = await app.request(`/reputation/${encodeURIComponent(identity.did)}`)
+      expect(reputationRecord.status).toBe(200)
+      expect((await reputationRecord.json()).reputations).toEqual(expect.arrayContaining([
+        expect.objectContaining({ capability: 'calendar.schedule' }),
+      ]))
+
+      const policy = await app.request('/policy/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: 'did:fides:requester',
+          agentId: identity.did,
+          capability: 'calendar.schedule',
+          requestedScopes: ['calendar:write'],
+        }),
+      })
+      expect(policy.status).toBe(200)
+      const policyData = await policy.json()
+      expect(policyData.policy.decision).toBe('allow')
+      expect(policyData.authorityGranted).toBe(false)
+      expect(policyData.requiresSessionGrant).toBe(true)
+    })
+
     it('serves local DHT publish and find endpoints', async () => {
       const publish = await app.request('/dht/publish', {
         method: 'POST',

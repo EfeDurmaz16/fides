@@ -24,6 +24,8 @@ describe('FidesClient', () => {
     await client.agents.register({ id: 'card_1' })
     await client.discovery.find({ capability: 'invoice.reconcile' })
     await client.trust.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
+    await client.reputation.update({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
+    await client.policy.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.sessions.request({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.invoke({ sessionId: 'sess_1', input: { invoiceId: 'inv_123' } })
 
@@ -34,6 +36,8 @@ describe('FidesClient', () => {
       'http://localhost:4817/agents/register',
       'http://localhost:4817/discover',
       'http://localhost:4817/trust/evaluate',
+      'http://localhost:4817/reputation/update',
+      'http://localhost:4817/policy/evaluate',
       'http://localhost:4817/sessions',
       'http://localhost:4817/invoke',
     ])

@@ -13,7 +13,7 @@ import { resolveTxt } from 'node:dns/promises'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
 import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
-import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
+import { evaluateFidesPolicy, evaluatePolicy, type PolicyBundle } from '@fides/policy'
 import { createTrustContext, evaluateGuard } from '@fides/guard'
 import {
   aggregateIncidentImpact,
@@ -40,8 +40,10 @@ import {
   type DelegationToken,
   type PrincipalIdentity,
   type PublisherIdentity,
+  type ReputationRecord,
   type RevocationRecord,
   type SignedAgentCard,
+  type TrustResult,
 } from '@fides/core'
 import { createAuthorityStore } from './storage.js'
 import type {
@@ -85,6 +87,8 @@ interface LocalRegisteredAgent {
   signed: boolean
 }
 const localAgents = new Map<string, LocalRegisteredAgent>()
+const localTrustResults = new Map<string, TrustResult>()
+const localReputationRecords = new Map<string, ReputationRecord>()
 const fullDemoSteps = [
   'initialize_daemon',
   'create_principal_identity',
@@ -217,6 +221,55 @@ function safeRegisteredAgent(record: LocalRegisteredAgent): Record<string, unkno
   }
 }
 
+function localCapabilityKey(agentId: string, capability: string): string {
+  return `${agentId}::${capability}`
+}
+
+function findLocalCapability(
+  agentId: string,
+  capabilityId: string
+): { record: LocalRegisteredAgent; card: AgentCard; capability: AgentCard['capabilities'][number] } | undefined {
+  const record = localAgents.get(agentId)
+  if (!record) return undefined
+
+  const card = localAgentCards.get(record.cardId)
+  if (!card) return undefined
+
+  const capability = card.capabilities.find(candidate => candidate.id === capabilityId)
+  if (!capability) return undefined
+
+  return { record, card, capability }
+}
+
+function computeLocalTrustResult(agentId: string, capabilityId: string): TrustResult | undefined {
+  const found = findLocalCapability(agentId, capabilityId)
+  if (!found) return undefined
+
+  const signed = localSignedAgentCards.has(found.record.cardId)
+  const reputation = localReputationRecords.get(localCapabilityKey(agentId, capabilityId))
+  const highRisk = found.capability.riskLevel === 'high' || found.capability.riskLevel === 'critical'
+
+  const trust = computeTrustResult({
+    agentId,
+    capability: found.capability,
+    components: {
+      identity: signed ? 1 : 0.65,
+      publisher: 0.5,
+      trustAnchors: 0.2,
+      capabilityFit: 1,
+      evidence: reputation ? Math.min(1, reputation.score + 0.2) : 0.3,
+      policyCompliance: 0.7,
+      runtimeSafety: highRisk ? 0.2 : 0.8,
+      peerAttestation: 0.2,
+      incidentPenalty: reputation ? Math.min(1, reputation.incident_count * 0.18) : 0,
+      noveltyPenalty: reputation ? Math.max(0, 0.4 - reputation.score) : 0.35,
+      contextBoundaryPenalty: reputation?.context_boundary_penalty ?? 0,
+    },
+  })
+  localTrustResults.set(localCapabilityKey(agentId, capabilityId), trust)
+  return trust
+}
+
 // Global middleware stack
 app.use('*', metricsMiddleware(collector))
 app.use('*', logger())
@@ -282,6 +335,21 @@ app.use('/agents/*', async (c, next) => {
   return auth(c, next)
 })
 app.use('/discover', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/trust/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/reputation/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/policy/*', async (c, next) => {
   if (c.req.method === 'GET') return next()
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
@@ -574,6 +642,140 @@ app.post('/discover', async (c) => {
     count: candidates.length,
     authorityGranted: false,
     explanation: 'Discovery returns candidates only. Policy evaluation and scoped session grants are required before invocation.',
+  })
+})
+
+app.post('/trust/evaluate', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const agentId = typeof body.agentId === 'string'
+    ? body.agentId
+    : typeof body.agent_id === 'string'
+      ? body.agent_id
+      : typeof body.targetAgentId === 'string'
+        ? body.targetAgentId
+        : undefined
+  const capability = typeof body.capability === 'string'
+    ? body.capability
+    : typeof body.capabilityId === 'string'
+      ? body.capabilityId
+      : undefined
+
+  if (!agentId || !capability) {
+    return c.json({ error: 'agentId and capability are required' }, 400)
+  }
+
+  const trust = computeLocalTrustResult(agentId, capability)
+  if (!trust) {
+    return c.json({ error: 'registered agent capability not found', agentId, capability }, 404)
+  }
+
+  return c.json({
+    trust,
+    authorityGranted: false,
+    explanation: 'Trust is a signal only. Policy evaluation and scoped session grants are required before invocation.',
+  })
+})
+
+app.get('/trust/:agentId', (c) => {
+  const agentId = c.req.param('agentId')
+  const trust = Array.from(localTrustResults.values()).filter(record => record.agent_id === agentId)
+  return c.json({ agentId, trust, authorityGranted: false })
+})
+
+app.post('/reputation/update', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const agentId = typeof body.agentId === 'string'
+    ? body.agentId
+    : typeof body.agent_id === 'string'
+      ? body.agent_id
+      : undefined
+  const capability = typeof body.capability === 'string'
+    ? body.capability
+    : typeof body.capabilityId === 'string'
+      ? body.capabilityId
+      : undefined
+
+  if (!agentId || !capability) {
+    return c.json({ error: 'agentId and capability are required' }, 400)
+  }
+
+  const found = findLocalCapability(agentId, capability)
+  if (!found) {
+    return c.json({ error: 'registered agent capability not found', agentId, capability }, 404)
+  }
+
+  const reputation = computeCapabilityReputation({
+    agentId,
+    publisherId: typeof body.publisherId === 'string' ? body.publisherId : undefined,
+    principalId: typeof body.principalId === 'string' ? body.principalId : undefined,
+    capability,
+    successfulInvocations: typeof body.successfulInvocations === 'number' ? body.successfulInvocations : undefined,
+    failedInvocations: typeof body.failedInvocations === 'number' ? body.failedInvocations : undefined,
+    incidentCount: typeof body.incidentCount === 'number' ? body.incidentCount : undefined,
+    publisherWeight: typeof body.publisherWeight === 'number' ? body.publisherWeight : undefined,
+    contextBoundaryMismatch: typeof body.contextBoundaryMismatch === 'boolean' ? body.contextBoundaryMismatch : undefined,
+  })
+  localReputationRecords.set(localCapabilityKey(agentId, capability), reputation)
+
+  return c.json({ reputation, authorityGranted: false })
+})
+
+app.get('/reputation/:agentId', (c) => {
+  const agentId = c.req.param('agentId')
+  const reputations = Array.from(localReputationRecords.values()).filter(record => record.agent_id === agentId)
+  return c.json({ agentId, reputations, authorityGranted: false })
+})
+
+app.post('/policy/evaluate', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const targetAgentId = typeof body.targetAgentId === 'string'
+    ? body.targetAgentId
+    : typeof body.agentId === 'string'
+      ? body.agentId
+      : typeof body.agent_id === 'string'
+        ? body.agent_id
+        : undefined
+  const capabilityId = typeof body.capability === 'string'
+    ? body.capability
+    : typeof body.capabilityId === 'string'
+      ? body.capabilityId
+      : undefined
+
+  if (!targetAgentId || !capabilityId) {
+    return c.json({ error: 'agentId and capability are required' }, 400)
+  }
+
+  const found = findLocalCapability(targetAgentId, capabilityId)
+  if (!found) {
+    return c.json({ error: 'registered agent capability not found', agentId: targetAgentId, capability: capabilityId }, 404)
+  }
+
+  const trustResult = computeLocalTrustResult(targetAgentId, capabilityId)
+  if (!trustResult) {
+    return c.json({ error: 'trust result unavailable', agentId: targetAgentId, capability: capabilityId }, 404)
+  }
+
+  const policy = evaluateFidesPolicy({
+    principalId: typeof body.principalId === 'string' ? body.principalId : 'did:fides:principal:local',
+    requesterAgentId: typeof body.requesterAgentId === 'string' ? body.requesterAgentId : 'did:fides:requester:local',
+    targetAgentId,
+    capability: found.capability,
+    trustResult,
+    requestedScopes: Array.isArray(body.requestedScopes) ? body.requestedScopes.map(String) : [],
+    runtimeAttestationValid: typeof body.runtimeAttestationValid === 'boolean' ? body.runtimeAttestationValid : undefined,
+    revocationActive: typeof body.revocationActive === 'boolean' ? body.revocationActive : undefined,
+    killSwitchActive: typeof body.killSwitchActive === 'boolean' ? body.killSwitchActive : undefined,
+    incidentsActive: typeof body.incidentsActive === 'boolean' ? body.incidentsActive : undefined,
+    approvalGranted: typeof body.approvalGranted === 'boolean' ? body.approvalGranted : undefined,
+    evidenceRefs: Array.isArray(body.evidenceRefs) ? body.evidenceRefs.map(String) : undefined,
+  })
+
+  return c.json({
+    policy,
+    trust: trustResult,
+    authorityGranted: false,
+    requiresSessionGrant: policy.decision === 'allow',
+    explanation: 'Policy decisions do not execute capabilities. Allowed decisions require a scoped SessionGrant before invocation.',
   })
 })
 

@@ -43,6 +43,10 @@ export class FidesClient {
     get: (agentId: string) => this.get(`/reputation/${encodeURIComponent(agentId)}`),
   }
 
+  readonly policy = {
+    evaluate: (body: Record<string, unknown>) => this.post('/policy/evaluate', body),
+  }
+
   readonly sessions = {
     request: (body: Record<string, unknown>) => this.post('/sessions', body),
     verify: (sessionId: string) => this.post(`/sessions/${encodeURIComponent(sessionId)}/verify`, {}),

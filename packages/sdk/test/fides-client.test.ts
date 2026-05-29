@@ -25,8 +25,15 @@ describe('FidesClient', () => {
     await client.discovery.find({ capability: 'invoice.reconcile' })
     await client.discovery.local({ capability: 'invoice.reconcile' })
     await client.discovery.wellKnown({ capability: 'invoice.reconcile' })
-    await client.discovery.registry({ capability: 'invoice.reconcile' })
-    await client.discovery.relay({ capability: 'invoice.reconcile' })
+    await client.discovery.registry({
+      capability: 'invoice.reconcile',
+      supported_versions: ['fides.v2.0'],
+      required_versions: ['fides.v2.0'],
+    })
+    await client.discovery.relay({
+      capability: 'invoice.reconcile',
+      supported_versions: ['fides.v2.0'],
+    })
     await client.discovery.dht({ capability: 'invoice.reconcile' })
     await client.trust.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.reputation.update({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
@@ -58,11 +65,18 @@ describe('FidesClient', () => {
     await client.sessions.verify('sess_1')
     await client.registry.start()
     await client.registry.publish({ agentCardId: 'did:fides:agent' })
-    await client.registry.search({ capability: 'invoice.reconcile' })
+    await client.registry.search({
+      capability: 'invoice.reconcile',
+      supported_versions: ['fides.v2.0'],
+      required_versions: ['fides.v2.0'],
+    })
     await client.registry.index()
     await client.relay.start()
     await client.relay.register({ agentId: 'did:fides:agent' })
-    await client.relay.discover({ capability: 'invoice.reconcile' })
+    await client.relay.discover({
+      capability: 'invoice.reconcile',
+      supported_versions: ['fides.v2.0'],
+    })
     await client.dht.start()
     await client.dht.publish({ capability: 'invoice.reconcile', agentId: 'did:fides:agent' })
     await client.dht.find({ capability: 'invoice.reconcile' })
@@ -192,6 +206,20 @@ describe('FidesClient', () => {
       'POST',
       'POST',
     ])
+    expect(JSON.parse(calls[7].init?.body as string)).toEqual({
+      capability: 'invoice.reconcile',
+      supported_versions: ['fides.v2.0'],
+      required_versions: ['fides.v2.0'],
+    })
+    expect(JSON.parse(calls[36].init?.body as string)).toEqual({
+      capability: 'invoice.reconcile',
+      supported_versions: ['fides.v2.0'],
+      required_versions: ['fides.v2.0'],
+    })
+    expect(JSON.parse(calls[42].init?.body as string)).toEqual({
+      capability: 'invoice.reconcile',
+      agentId: 'did:fides:agent',
+    })
   })
 
   it('uses the root identity API served by local agentd', async () => {

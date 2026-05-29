@@ -7,6 +7,69 @@ export interface FidesRequestOptions {
   headers?: Record<string, string>
 }
 
+export interface FidesDiscoveryQuery {
+  intent?: string
+  capability: string
+  constraints?: Record<string, unknown>
+  supported_versions?: string[]
+  required_versions?: string[]
+}
+
+export interface FidesProviderRecord {
+  agentId?: string
+  agent_id?: string
+  cardId?: string
+  capability?: string
+  capabilities?: string[]
+  authorityGranted?: false
+  agentCardUrl?: string
+  agent_card_url?: string
+  agentCardHash?: string
+  agent_card_hash?: string
+  registryIndexVerified?: boolean
+  registryIndexRecord?: Record<string, unknown>
+  registryIndexProof?: Record<string, unknown> | null
+  signedAgentCard?: boolean
+  agentCardProof?: Record<string, unknown> | null
+  verification?: Record<string, unknown>
+  versionNegotiation?: Record<string, unknown>
+  reasons?: string[]
+  [key: string]: unknown
+}
+
+export interface FidesDiscoveryResponse {
+  provider?: string
+  capability?: string | null
+  candidates?: FidesProviderRecord[]
+  rejectedCandidates?: FidesProviderRecord[]
+  records?: FidesProviderRecord[]
+  rejectedRecords?: FidesProviderRecord[]
+  pointers?: FidesProviderRecord[]
+  rejectedPointers?: FidesProviderRecord[]
+  authorityGranted: false
+  explanation?: string
+  [key: string]: unknown
+}
+
+export interface FidesRegistryPublishRequest {
+  agentCardId: string
+  mode?: 'public' | 'private'
+}
+
+export interface FidesRelayRegisterRequest {
+  agentId: string
+  endpointHints?: string[]
+}
+
+export interface FidesDhtPublishRequest {
+  capability: string
+  agentId?: string
+  agentCardId?: string
+  agentCard?: string
+  agentCardUrl?: string
+  expiresAt?: string
+}
+
 export class FidesClient {
   readonly identity = {
     createAgent: (body: Record<string, unknown> = {}) => this.post('/identities', { ...body, type: 'agent' }),
@@ -30,12 +93,12 @@ export class FidesClient {
   }
 
   readonly discovery = {
-    find: (query: Record<string, unknown>) => this.post('/discover', query),
-    local: (query: Record<string, unknown>) => this.post('/discover/local', query),
-    wellKnown: (query: Record<string, unknown>) => this.post('/discover/well-known', query),
-    registry: (query: Record<string, unknown>) => this.post('/discover/registry', query),
-    relay: (query: Record<string, unknown>) => this.post('/discover/relay', query),
-    dht: (query: Record<string, unknown>) => this.post('/discover/dht', query),
+    find: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover', query) as Promise<FidesDiscoveryResponse>,
+    local: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/local', query) as Promise<FidesDiscoveryResponse>,
+    wellKnown: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/well-known', query) as Promise<FidesDiscoveryResponse>,
+    registry: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/registry', query) as Promise<FidesDiscoveryResponse>,
+    relay: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/relay', query) as Promise<FidesDiscoveryResponse>,
+    dht: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/dht', query) as Promise<FidesDiscoveryResponse>,
   }
 
   readonly trust = {
@@ -96,21 +159,21 @@ export class FidesClient {
 
   readonly registry = {
     start: () => this.post('/registry/start', {}),
-    publish: (body: Record<string, unknown>) => this.post('/registry/publish', body),
-    search: (body: Record<string, unknown>) => this.post('/registry/search', body),
+    publish: (body: FidesRegistryPublishRequest) => this.post('/registry/publish', body),
+    search: (body: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/registry/search', body) as Promise<FidesDiscoveryResponse>,
     index: () => this.get('/registry/index'),
   }
 
   readonly relay = {
     start: () => this.post('/relay/start', {}),
-    register: (body: Record<string, unknown>) => this.post('/relay/register', body),
-    discover: (body: Record<string, unknown>) => this.post('/relay/discover', body),
+    register: (body: FidesRelayRegisterRequest) => this.post('/relay/register', body),
+    discover: (body: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/relay/discover', body) as Promise<FidesDiscoveryResponse>,
   }
 
   readonly dht = {
     start: () => this.post('/dht/start', {}),
-    publish: (body: Record<string, unknown>) => this.post('/dht/publish', body),
-    find: (body: Record<string, unknown>) => this.post('/dht/find', body),
+    publish: (body: FidesDhtPublishRequest) => this.post('/dht/publish', body),
+    find: (body: Pick<FidesDiscoveryQuery, 'capability'>) => this.post('/dht/find', body),
   }
 
   readonly wellKnown = {

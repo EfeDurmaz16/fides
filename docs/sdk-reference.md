@@ -30,8 +30,15 @@ await client.agents.list()
 await client.agents.inspect(identity.identity.did)
 const results = await client.discovery.find({ capability: 'invoice.reconcile' })
 await client.discovery.local({ capability: 'invoice.reconcile' })
-await client.discovery.registry({ capability: 'invoice.reconcile' })
-await client.discovery.relay({ capability: 'invoice.reconcile' })
+await client.discovery.registry({
+  capability: 'invoice.reconcile',
+  supported_versions: ['fides.v2.0'],
+  required_versions: ['fides.v2.0'],
+})
+await client.discovery.relay({
+  capability: 'invoice.reconcile',
+  supported_versions: ['fides.v2.0'],
+})
 await client.discovery.dht({ capability: 'invoice.reconcile' })
 const trust = await client.trust.evaluate({
   agentId: identity.identity.did,
@@ -97,14 +104,19 @@ const attestation = await client.attestations.create({
 await client.attestations.verify(attestation.attestation.attestation_id)
 await client.registry.start()
 await client.registry.publish({ agentCardId: identity.identity.did })
-await client.registry.search({ capability: 'invoice.reconcile' })
+await client.registry.search({
+  capability: 'invoice.reconcile',
+  supported_versions: ['fides.v2.0'],
+})
 await client.relay.start()
 await client.relay.register({ agentId: identity.identity.did })
-await client.relay.discover({ capability: 'invoice.reconcile' })
+await client.relay.discover({
+  capability: 'invoice.reconcile',
+  supported_versions: ['fides.v2.0'],
+})
 await client.dht.publish({
   capability: 'invoice.reconcile',
   agentId: identity.identity.did,
-  agentCardUrl: 'local://invoice-agent-card',
 })
 await client.dht.find({ capability: 'invoice.reconcile' })
 await client.wellKnown.fides()
@@ -149,7 +161,11 @@ session policy decisions. Runtime attestation helpers issue and verify local
 MockTEE attestations that can satisfy high-risk session policy when passed as
 an `attestationId`. Registry, relay, DHT, and well-known helpers expose the
 local mock discovery surfaces. They return candidate records or pointers only;
-they do not convert discovery into authority.
+they do not convert discovery into authority. Discovery, registry, and relay
+helpers accept `supported_versions` and `required_versions` so callers can
+request protocol compatibility filtering. `dht.publish` can publish a signed
+local pointer without an AgentCard URL when `agentId` or `agentCardId` refers to
+a registered local AgentCard.
 Advanced authority flows can use `AgentdClient`. `AgentdClient.health()` reads
 `GET /health` and returns typed authority-store and local-state-store status,
 including the SQLite snapshot path when the daemon exposes it.

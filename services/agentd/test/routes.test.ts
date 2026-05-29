@@ -223,6 +223,51 @@ describe('Agentd Service Routes', () => {
     })
   })
 
+  describe('FIDES v2 local API aliases', () => {
+    it('serves local DHT publish and find endpoints', async () => {
+      const publish = await app.request('/dht/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          capability: 'invoice.reconcile',
+          agentId: 'did:fides:agent',
+          agentCardUrl: 'file://agent-card.json',
+        }),
+      })
+      expect(publish.status).toBe(201)
+
+      const find = await app.request('/dht/find?capability=invoice.reconcile')
+      expect(find.status).toBe(200)
+      const data = await find.json()
+      expect(data.capability).toBe('invoice.reconcile')
+      expect(data.pointers).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agentId: 'did:fides:agent' }),
+      ]))
+    })
+
+    it('serves demo and adversarial simulation endpoints', async () => {
+      const demo = await app.request('/demo/run', { method: 'POST' })
+      expect(demo.status).toBe(200)
+      expect((await demo.json()).status).toBe('working_prototype')
+
+      const sim = await app.request('/simulate/adversarial', { method: 'POST' })
+      expect(sim.status).toBe(200)
+      const data = await sim.json()
+      expect(data.scenarios.map((scenario: any) => scenario.name)).toContain('tampered_agent_card')
+      expect(data.scenarios.every((scenario: any) => scenario.detected)).toBe(true)
+    })
+
+    it('serves root evidence verify/export aliases', async () => {
+      const verify = await app.request('/evidence/verify', { method: 'POST' })
+      expect(verify.status).toBe(200)
+      expect((await verify.json()).valid).toBe(true)
+
+      const exported = await app.request('/evidence/export', { method: 'POST' })
+      expect(exported.status).toBe(200)
+      expect((await exported.json()).format).toBe('json')
+    })
+  })
+
   describe('GET /v1/identities/:did', () => {
     it('resolves identity via discovery proxy', async () => {
       mockFetch.mockResolvedValueOnce(

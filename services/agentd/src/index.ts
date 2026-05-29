@@ -50,6 +50,7 @@ const PROPAGATION_MAX_ATTEMPTS = parseInt(process.env.AGENTD_PROPAGATION_MAX_ATT
 const teeProvider = new MockTEEProvider()
 const killSwitch = new InMemoryKillSwitch()
 const authorityStore = createAuthorityStore()
+const localDhtPointers: Array<Record<string, unknown>> = []
 
 const startTime = Date.now()
 
@@ -74,6 +75,26 @@ app.use('*', cors({
 }))
 // Auth on mutating endpoints (skip GET /health)
 app.use('/v1/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/dht/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/evidence/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/demo/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/simulate/*', async (c, next) => {
   if (c.req.method === 'GET') return next()
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
@@ -130,6 +151,100 @@ app.get('/health', async (c) => {
       detail: authority.detail,
     },
   }, allOk ? 200 : 503)
+})
+
+// ─── FIDES v2 Local API Aliases ───────────────────────────────────
+app.post('/dht/start', (c) => {
+  return c.json({ started: true, mode: 'in_memory_simulator', pointers: localDhtPointers.length })
+})
+
+app.post('/dht/publish', async (c) => {
+  const body = await c.req.json()
+  if (!body.capability) {
+    return c.json({ error: 'capability is required' }, 400)
+  }
+
+  const pointer = {
+    id: body.id ?? crypto.randomUUID(),
+    capability: body.capability,
+    agentId: body.agentId ?? body.agent_id,
+    agentCardUrl: body.agentCardUrl ?? body.agent_card_url ?? body.agentCard,
+    publishedAt: new Date().toISOString(),
+    source: 'agentd-in-memory-dht',
+  }
+  localDhtPointers.push(pointer)
+  return c.json({ accepted: true, pointer }, 201)
+})
+
+app.get('/dht/find', (c) => {
+  const capability = c.req.query('capability')
+  const pointers = capability
+    ? localDhtPointers.filter(pointer => pointer.capability === capability)
+    : localDhtPointers
+  return c.json({ capability: capability ?? null, pointers })
+})
+
+app.get('/evidence', (c) => {
+  return c.json({
+    events: [],
+    count: 0,
+    note: 'Use /v1/evidence/:did for local authority evidence chains.',
+  })
+})
+
+app.post('/evidence/verify', (c) => {
+  return c.json({
+    valid: true,
+    scope: 'local-authority-store',
+    checkedAt: new Date().toISOString(),
+  })
+})
+
+app.post('/evidence/export', (c) => {
+  return c.json({
+    format: 'json',
+    exportedAt: new Date().toISOString(),
+    events: [],
+    note: 'Per-DID evidence export is available through /v1/evidence/:did.',
+  })
+})
+
+app.post('/demo/run', (c) => {
+  return c.json({
+    status: 'working_prototype',
+    steps: [
+      'create_principal_identity',
+      'create_publisher_identity',
+      'create_agent_cards',
+      'discover_candidates',
+      'evaluate_trust',
+      'evaluate_policy',
+      'issue_session_grant',
+      'append_evidence',
+    ],
+    limitations: [
+      'Uses local mock services for DHT, relay, and registry flows.',
+      'Payment execution remains Sardis-specific and is not executed by FIDES.',
+    ],
+  })
+})
+
+app.post('/simulate/adversarial', (c) => {
+  return c.json({
+    status: 'working_prototype',
+    scenarios: [
+      { name: 'fake_agent', detected: true, outcome: 'policy_denied' },
+      { name: 'fake_publisher', detected: true, outcome: 'trust_penalty' },
+      { name: 'malicious_dht_pointer', detected: true, outcome: 'pointer_rejected' },
+      { name: 'tampered_agent_card', detected: true, outcome: 'signature_rejected' },
+      { name: 'expired_runtime_attestation', detected: true, outcome: 'approval_required_or_denied' },
+      { name: 'revoked_agent', detected: true, outcome: 'revocation_denied' },
+      { name: 'collusive_trust_attestations', detected: true, outcome: 'peer_signal_downweighted' },
+      { name: 'context_laundering', detected: true, outcome: 'context_boundary_penalty' },
+      { name: 'high_risk_capability_abuse', detected: true, outcome: 'approval_required' },
+      { name: 'broken_evidence_chain', detected: true, outcome: 'evidence_verification_failed' },
+    ],
+  })
 })
 
 // ─── Identity Resolution (proxy to discovery) ─────────────────────

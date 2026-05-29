@@ -26,17 +26,22 @@ import {
   createIncidentRecordV2,
   createPrincipalIdentity,
   createPublisherIdentity,
+  signAgentCard,
+  validateAgentCard,
+  verifySignedAgentCard,
   verifyDelegationTokenSignature,
   verifyDomainDid,
   evaluateInvocationPreflight,
   verifyIncidentRecord,
   verifyRevocationRecord,
   type AgentIdentity,
+  type AgentCard,
   type IncidentRecord,
   type DelegationToken,
   type PrincipalIdentity,
   type PublisherIdentity,
   type RevocationRecord,
+  type SignedAgentCard,
 } from '@fides/core'
 import { createAuthorityStore } from './storage.js'
 import type {
@@ -71,6 +76,8 @@ interface LocalIdentityRecord {
   createdAt: string
 }
 const localIdentities = new Map<string, LocalIdentityRecord>()
+const localAgentCards = new Map<string, AgentCard>()
+const localSignedAgentCards = new Map<string, SignedAgentCard>()
 const fullDemoSteps = [
   'initialize_daemon',
   'create_principal_identity',
@@ -237,6 +244,16 @@ app.use('/identities/*', async (c, next) => {
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
 })
+app.use('/agent-cards', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/agent-cards/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
 app.post('*', rateLimitMiddleware({ maxRequests: 100, windowMs: 60_000 }))
 app.get('*', rateLimitMiddleware({ maxRequests: 300, windowMs: 60_000 }))
 app.use('*', bodyLimit({ maxSize: 1024 * 1024 }))
@@ -320,6 +337,117 @@ app.get('/identities/:id', (c) => {
     return c.json({ error: 'identity not found', id }, 404)
   }
   return c.json(safeIdentityRecord(record))
+})
+
+// ─── Root FIDES v2 AgentCard API ─────────────────────────────────
+app.post('/agent-cards', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const did = typeof body.agentId === 'string'
+    ? body.agentId
+    : typeof body.agent_id === 'string'
+      ? body.agent_id
+      : typeof body.identity?.did === 'string'
+        ? body.identity.did
+        : undefined
+  if (!did) {
+    return c.json({ error: 'identity.did or agentId is required' }, 400)
+  }
+
+  const localIdentity = localIdentities.get(did)
+  if (!localIdentity || localIdentity.type !== 'agent') {
+    return c.json({ error: 'agent identity not found in local daemon', did }, 404)
+  }
+
+  const capabilities = Array.isArray(body.capabilities)
+    ? body.capabilities.map((capability: Record<string, unknown>) => createCapabilityDescriptor({
+      id: String(capability.id),
+      name: typeof capability.name === 'string' ? capability.name : undefined,
+      description: typeof capability.description === 'string' ? capability.description : undefined,
+      inputSchema: typeof capability.inputSchema === 'object' && capability.inputSchema !== null ? capability.inputSchema as any : undefined,
+      outputSchema: typeof capability.outputSchema === 'object' && capability.outputSchema !== null ? capability.outputSchema as any : undefined,
+      riskLevel: typeof capability.riskLevel === 'string' ? capability.riskLevel as any : undefined,
+      requiredScopes: Array.isArray(capability.requiredScopes) ? capability.requiredScopes.map(String) : undefined,
+      supportedControls: Array.isArray(capability.supportedControls) ? capability.supportedControls as any : undefined,
+      supportsDryRun: typeof capability.supportsDryRun === 'boolean' ? capability.supportsDryRun : undefined,
+      supportsHumanApproval: typeof capability.supportsHumanApproval === 'boolean' ? capability.supportsHumanApproval : undefined,
+      supportsPolicyProof: typeof capability.supportsPolicyProof === 'boolean' ? capability.supportsPolicyProof : undefined,
+    }))
+    : []
+
+  const now = new Date().toISOString()
+  const card: AgentCard = {
+    schema_version: 'fides.agent_card.v1',
+    id: did,
+    agent_id: did,
+    identity: {
+      ...(localIdentity.identity as AgentIdentity),
+      metadata: {
+        ...(localIdentity.identity as AgentIdentity).metadata,
+        ...(typeof body.name === 'string' && { name: body.name }),
+      },
+    },
+    capabilities,
+    endpoints: Array.isArray(body.endpoints) ? body.endpoints : [],
+    policies: Array.isArray(body.policies)
+      ? body.policies
+      : [{ requiresRuntimeAttestation: false, requiresApproval: false }],
+    protocolVersions: Array.isArray(body.protocolVersions) ? body.protocolVersions.map(String) : ['fides.v2.0'],
+    createdAt: now,
+    updatedAt: now,
+    ...(typeof body.expiresAt === 'string' && { expiresAt: body.expiresAt }),
+  }
+
+  const validation = validateAgentCard(card)
+  if (!validation.valid) {
+    return c.json({ validation, card }, 400)
+  }
+
+  localAgentCards.set(card.id, card)
+  localSignedAgentCards.delete(card.id)
+  return c.json({ card, validation }, 201)
+})
+
+app.post('/agent-cards/:id/sign', async (c) => {
+  const id = c.req.param('id')
+  const card = localAgentCards.get(id)
+  if (!card) {
+    return c.json({ error: 'AgentCard not found', id }, 404)
+  }
+  const identity = localIdentities.get(card.identity.did)
+  if (!identity) {
+    return c.json({ error: 'AgentCard identity key not found', did: card.identity.did }, 404)
+  }
+
+  const signed = await signAgentCard(card, Buffer.from(identity.privateKeyHex, 'hex'), card.identity.did)
+  localSignedAgentCards.set(card.id, signed)
+  return c.json({ signed })
+})
+
+app.post('/agent-cards/:id/verify', async (c) => {
+  const id = c.req.param('id')
+  const signed = localSignedAgentCards.get(id)
+  if (signed) {
+    return c.json({ valid: await verifySignedAgentCard(signed), signed: true })
+  }
+
+  const card = localAgentCards.get(id)
+  if (!card) {
+    return c.json({ valid: false, error: 'AgentCard not found', id }, 404)
+  }
+  const validation = validateAgentCard(card)
+  return c.json({ valid: validation.valid, signed: false, validation })
+})
+
+app.get('/agent-cards/:id', (c) => {
+  const id = c.req.param('id')
+  const card = localAgentCards.get(id)
+  if (!card) {
+    return c.json({ error: 'AgentCard not found', id }, 404)
+  }
+  return c.json({
+    card,
+    signed: localSignedAgentCards.get(id) ?? null,
+  })
 })
 
 // ─── FIDES v2 Local API Aliases ───────────────────────────────────

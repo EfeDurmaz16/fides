@@ -18,14 +18,19 @@ const identity = await client.identity.createAgent({ name: 'Invoice Agent' })
 const identities = await client.identity.list()
 const sameIdentity = await client.identity.show(identity.identity.did)
 const card = await client.cards.create({
+  identity: identity.identity,
   name: 'Invoice Agent',
   capabilities: [{ id: 'invoice.reconcile', riskClass: 'medium' }],
 })
-await client.cards.sign(card as { id: string })
+await client.cards.sign({ id: identity.identity.did })
+await client.cards.verify(identity.identity.did)
+await client.cards.get(identity.identity.did)
 await client.agents.register(card as Record<string, unknown>)
 const results = await client.discovery.find({ capability: 'invoice.reconcile' })
 ```
 
 `identity.createAgent`, `identity.list`, and `identity.show` target the root
 `agentd` identity API. The API does not return private keys. The facade is
-intentionally thin. Advanced authority flows can use `AgentdClient`.
+intentionally thin. The AgentCard helpers target root `agentd` AgentCard
+endpoints and use daemon-held local identity keys for signing. Advanced
+authority flows can use `AgentdClient`.

@@ -155,6 +155,20 @@ describe('Agentd Service Routes', () => {
       expect((await res.json()).error).toContain('SERVICE_API_KEY is required in production')
     })
 
+    it('fails closed for root AgentCard creation in production when API key is not configured', async () => {
+      process.env.NODE_ENV = 'production'
+      delete process.env.SERVICE_API_KEY
+
+      const res = await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identity: { did: 'did:fides:agent' }, capabilities: [] }),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('SERVICE_API_KEY is required in production')
+    })
+
     it('enforces scoped agentd API keys when configured', async () => {
       process.env.AGENTD_API_KEYS = JSON.stringify([
         { key: 'evidence-key', scopes: ['agentd:evidence:write'] },
@@ -263,6 +277,43 @@ describe('Agentd Service Routes', () => {
       const shownData = await shown.json()
       expect(shownData.identity.did).toBe(createdData.identity.did)
       expect(shownData.privateKeyHex).toBeUndefined()
+    })
+
+    it('creates, signs, verifies, and reads local AgentCards', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Invoice Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+
+      const created = await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          name: 'Invoice Agent',
+          capabilities: [{ id: 'invoice.reconcile', requiredScopes: ['invoice:read'] }],
+        }),
+      })
+      expect(created.status).toBe(201)
+      const createdData = await created.json()
+      expect(createdData.card.id).toBe(identity.did)
+      expect(createdData.card.capabilities[0].id).toBe('invoice.reconcile')
+      expect(createdData.validation.valid).toBe(true)
+
+      const signed = await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      expect(signed.status).toBe(200)
+      const signedData = await signed.json()
+      expect(signedData.signed.proof.type).toBe('Ed25519Signature2024')
+
+      const verified = await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/verify`, { method: 'POST' })
+      expect(verified.status).toBe(200)
+      expect((await verified.json()).valid).toBe(true)
+
+      const fetched = await app.request(`/agent-cards/${encodeURIComponent(identity.did)}`)
+      expect(fetched.status).toBe(200)
+      expect((await fetched.json()).card.id).toBe(identity.did)
     })
 
     it('serves local DHT publish and find endpoints', async () => {

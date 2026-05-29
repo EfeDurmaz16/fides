@@ -72,4 +72,39 @@ describe('FidesClient', () => {
     ])
     expect((calls[0].init?.headers as Headers).get('X-API-Key')).toBe('sdk-key')
   })
+
+  it('uses the root AgentCard API served by local agentd', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init })
+      if (String(url).endsWith('/agent-cards/card_1/sign')) {
+        return new Response(JSON.stringify({ signed: { payload: { id: 'card_1' }, proof: {} } }), { status: 200 })
+      }
+      if (String(url).endsWith('/agent-cards/card_1/verify')) {
+        return new Response(JSON.stringify({ valid: true }), { status: 200 })
+      }
+      if (String(url).endsWith('/agent-cards/card_1')) {
+        return new Response(JSON.stringify({ card: { id: 'card_1' } }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ card: { id: 'card_1' }, validation: { valid: true } }), { status: 201 })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+
+    await expect(client.cards.create({ identity: { did: 'did:fides:agent' }, capabilities: [] })).resolves.toMatchObject({
+      card: { id: 'card_1' },
+    })
+    await expect(client.cards.sign({ id: 'card_1' })).resolves.toMatchObject({
+      signed: { payload: { id: 'card_1' } },
+    })
+    await expect(client.cards.verify('card_1')).resolves.toMatchObject({ valid: true })
+    await expect(client.cards.get('card_1')).resolves.toMatchObject({ card: { id: 'card_1' } })
+
+    expect(calls.map(call => call.url)).toEqual([
+      'http://localhost:7345/agent-cards',
+      'http://localhost:7345/agent-cards/card_1/sign',
+      'http://localhost:7345/agent-cards/card_1/verify',
+      'http://localhost:7345/agent-cards/card_1',
+    ])
+  })
 })

@@ -52,10 +52,18 @@ const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
 const identity = await client.identity.createAgent({ name: 'Invoice Agent' })
 const identities = await client.identity.list()
 const sameIdentity = await client.identity.show(identity.identity.did)
+
+const card = await client.cards.create({
+  identity: identity.identity,
+  name: 'Invoice Agent',
+  capabilities: [{ id: 'invoice.reconcile', requiredScopes: ['invoice:read'] }],
+})
+const signed = await client.cards.sign({ id: identity.identity.did })
+const verified = await client.cards.verify(identity.identity.did)
 ```
 
 The local identity API returns public identity data only; it does not return
-private keys.
+private keys. AgentCard signing uses the daemon-held local identity key.
 
 ```typescript
 import { AgentdClient } from '@fides/sdk'

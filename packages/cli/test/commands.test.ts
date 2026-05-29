@@ -107,6 +107,22 @@ describe('CLI Commands', () => {
     vi.unstubAllGlobals();
   });
 
+  describe('binary name inference', () => {
+    it('uses agentd when invoked through the agentd workspace script or binary', async () => {
+      const { inferCliName } = await import('../src/cli-name.js');
+
+      expect(inferCliName(['/usr/local/bin/node', '/repo/packages/cli/dist/index.js'], 'agentd')).toBe('agentd');
+      expect(inferCliName(['/usr/local/bin/node', '/usr/local/bin/agentd'])).toBe('agentd');
+    });
+
+    it('defaults to fides for the fides binary and direct node execution', async () => {
+      const { inferCliName } = await import('../src/cli-name.js');
+
+      expect(inferCliName(['/usr/local/bin/node', '/usr/local/bin/fides'])).toBe('fides');
+      expect(inferCliName(['/usr/local/bin/node', '/repo/packages/cli/dist/index.js'])).toBe('fides');
+    });
+  });
+
   describe('init command', () => {
     it('should create identity and save config', async () => {
       const mockKeyPair = {

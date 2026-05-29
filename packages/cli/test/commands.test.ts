@@ -664,10 +664,16 @@ describe('CLI Commands', () => {
           trustGraph: 'connected',
           registry: 'connected',
           authorityStore: 'ready',
+          localStateStore: 'ready',
         },
         authorityStore: {
           kind: 'file',
           ok: true,
+        },
+        localStateStore: {
+          kind: 'sqlite',
+          ok: true,
+          path: '/tmp/fides.sqlite',
         },
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
       vi.stubGlobal('fetch', mockFetch);
@@ -678,6 +684,9 @@ describe('CLI Commands', () => {
       await cmd.parseAsync(['status', '--agentd-url', 'http://localhost:7345'], { from: 'user' });
 
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:7345/health');
+      const output = vi.mocked(console.log).mock.calls.map(call => String(call[0])).join('\n');
+      expect(output).toContain('Local State Store:');
+      expect(output).toContain('sqlite (ready)');
       expect(process.exitCode).toBeUndefined();
     });
 
@@ -690,10 +699,16 @@ describe('CLI Commands', () => {
           trustGraph: 'connected',
           registry: 'connected',
           authorityStore: 'ready',
+          localStateStore: 'ready',
         },
         authorityStore: {
           kind: 'postgres',
           ok: true,
+        },
+        localStateStore: {
+          kind: 'sqlite',
+          ok: true,
+          path: '/tmp/fides.sqlite',
         },
       }), { status: 503, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
       vi.stubGlobal('fetch', mockFetch);
@@ -705,6 +720,7 @@ describe('CLI Commands', () => {
 
       const output = JSON.parse(vi.mocked(console.log).mock.calls[0][0] as string);
       expect(output.status).toBe('degraded');
+      expect(output.localStateStore).toMatchObject({ kind: 'sqlite', ok: true });
       expect(process.exitCode).toBe(1);
     });
   });

@@ -18,6 +18,13 @@ interface AgentdHealth {
   authorityStore?: {
     kind?: string
     ok?: boolean
+    path?: string
+    detail?: string
+  }
+  localStateStore?: {
+    kind?: string
+    ok?: boolean
+    path?: string
     detail?: string
   }
 }
@@ -148,8 +155,20 @@ function printAgentdHealth(agentdUrl: string, health: AgentdHealth): void {
   }
   if (health.authorityStore) {
     rows.push(['Authority Store:', `${health.authorityStore.kind ?? 'unknown'} (${health.authorityStore.ok ? 'ready' : 'unready'})`])
+    if (health.authorityStore.path) {
+      rows.push(['Authority Path:', health.authorityStore.path])
+    }
     if (health.authorityStore.detail) {
       rows.push(['Authority Detail:', health.authorityStore.detail])
+    }
+  }
+  if (health.localStateStore) {
+    rows.push(['Local State Store:', `${health.localStateStore.kind ?? 'unknown'} (${health.localStateStore.ok ? 'ready' : 'unready'})`])
+    if (health.localStateStore.path) {
+      rows.push(['Local State Path:', health.localStateStore.path])
+    }
+    if (health.localStateStore.detail) {
+      rows.push(['Local State Detail:', health.localStateStore.detail])
     }
   }
   for (const [name, status] of Object.entries(checks)) {

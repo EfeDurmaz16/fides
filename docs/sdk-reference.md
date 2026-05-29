@@ -150,4 +150,6 @@ MockTEE attestations that can satisfy high-risk session policy when passed as
 an `attestationId`. Registry, relay, DHT, and well-known helpers expose the
 local mock discovery surfaces. They return candidate records or pointers only;
 they do not convert discovery into authority.
-Advanced authority flows can use `AgentdClient`.
+Advanced authority flows can use `AgentdClient`. `AgentdClient.health()` reads
+`GET /health` and returns typed authority-store and local-state-store status,
+including the SQLite snapshot path when the daemon exposes it.

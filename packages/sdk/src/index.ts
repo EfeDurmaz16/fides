@@ -87,6 +87,8 @@ export {
   AgentdError,
   type AgentdCardResponse,
   type AgentdClientOptions,
+  type AgentdHealthResponse,
+  type AgentdStoreHealth,
   type AuthorizationDecision,
   type AuthorizationRequest,
   type AuthorityPropagationResponse,

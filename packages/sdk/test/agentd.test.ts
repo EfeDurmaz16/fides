@@ -49,6 +49,43 @@ describe('AgentdClient', () => {
     client = new AgentdClient({ baseUrl: 'http://localhost:7345/', apiKey: 'sdk-key' })
   })
 
+  it('reads agentd health including local state store status', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => JSON.stringify({
+        status: 'healthy',
+        service: 'agentd',
+        checks: {
+          authorityStore: 'ready',
+          localStateStore: 'ready',
+        },
+        authorityStore: {
+          kind: 'memory',
+          ok: true,
+        },
+        localStateStore: {
+          kind: 'sqlite',
+          ok: true,
+          path: '/tmp/fides.sqlite',
+        },
+      }),
+    })
+
+    await expect(client.health()).resolves.toMatchObject({
+      status: 'healthy',
+      localStateStore: {
+        kind: 'sqlite',
+        ok: true,
+        path: '/tmp/fides.sqlite',
+      },
+    })
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:7345/health',
+      expect.objectContaining({ method: 'GET' })
+    )
+  })
+
   it('creates and reads delegated sessions', async () => {
     mockFetch
       .mockResolvedValueOnce({

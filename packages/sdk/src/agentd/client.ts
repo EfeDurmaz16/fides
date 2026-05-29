@@ -17,6 +17,23 @@ export interface AgentdClientOptions {
   apiKey?: string
 }
 
+export interface AgentdStoreHealth {
+  kind?: string
+  ok?: boolean
+  path?: string
+  detail?: string
+}
+
+export interface AgentdHealthResponse {
+  status: 'healthy' | 'degraded' | string
+  service: string
+  timestamp?: string
+  uptime?: number
+  checks?: Record<string, string>
+  authorityStore?: AgentdStoreHealth
+  localStateStore?: AgentdStoreHealth
+}
+
 export interface AuthorizationRequest {
   agentDid: string
   capabilityId: string
@@ -231,6 +248,10 @@ export class AgentdError extends Error {
 
 export class AgentdClient {
   constructor(private options: AgentdClientOptions) {}
+
+  async health(): Promise<AgentdHealthResponse> {
+    return this.get<AgentdHealthResponse>('/health')
+  }
 
   async createSession(request: SessionCreateRequest): Promise<SessionCreateResponse> {
     return this.post<SessionCreateResponse>('/v1/sessions', request)

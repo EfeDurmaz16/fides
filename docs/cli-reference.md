@@ -53,6 +53,7 @@ agentd relay register did:fides:...
 agentd relay discover --capability invoice.reconcile
 agentd dht find --capability invoice.reconcile
 agentd evidence verify
+agentd daemon status
 ```
 
 Local identity files are stored under `~/.fides/identities` by default. Set
@@ -69,3 +70,7 @@ they do not grant invocation authority.
 `registry`, `relay`, and `dht` commands target local `agentd` discovery
 surfaces by default. They expose provider-specific publish/start/search
 operations and keep authority separate from discovery.
+
+`daemon status` calls `GET /health` and prints upstream checks, the authority
+store, and the root v2 local state store. When SQLite local state is enabled,
+the status output includes the SQLite path used for the daemon snapshot.

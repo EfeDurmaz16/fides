@@ -38,6 +38,11 @@ agentd identity list
 agentd identity show did:fides:...
 agentd identity domain challenge example.com did:fides:...
 agentd identity domain verify example.com did:fides:...
+agentd discover "reconcile invoices" --capability invoice.reconcile --provider local
+agentd discover --capability invoice.reconcile --provider registry
+agentd discover --capability invoice.reconcile --provider relay
+agentd discover --capability invoice.reconcile --provider dht
+agentd discover --capability invoice.reconcile --all-providers
 agentd demo run
 agentd simulate adversarial
 agentd registry start
@@ -55,6 +60,12 @@ Local identity files are stored under `~/.fides/identities` by default. Set
 `identity show` and `identity list` do not print private keys; private keys stay
 inside the local identity file.
 
+`discover --capability` targets local `agentd` capability discovery. Use
+`--provider local`, `well-known`, `registry`, `relay`, `dht`, or
+`--all-providers` to choose the provider surface. These commands return
+candidates, registry records, relay presence records, or DHT pointers only;
+they do not grant invocation authority.
+
 `registry`, `relay`, and `dht` commands target local `agentd` discovery
-surfaces by default. They return registry records, relay presence records, or
-DHT pointers only; they do not grant invocation authority.
+surfaces by default. They expose provider-specific publish/start/search
+operations and keep authority separate from discovery.

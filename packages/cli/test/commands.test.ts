@@ -428,6 +428,89 @@ describe('CLI Commands', () => {
       expect(mockDiscoveryClient.resolve).toHaveBeenCalledWith('did:fides:test123');
       expect(mockTrustClient.getScore).toHaveBeenCalledWith(mockIdentity.did);
     });
+
+    it('discovers capabilities through a selected local agentd provider', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        provider: 'registry',
+        authorityGranted: false,
+        records: [{ agentId: 'did:fides:agent' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDiscoverCommand } = await import('../src/commands/discover.js');
+      const cmd = createDiscoverCommand();
+
+      await cmd.parseAsync([
+        'reconcile invoices',
+        '--capability',
+        'invoice.reconcile',
+        '--provider',
+        'registry',
+        '--constraints',
+        '{"tenant":"acme"}',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/discover/registry',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            intent: 'reconcile invoices',
+            capability: 'invoice.reconcile',
+            constraints: { tenant: 'acme' },
+          }),
+        })
+      );
+    });
+
+    it('discovers capabilities through every local agentd provider', async () => {
+      const mockFetch = vi.fn(async (url: string | URL | Request) => new Response(JSON.stringify({
+        provider: String(url).split('/').at(-1),
+        authorityGranted: false,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDiscoverCommand } = await import('../src/commands/discover.js');
+      const cmd = createDiscoverCommand();
+
+      await cmd.parseAsync([
+        '--capability',
+        'calendar.schedule',
+        '--all-providers',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/discover/local',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/discover/well-known',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/discover/registry',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        4,
+        'http://agentd.test/discover/relay',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        5,
+        'http://agentd.test/discover/dht',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
   });
 
   describe('identity domain commands', () => {

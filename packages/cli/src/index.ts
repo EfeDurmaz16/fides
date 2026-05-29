@@ -20,6 +20,10 @@ import { createPropagationCommand } from './commands/propagation.js';
 import { createAuthorizeCommand } from './commands/authorize.js';
 import { createRelayCommand } from './commands/relay.js';
 import { createIdentityCommand } from './commands/identity.js';
+import { createDhtCommand } from './commands/dht.js';
+import { createEvidenceCommand } from './commands/evidence.js';
+import { createDemoCommand } from './commands/demo.js';
+import { createSimulateCommand } from './commands/simulate.js';
 import packageJson from '../package.json' with { type: 'json' };
 
 const program = new Command();
@@ -49,5 +53,9 @@ program.addCommand(createPropagationCommand());
 program.addCommand(createAuthorizeCommand());
 program.addCommand(createRelayCommand());
 program.addCommand(createIdentityCommand());
+program.addCommand(createDhtCommand());
+program.addCommand(createEvidenceCommand());
+program.addCommand(createDemoCommand());
+program.addCommand(createSimulateCommand());
 
 program.parse();

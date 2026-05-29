@@ -16,7 +16,8 @@
     "node": ">=22.0.0"
   },
   "bin": {
-    "fides": "./dist/index.js"
+    "fides": "./dist/index.js",
+    "agentd": "./dist/index.js"
   },
   "files": ["dist", "README.md", "LICENSE"],
   "sideEffects": false,

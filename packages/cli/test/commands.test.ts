@@ -145,6 +145,20 @@ describe('CLI Commands', () => {
     });
   });
 
+  describe('v2 command surface', () => {
+    it('exposes dht, evidence, demo, and simulate commands', async () => {
+      const { createDhtCommand } = await import('../src/commands/dht.js');
+      const { createEvidenceCommand } = await import('../src/commands/evidence.js');
+      const { createDemoCommand } = await import('../src/commands/demo.js');
+      const { createSimulateCommand } = await import('../src/commands/simulate.js');
+
+      expect(createDhtCommand().name()).toBe('dht');
+      expect(createEvidenceCommand().name()).toBe('evidence');
+      expect(createDemoCommand().name()).toBe('demo');
+      expect(createSimulateCommand().name()).toBe('simulate');
+    });
+  });
+
   describe('card registry commands', () => {
     it('publishes a validated AgentCard to the registry', async () => {
       const fs = await import('node:fs');

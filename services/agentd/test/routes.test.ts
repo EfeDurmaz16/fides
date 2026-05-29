@@ -1131,6 +1131,140 @@ describe('Agentd Service Routes', () => {
       })
     })
 
+    it('publishes signed local DHT pointer records without requiring a caller URL', async () => {
+      const capability = `signed.dht.${crypto.randomUUID()}`
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Signed DHT Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: capability, requiredScopes: ['signed:dht'] }],
+          endpoints: [],
+          protocolVersions: ['fides.v2.0'],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const publish = await app.request('/dht/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          capability,
+          agentId: identity.did,
+        }),
+      })
+      expect(publish.status).toBe(201)
+      const published = await publish.json()
+      expect(published.pointer).toMatchObject({
+        schema_version: 'fides.dht.pointer.v1',
+        record_type: 'capability_pointer',
+        agent_id: identity.did,
+        agentId: identity.did,
+        agentCardUrl: `local://agent-cards/${encodeURIComponent(identity.did)}`,
+        signed: true,
+      })
+      expect(published.pointer.agent_card_hash).toMatch(/^sha256:/)
+      expect(published.pointer.signature).toEqual(expect.any(String))
+
+      const find = await app.request(`/dht/find?capability=${encodeURIComponent(capability)}`)
+      expect(find.status).toBe(200)
+      const found = await find.json()
+      expect(found.pointers).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          agent_id: identity.did,
+          verification: expect.objectContaining({ valid: true }),
+        }),
+      ]))
+
+      const discoverDht = await app.request('/discover/dht', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          capability,
+          supported_versions: ['fides.v2.0'],
+          required_versions: ['fides.v2.0'],
+        }),
+      })
+      expect(discoverDht.status).toBe(200)
+      const discovery = await discoverDht.json()
+      expect(discovery.pointers).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          agent_id: identity.did,
+          verification: expect.objectContaining({ valid: true }),
+          versionNegotiation: expect.objectContaining({ compatible: true }),
+        }),
+      ]))
+      expect(discovery.rejectedPointers).toEqual([])
+      expect(discovery.authorityGranted).toBe(false)
+    })
+
+    it('rejects expired signed local DHT pointer records during discovery', async () => {
+      const capability = `expired.dht.${crypto.randomUUID()}`
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Expired DHT Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: capability, requiredScopes: ['expired:dht'] }],
+          endpoints: [],
+          protocolVersions: ['fides.v2.0'],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const publish = await app.request('/dht/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          capability,
+          agentId: identity.did,
+          expiresAt: '2026-01-01T00:00:00.000Z',
+        }),
+      })
+      expect(publish.status).toBe(201)
+
+      const discoverDht = await app.request('/discover/dht', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability }),
+      })
+      expect(discoverDht.status).toBe(200)
+      const discovery = await discoverDht.json()
+      expect(discovery.pointers).toEqual([])
+      expect(discovery.rejectedPointers).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          agent_id: identity.did,
+          verification: expect.objectContaining({
+            valid: false,
+            errors: expect.arrayContaining(['DHT pointer is expired']),
+          }),
+        }),
+      ]))
+      expect(discovery.authorityGranted).toBe(false)
+    })
+
     it('serves local registry, relay, and well-known discovery aliases without authority', async () => {
       const identityResponse = await app.request('/identities', {
         method: 'POST',

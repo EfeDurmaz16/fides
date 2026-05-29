@@ -65,6 +65,7 @@ import {
   type ApprovalDecision,
   type ApprovalRequest,
   type DelegationConstraint,
+  type DHTPointerRecord,
   type IncidentRecord,
   type IncidentRecordV2,
   type KillSwitchRule,
@@ -1027,6 +1028,22 @@ function filterVersionCompatibleProviderRecords(
   return { records: compatible, rejected, rejectedKey }
 }
 
+function dhtPointerRecordOnly(pointer: Record<string, unknown>): DHTPointerRecord {
+  return {
+    schema_version: 'fides.dht.pointer.v1',
+    record_type: 'capability_pointer',
+    capability: String(pointer.capability),
+    capability_hash: String(pointer.capability_hash),
+    agent_id: String(pointer.agent_id),
+    agent_card_url: String(pointer.agent_card_url),
+    agent_card_hash: String(pointer.agent_card_hash),
+    publisher_id: String(pointer.publisher_id),
+    expires_at: String(pointer.expires_at),
+    sequence: typeof pointer.sequence === 'number' ? pointer.sequence : Number(pointer.sequence ?? 1),
+    signature: String(pointer.signature ?? ''),
+  }
+}
+
 function localDiscoveryResult(body: Record<string, unknown>, provider = 'local') {
   const capability = typeof body.capability === 'string' ? body.capability : undefined
   if (!capability) {
@@ -1932,11 +1949,76 @@ app.post('/dht/publish', async (c) => {
     return c.json({ error: 'capability is required' }, 400)
   }
 
+  const capability = String(body.capability)
+  const cardId = typeof body.agentCardId === 'string'
+    ? body.agentCardId
+    : typeof body.cardId === 'string'
+      ? body.cardId
+      : undefined
+  const agentId = typeof body.agentId === 'string'
+    ? body.agentId
+    : typeof body.agent_id === 'string'
+      ? body.agent_id
+      : undefined
+  const registered = cardId
+    ? Array.from(localAgents.values()).find(record => record.cardId === cardId)
+    : agentId
+      ? localAgents.get(agentId)
+      : undefined
+  const card = registered ? localAgentCards.get(registered.cardId) : undefined
+  const identity = card ? localIdentities.get(card.identity.did) : undefined
+
+  if (card && identity) {
+    if (!card.capabilities.some(candidate => candidate.id === capability)) {
+      return c.json({ error: 'AgentCard does not advertise capability', capability, cardId: card.id }, 400)
+    }
+    const pointer = await signDHTPointerRecord(createDHTPointerRecord({
+      capability,
+      agentId: card.identity.did,
+      agentCardUrl: typeof body.agentCardUrl === 'string'
+        ? body.agentCardUrl
+        : typeof body.agent_card_url === 'string'
+          ? body.agent_card_url
+          : `local://agent-cards/${encodeURIComponent(card.id)}`,
+      agentCardHash: hashAgentCard(card),
+      publisherId: typeof body.publisherId === 'string'
+        ? body.publisherId
+        : typeof body.publisher_id === 'string'
+          ? body.publisher_id
+          : card.publisher?.did ?? card.identity.did,
+      expiresAt: typeof body.expiresAt === 'string'
+        ? body.expiresAt
+        : typeof body.expires_at === 'string'
+          ? body.expires_at
+          : new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      sequence: typeof body.sequence === 'number' ? body.sequence : undefined,
+    }), Buffer.from(identity.privateKeyHex, 'hex'), card.identity.did)
+    const storedPointer = {
+      ...pointer,
+      id: body.id ?? crypto.randomUUID(),
+      agentId: pointer.agent_id,
+      agentCardUrl: pointer.agent_card_url,
+      agentCardHash: pointer.agent_card_hash,
+      publisherId: pointer.publisher_id,
+      cardId: card.id,
+      signed: true,
+      publishedAt: new Date().toISOString(),
+      source: 'agentd-signed-dht-pointer',
+    }
+    localDhtPointers.push(storedPointer)
+    return c.json({ accepted: true, pointer: storedPointer }, 201)
+  }
+
   const pointer = {
     id: body.id ?? crypto.randomUUID(),
-    capability: body.capability,
-    agentId: body.agentId ?? body.agent_id,
+    capability,
+    agentId: agentId,
     agentCardUrl: body.agentCardUrl ?? body.agent_card_url ?? body.agentCard,
+    signed: false,
+    verification: {
+      valid: false,
+      errors: ['DHT pointer signature is required'],
+    },
     publishedAt: new Date().toISOString(),
     source: 'agentd-in-memory-dht',
   }
@@ -1944,27 +2026,54 @@ app.post('/dht/publish', async (c) => {
   return c.json({ accepted: true, pointer }, 201)
 })
 
-function findLocalDhtPointers(capability?: string) {
-  const pointers = capability
+async function findLocalDhtPointers(capability?: string) {
+  const matched = capability
     ? localDhtPointers.filter(pointer => pointer.capability === capability)
     : localDhtPointers
-  return { capability: capability ?? null, pointers }
+  const rejectedPointers: Array<Record<string, unknown>> = []
+  const pointers: Array<Record<string, unknown>> = []
+  for (const pointer of matched) {
+    if (pointer.schema_version === 'fides.dht.pointer.v1') {
+      const pointerRecord = dhtPointerRecordOnly(pointer)
+      const card = localCardForProviderRecord(pointer)
+      const verification = await verifyDHTPointerRecord(pointerRecord, {
+        ...(card && { card }),
+        verificationMethod: typeof pointer.agent_id === 'string' ? pointer.agent_id : undefined,
+      })
+      const enriched = { ...pointer, verification }
+      if (!verification.valid) {
+        rejectedPointers.push({
+          ...enriched,
+          authorityGranted: false,
+          reasons: [
+            'dht_pointer_verification_failed',
+            'discovery_does_not_grant_authority',
+          ],
+        })
+        continue
+      }
+      pointers.push(enriched)
+      continue
+    }
+    pointers.push(pointer)
+  }
+  return { capability: capability ?? null, pointers, rejectedPointers }
 }
 
-app.get('/dht/find', (c) => {
-  return c.json(findLocalDhtPointers(c.req.query('capability')))
+app.get('/dht/find', async (c) => {
+  return c.json(await findLocalDhtPointers(c.req.query('capability')))
 })
 
 app.post('/dht/find', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const capability = typeof body.capability === 'string' ? body.capability : undefined
-  return c.json(findLocalDhtPointers(capability))
+  return c.json(await findLocalDhtPointers(capability))
 })
 
 app.post('/discover/dht', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const capability = typeof body.capability === 'string' ? body.capability : undefined
-  const found = findLocalDhtPointers(capability)
+  const found = await findLocalDhtPointers(capability)
   const filtered = filterVersionCompatibleProviderRecords(
     body,
     found.pointers as Array<Record<string, unknown>>,
@@ -1974,7 +2083,10 @@ app.post('/discover/dht', async (c) => {
     provider: 'dht',
     capability: found.capability,
     pointers: filtered.records,
-    [filtered.rejectedKey]: filtered.rejected,
+    rejectedPointers: [
+      ...found.rejectedPointers,
+      ...filtered.rejected,
+    ],
     authorityGranted: false,
     explanation: 'DHT discovery returns signed pointer candidates only; trust, policy, and session grants are evaluated separately.',
   })
@@ -2362,7 +2474,7 @@ async function runLocalFullDemo() {
   const invoiceRegistryRecords = Array.from(localRegistryRecords.values()).filter((record) => (
     (record.capabilities as string[] | undefined)?.includes(invoiceCapability.id)
   ))
-  const paymentDhtPointers = findLocalDhtPointers(paymentCapability.id)
+  const paymentDhtPointers = await findLocalDhtPointers(paymentCapability.id)
   const verifiedCards = await Promise.all([calendar.signed, invoice.signed, payment.signed].map(verifySignedAgentCard))
 
   const invoiceTrust = computeLocalTrustResult(invoice.card.identity.did, invoiceCapability.id)

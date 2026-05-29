@@ -147,13 +147,20 @@ and the associated AgentCard. `POST /discover` and `POST /discover/local`
 search registered local agents by capability. `POST /discover/well-known`,
 `POST /discover/registry`, `POST /discover/relay`, and `POST /discover/dht`
 expose provider-specific discovery aliases over the daemon's local state.
+`POST /dht/publish` creates a signed DHT pointer when the referenced agent is
+registered locally; callers may omit `agentCardUrl`, in which case the daemon
+uses a `local://agent-cards/<card-id>` pointer and signs it with the local
+identity. Unresolved external DHT publishes remain local mock pointers and are
+returned as unverified records.
 Discovery responses always include `authorityGranted: false`; discovery is
 candidate resolution only, and invocation authority still requires policy
 evaluation and scoped session grants. Local discovery does not require an
 endpoint URL; daemon-held AgentCards can resolve by capability with
 `resolution.urlRequired: false`. Endpoint URLs remain optional transport
-metadata, not authority. Local, well-known, registry, relay, and locally
-resolvable DHT discovery also negotiate protocol compatibility between query
+metadata, not authority. DHT discovery also does not require an HTTP URL when a
+local AgentCard can be resolved, but DHT remains a pointer layer rather than a
+trust source. Local, well-known, registry, relay, and locally resolvable DHT
+discovery also negotiate protocol compatibility between query
 `supported_versions` / `required_versions` and the candidate AgentCard
 `protocolVersions`; incompatible candidates are omitted from provider results
 and reported under `rejectedCandidates`, `rejectedRecords`, or

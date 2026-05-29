@@ -6,10 +6,17 @@ Current implementation anchors:
 
 - `packages/core/src/dht.ts`
 - `packages/discovery/src/dht-provider.ts`
+- `services/agentd/src/index.ts`
 
 ## Pointer Record
 
 DHT records point from capability hash to AgentCard location and hash. They include agent ID, publisher ID, expiry, sequence, and signature.
+
+The local daemon can publish a signed DHT pointer from an already registered
+local AgentCard without the caller supplying a URL. In that case it uses a
+`local://agent-cards/<card-id>` reference, hashes the daemon-held AgentCard, and
+signs the pointer with the local agent identity. External or unresolved pointer
+publishes are accepted only as local mock records and are marked unverified.
 
 ## Flow
 
@@ -19,5 +26,9 @@ DHT records point from capability hash to AgentCard location and hash. They incl
 4. Resolve AgentCard.
 5. Verify AgentCard hash and signature.
 6. Continue to trust and policy.
+
+`/dht/find` and `/discover/dht` verify signed local pointer records before
+returning them. Expired, tampered, or AgentCard-hash-mismatched pointers are
+reported as rejected pointers and do not become authority.
 
 The in-memory DHT simulator is local mock infrastructure. A libp2p/Kademlia adapter should implement the same provider contract later.

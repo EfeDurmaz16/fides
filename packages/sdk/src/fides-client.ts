@@ -31,6 +31,11 @@ export class FidesClient {
 
   readonly discovery = {
     find: (query: Record<string, unknown>) => this.post('/discover', query),
+    local: (query: Record<string, unknown>) => this.post('/discover/local', query),
+    wellKnown: (query: Record<string, unknown>) => this.post('/discover/well-known', query),
+    registry: (query: Record<string, unknown>) => this.post('/discover/registry', query),
+    relay: (query: Record<string, unknown>) => this.post('/discover/relay', query),
+    dht: (query: Record<string, unknown>) => this.post('/discover/dht', query),
   }
 
   readonly trust = {

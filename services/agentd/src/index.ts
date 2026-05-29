@@ -454,6 +454,11 @@ app.use('/discover', async (c, next) => {
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
 })
+app.use('/discover/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
 app.use('/trust/*', async (c, next) => {
   if (c.req.method === 'GET') return next()
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
@@ -792,11 +797,10 @@ app.get('/agents/:id', (c) => {
   })
 })
 
-app.post('/discover', async (c) => {
-  const body = await c.req.json().catch(() => ({}))
+function localDiscoveryResult(body: Record<string, unknown>, provider = 'local') {
   const capability = typeof body.capability === 'string' ? body.capability : undefined
   if (!capability) {
-    return c.json({ error: 'capability is required' }, 400)
+    return { error: 'capability is required' as const }
   }
 
   const candidates = Array.from(localAgents.values()).flatMap((record) => {
@@ -813,7 +817,8 @@ app.post('/discover', async (c) => {
       signed: localSignedAgentCards.has(record.cardId),
       authorityGranted: false,
       resolution: {
-        mode: 'local_agent_card',
+        mode: provider === 'well-known' ? 'local_well_known_agent_card' : 'local_agent_card',
+        provider,
         urlRequired: false,
         authorityGranted: false,
         hint: 'Local discovery resolves from daemon-held AgentCards; endpoint URLs are optional transport metadata.',
@@ -828,13 +833,35 @@ app.post('/discover', async (c) => {
     }]
   })
 
-  return c.json({
+  return {
     query: body,
+    provider,
     candidates,
     count: candidates.length,
     authorityGranted: false,
     explanation: 'Discovery returns candidates only. Policy evaluation and scoped session grants are required before invocation.',
-  })
+  }
+}
+
+app.post('/discover', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const result = localDiscoveryResult(body)
+  if ('error' in result) return c.json({ error: result.error }, 400)
+  return c.json(result)
+})
+
+app.post('/discover/local', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const result = localDiscoveryResult(body, 'local')
+  if ('error' in result) return c.json({ error: result.error }, 400)
+  return c.json(result)
+})
+
+app.post('/discover/well-known', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const result = localDiscoveryResult(body, 'well-known')
+  if ('error' in result) return c.json({ error: result.error }, 400)
+  return c.json(result)
 })
 
 app.post('/trust/evaluate', async (c) => {
@@ -1683,6 +1710,17 @@ app.post('/dht/find', async (c) => {
   return c.json(findLocalDhtPointers(capability))
 })
 
+app.post('/discover/dht', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const capability = typeof body.capability === 'string' ? body.capability : undefined
+  return c.json({
+    provider: 'dht',
+    ...findLocalDhtPointers(capability),
+    authorityGranted: false,
+    explanation: 'DHT discovery returns signed pointer candidates only; trust, policy, and session grants are evaluated separately.',
+  })
+})
+
 function localRegistryRecordFor(cardId: string, mode: 'public' | 'private' = 'public') {
   const card = localAgentCards.get(cardId)
   const registered = card ? localAgents.get(card.identity.did) : undefined
@@ -1727,6 +1765,21 @@ app.post('/registry/search', async (c) => {
     !capability || (record.capabilities as string[] | undefined)?.includes(capability)
   ))
   return c.json({ capability: capability ?? null, records, authorityGranted: false })
+})
+
+app.post('/discover/registry', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const capability = typeof body.capability === 'string' ? body.capability : undefined
+  const records = Array.from(localRegistryRecords.values()).filter((record) => (
+    !capability || (record.capabilities as string[] | undefined)?.includes(capability)
+  ))
+  return c.json({
+    provider: 'registry',
+    capability: capability ?? null,
+    records,
+    authorityGranted: false,
+    explanation: 'Registry discovery returns registry records only; registration does not grant invocation authority.',
+  })
 })
 
 app.get('/registry/index', (c) => {
@@ -1792,6 +1845,21 @@ app.post('/relay/discover', async (c) => {
     !capability || (record.capabilities as string[] | undefined)?.includes(capability)
   ))
   return c.json({ capability: capability ?? null, records, authorityGranted: false })
+})
+
+app.post('/discover/relay', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const capability = typeof body.capability === 'string' ? body.capability : undefined
+  const records = Array.from(localRelayRecords.values()).filter((record) => (
+    !capability || (record.capabilities as string[] | undefined)?.includes(capability)
+  ))
+  return c.json({
+    provider: 'relay',
+    capability: capability ?? null,
+    records,
+    authorityGranted: false,
+    explanation: 'Relay discovery returns presence records only; relay presence is not authority.',
+  })
 })
 
 app.get('/.well-known/fides.json', (c) => {

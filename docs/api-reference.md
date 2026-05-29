@@ -21,6 +21,11 @@ Current implementation anchors:
 - `GET /agents`
 - `GET /agents/:id`
 - `POST /discover`
+- `POST /discover/local`
+- `POST /discover/well-known`
+- `POST /discover/registry`
+- `POST /discover/relay`
+- `POST /discover/dht`
 - `POST /trust/evaluate`
 - `GET /trust/:agentId`
 - `POST /reputation/update`
@@ -123,11 +128,14 @@ durable SQLite-backed identity/card storage.
 
 `POST /agents/register` registers a locally stored AgentCard as a discovery
 candidate. `GET /agents` and `GET /agents/:id` expose local registration state
-and the associated AgentCard. `POST /discover` searches registered local agents
-by capability. Discovery responses always include `authorityGranted: false`;
-discovery is candidate resolution only, and invocation authority still requires
-policy evaluation and scoped session grants. Local discovery does not require
-an endpoint URL; daemon-held AgentCards can resolve by capability with
+and the associated AgentCard. `POST /discover` and `POST /discover/local`
+search registered local agents by capability. `POST /discover/well-known`,
+`POST /discover/registry`, `POST /discover/relay`, and `POST /discover/dht`
+expose provider-specific discovery aliases over the daemon's local state.
+Discovery responses always include `authorityGranted: false`; discovery is
+candidate resolution only, and invocation authority still requires policy
+evaluation and scoped session grants. Local discovery does not require an
+endpoint URL; daemon-held AgentCards can resolve by capability with
 `resolution.urlRequired: false`. Endpoint URLs remain optional transport
 metadata, not authority.
 

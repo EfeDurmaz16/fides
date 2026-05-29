@@ -65,6 +65,10 @@ await client.agents.register({ agentCardId: identity.identity.did })
 const agents = await client.agents.list()
 const candidateAgent = await client.agents.inspect(identity.identity.did)
 const candidates = await client.discovery.find({ capability: 'invoice.reconcile' })
+await client.discovery.local({ capability: 'invoice.reconcile' })
+await client.discovery.registry({ capability: 'invoice.reconcile' })
+await client.discovery.relay({ capability: 'invoice.reconcile' })
+await client.discovery.dht({ capability: 'invoice.reconcile' })
 const trust = await client.trust.evaluate({
   agentId: identity.identity.did,
   capability: 'invoice.reconcile',

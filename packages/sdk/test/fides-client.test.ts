@@ -23,6 +23,11 @@ describe('FidesClient', () => {
     await client.cards.sign({ id: 'card_1' })
     await client.agents.register({ id: 'card_1' })
     await client.discovery.find({ capability: 'invoice.reconcile' })
+    await client.discovery.local({ capability: 'invoice.reconcile' })
+    await client.discovery.wellKnown({ capability: 'invoice.reconcile' })
+    await client.discovery.registry({ capability: 'invoice.reconcile' })
+    await client.discovery.relay({ capability: 'invoice.reconcile' })
+    await client.discovery.dht({ capability: 'invoice.reconcile' })
     await client.trust.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.reputation.update({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.policy.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
@@ -79,6 +84,11 @@ describe('FidesClient', () => {
       'http://localhost:4817/agent-cards/card_1/sign',
       'http://localhost:4817/agents/register',
       'http://localhost:4817/discover',
+      'http://localhost:4817/discover/local',
+      'http://localhost:4817/discover/well-known',
+      'http://localhost:4817/discover/registry',
+      'http://localhost:4817/discover/relay',
+      'http://localhost:4817/discover/dht',
       'http://localhost:4817/trust/evaluate',
       'http://localhost:4817/reputation/update',
       'http://localhost:4817/policy/evaluate',
@@ -126,6 +136,11 @@ describe('FidesClient', () => {
       'http://localhost:4817/invoke',
     ])
     expect(calls.map(call => call.init?.method)).toEqual([
+      'POST',
+      'POST',
+      'POST',
+      'POST',
+      'POST',
       'POST',
       'POST',
       'POST',

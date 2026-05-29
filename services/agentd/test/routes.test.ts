@@ -419,6 +419,30 @@ describe('Agentd Service Routes', () => {
         }),
       ]))
       expect(discoveredData.candidates[0].reasons).toContain('url_not_required_for_local_discovery')
+
+      const localDiscovered = await app.request('/discover/local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability: 'invoice.reconcile' }),
+      })
+      expect(localDiscovered.status).toBe(200)
+      expect(await localDiscovered.json()).toMatchObject({
+        provider: 'local',
+        authorityGranted: false,
+        count: 1,
+      })
+
+      const wellKnownDiscovered = await app.request('/discover/well-known', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability: 'invoice.reconcile' }),
+      })
+      expect(wellKnownDiscovered.status).toBe(200)
+      expect(await wellKnownDiscovered.json()).toMatchObject({
+        provider: 'well-known',
+        authorityGranted: false,
+        count: 1,
+      })
     })
 
     it('evaluates root trust, reputation, and policy for a registered local candidate', async () => {
@@ -934,6 +958,20 @@ describe('Agentd Service Routes', () => {
       expect((await postFind.json()).pointers).toEqual(expect.arrayContaining([
         expect.objectContaining({ agentId: 'did:fides:agent' }),
       ]))
+
+      const discoverDht = await app.request('/discover/dht', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability: 'invoice.reconcile' }),
+      })
+      expect(discoverDht.status).toBe(200)
+      expect(await discoverDht.json()).toMatchObject({
+        provider: 'dht',
+        authorityGranted: false,
+        pointers: expect.arrayContaining([
+          expect.objectContaining({ agentId: 'did:fides:agent' }),
+        ]),
+      })
     })
 
     it('serves local registry, relay, and well-known discovery aliases without authority', async () => {
@@ -978,6 +1016,20 @@ describe('Agentd Service Routes', () => {
         expect.objectContaining({ agentId: identity.did }),
       ]))
 
+      const discoverRegistry = await app.request('/discover/registry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability: 'calendar.schedule' }),
+      })
+      expect(discoverRegistry.status).toBe(200)
+      expect(await discoverRegistry.json()).toMatchObject({
+        provider: 'registry',
+        authorityGranted: false,
+        records: expect.arrayContaining([
+          expect.objectContaining({ agentId: identity.did }),
+        ]),
+      })
+
       const index = await app.request('/registry/index')
       expect(index.status).toBe(200)
       expect((await index.json()).records).toEqual(expect.arrayContaining([
@@ -1009,6 +1061,20 @@ describe('Agentd Service Routes', () => {
       expect((await relayDiscover.json()).records).toEqual(expect.arrayContaining([
         expect.objectContaining({ agentId: identity.did }),
       ]))
+
+      const discoverRelay = await app.request('/discover/relay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability: 'calendar.schedule' }),
+      })
+      expect(discoverRelay.status).toBe(200)
+      expect(await discoverRelay.json()).toMatchObject({
+        provider: 'relay',
+        authorityGranted: false,
+        records: expect.arrayContaining([
+          expect.objectContaining({ agentId: identity.did }),
+        ]),
+      })
 
       const wellKnown = await app.request('/.well-known/fides.json')
       expect(wellKnown.status).toBe(200)

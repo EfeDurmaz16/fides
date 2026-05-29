@@ -1639,6 +1639,24 @@ app.get('/registry/index', (c) => {
   })
 })
 
+app.post('/registry/start', (c) => {
+  return c.json({
+    started: true,
+    mode: 'local_mock_registry',
+    records: localRegistryRecords.size,
+    authorityGranted: false,
+  })
+})
+
+app.post('/relay/start', (c) => {
+  return c.json({
+    started: true,
+    mode: 'local_mock_relay',
+    records: localRelayRecords.size,
+    authorityGranted: false,
+  })
+})
+
 app.post('/relay/register', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const agentId = typeof body.agentId === 'string'

@@ -146,12 +146,14 @@ describe('CLI Commands', () => {
   });
 
   describe('v2 command surface', () => {
-    it('exposes dht, evidence, demo, and simulate commands', async () => {
+    it('exposes registry, dht, evidence, demo, and simulate commands', async () => {
+      const { createRegistryCommand } = await import('../src/commands/registry.js');
       const { createDhtCommand } = await import('../src/commands/dht.js');
       const { createEvidenceCommand } = await import('../src/commands/evidence.js');
       const { createDemoCommand } = await import('../src/commands/demo.js');
       const { createSimulateCommand } = await import('../src/commands/simulate.js');
 
+      expect(createRegistryCommand().name()).toBe('registry');
       expect(createDhtCommand().name()).toBe('dht');
       expect(createEvidenceCommand().name()).toBe('evidence');
       expect(createDemoCommand().name()).toBe('demo');
@@ -982,6 +984,123 @@ describe('CLI Commands', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         'http://relay.test/v1/relay/did%3Afides%3Areceiver/messages',
         expect.objectContaining({ method: 'GET' })
+      );
+    });
+
+    it('relay register and discover should use local agentd aliases', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        authorityGranted: false,
+        records: [{ agentId: 'did:fides:agent' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRelayCommand } = await import('../src/commands/relay.js');
+      const cmd = createRelayCommand();
+
+      await cmd.parseAsync([
+        'start',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'register',
+        'did:fides:agent',
+        '--endpoint-hints',
+        'local://agent',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'discover',
+        '--capability',
+        'invoice.reconcile',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/relay/start',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/relay/register',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            endpointHints: ['local://agent'],
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/relay/discover',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ capability: 'invoice.reconcile' }),
+        })
+      );
+    });
+
+    it('registry publish and search should use local agentd aliases', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        authorityGranted: false,
+        records: [{ agentId: 'did:fides:agent' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRegistryCommand } = await import('../src/commands/registry.js');
+      const cmd = createRegistryCommand();
+
+      await cmd.parseAsync([
+        'start',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'publish',
+        'did:fides:agent',
+        '--mode',
+        'private',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'search',
+        '--capability',
+        'invoice.reconcile',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/registry/start',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/registry/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ agentCardId: 'did:fides:agent', mode: 'private' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/registry/search',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ capability: 'invoice.reconcile' }),
+        })
       );
     });
 

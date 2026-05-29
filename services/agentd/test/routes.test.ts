@@ -916,6 +916,14 @@ describe('Agentd Service Routes', () => {
         expect.objectContaining({ agentId: identity.did }),
       ]))
 
+      const registryStart = await app.request('/registry/start', { method: 'POST' })
+      expect(registryStart.status).toBe(200)
+      expect((await registryStart.json()).authorityGranted).toBe(false)
+
+      const relayStart = await app.request('/relay/start', { method: 'POST' })
+      expect(relayStart.status).toBe(200)
+      expect((await relayStart.json()).authorityGranted).toBe(false)
+
       const relayRegister = await app.request('/relay/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

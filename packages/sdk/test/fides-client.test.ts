@@ -51,9 +51,11 @@ describe('FidesClient', () => {
     await client.sessions.request({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.sessions.get('sess_1')
     await client.sessions.verify('sess_1')
+    await client.registry.start()
     await client.registry.publish({ agentCardId: 'did:fides:agent' })
     await client.registry.search({ capability: 'invoice.reconcile' })
     await client.registry.index()
+    await client.relay.start()
     await client.relay.register({ agentId: 'did:fides:agent' })
     await client.relay.discover({ capability: 'invoice.reconcile' })
     await client.dht.start()
@@ -99,9 +101,11 @@ describe('FidesClient', () => {
       'http://localhost:4817/sessions',
       'http://localhost:4817/sessions/sess_1',
       'http://localhost:4817/sessions/sess_1/verify',
+      'http://localhost:4817/registry/start',
       'http://localhost:4817/registry/publish',
       'http://localhost:4817/registry/search',
       'http://localhost:4817/registry/index',
+      'http://localhost:4817/relay/start',
       'http://localhost:4817/relay/register',
       'http://localhost:4817/relay/discover',
       'http://localhost:4817/dht/start',
@@ -149,7 +153,9 @@ describe('FidesClient', () => {
       'POST',
       'POST',
       'POST',
+      'POST',
       'GET',
+      'POST',
       'POST',
       'POST',
       'POST',

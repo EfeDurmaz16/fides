@@ -91,8 +91,10 @@ const attestation = await client.attestations.create({
   policyHash: `sha256:${'c'.repeat(64)}`,
 })
 await client.attestations.verify(attestation.attestation.attestation_id)
+await client.registry.start()
 await client.registry.publish({ agentCardId: identity.identity.did })
 await client.registry.search({ capability: 'invoice.reconcile' })
+await client.relay.start()
 await client.relay.register({ agentId: identity.identity.did })
 await client.relay.discover({ capability: 'invoice.reconcile' })
 await client.dht.publish({

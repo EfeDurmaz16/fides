@@ -90,12 +90,14 @@ export class FidesClient {
   }
 
   readonly registry = {
+    start: () => this.post('/registry/start', {}),
     publish: (body: Record<string, unknown>) => this.post('/registry/publish', body),
     search: (body: Record<string, unknown>) => this.post('/registry/search', body),
     index: () => this.get('/registry/index'),
   }
 
   readonly relay = {
+    start: () => this.post('/relay/start', {}),
     register: (body: Record<string, unknown>) => this.post('/relay/register', body),
     discover: (body: Record<string, unknown>) => this.post('/relay/discover', body),
   }

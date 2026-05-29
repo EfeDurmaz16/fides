@@ -51,9 +51,11 @@ Current implementation anchors:
 - `GET /.well-known/fides.json`
 - `GET /.well-known/agents.json`
 - `GET /.well-known/agents/:id.json`
+- `POST /registry/start`
 - `POST /registry/publish`
 - `POST /registry/search`
 - `GET /registry/index`
+- `POST /relay/start`
 - `POST /relay/register`
 - `POST /relay/discover`
 - `POST /v1/policy/evaluate`
@@ -84,14 +86,14 @@ Current implementation anchors:
 
 The alias endpoints currently provide local mock/demo behavior and should be hardened into durable API routes.
 
-`POST /registry/publish`, `POST /registry/search`, and `GET /registry/index`
-provide a local mock registry over registered AgentCards. `POST /relay/register`
-and `POST /relay/discover` provide local mock relay presence and rendezvous.
-Both surfaces return candidates or presence records only; they set
-`authorityGranted: false` and do not replace policy evaluation or scoped
-session grants. `GET /.well-known/fides.json`, `GET /.well-known/agents.json`,
-and `GET /.well-known/agents/:id.json` expose local well-known metadata for
-same-host discovery.
+`POST /registry/start`, `POST /registry/publish`, `POST /registry/search`, and
+`GET /registry/index` provide a local mock registry over registered AgentCards.
+`POST /relay/start`, `POST /relay/register`, and `POST /relay/discover` provide
+local mock relay presence and rendezvous. Both surfaces return candidates or
+presence records only; they set `authorityGranted: false` and do not replace
+policy evaluation or scoped session grants. `GET /.well-known/fides.json`,
+`GET /.well-known/agents.json`, and `GET /.well-known/agents/:id.json` expose
+local well-known metadata for same-host discovery.
 
 `POST /identities` creates local in-memory identities for the daemon prototype
 and returns only public identity data. Private keys are retained inside the

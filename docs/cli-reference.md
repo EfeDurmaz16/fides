@@ -21,6 +21,7 @@ Current implementation anchors:
 - `revoke`
 - `incident`
 - `killswitch`
+- `registry`
 - `relay`
 - `dht`
 - `evidence`
@@ -39,6 +40,12 @@ agentd identity domain challenge example.com did:fides:...
 agentd identity domain verify example.com did:fides:...
 agentd demo run
 agentd simulate adversarial
+agentd registry start
+agentd registry publish did:fides:...
+agentd registry search --capability invoice.reconcile
+agentd relay start
+agentd relay register did:fides:...
+agentd relay discover --capability invoice.reconcile
 agentd dht find --capability invoice.reconcile
 agentd evidence verify
 ```
@@ -47,3 +54,7 @@ Local identity files are stored under `~/.fides/identities` by default. Set
 `FIDES_HOME=/path/to/workdir` to isolate local CLI state for demos or tests.
 `identity show` and `identity list` do not print private keys; private keys stay
 inside the local identity file.
+
+`registry`, `relay`, and `dht` commands target local `agentd` discovery
+surfaces by default. They return registry records, relay presence records, or
+DHT pointers only; they do not grant invocation authority.

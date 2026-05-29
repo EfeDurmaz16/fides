@@ -14,8 +14,13 @@ npm install -g @fides/cli
 
 ```bash
 fides init --name payment-agent
+fides identity create --type agent --name invoice-agent
+fides identity list
+fides identity show did:fides:...
 fides sign https://api.example.com/data --method GET
 fides card publish agent-card.json --registry-url http://localhost:7346
+fides demo run --agentd-url http://localhost:7345
+fides simulate adversarial --agentd-url http://localhost:7345
 fides daemon status --agentd-url http://localhost:7345
 ```
 

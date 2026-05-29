@@ -31,8 +31,19 @@ Current implementation anchors:
 Example:
 
 ```bash
+agentd identity create --type agent --name "Invoice Agent"
+agentd identity create --type publisher --name "Acme Agents"
+agentd identity list
+agentd identity show did:fides:...
+agentd identity domain challenge example.com did:fides:...
+agentd identity domain verify example.com did:fides:...
 agentd demo run
 agentd simulate adversarial
 agentd dht find --capability invoice.reconcile
 agentd evidence verify
 ```
+
+Local identity files are stored under `~/.fides/identities` by default. Set
+`FIDES_HOME=/path/to/workdir` to isolate local CLI state for demos or tests.
+`identity show` and `identity list` do not print private keys; private keys stay
+inside the local identity file.

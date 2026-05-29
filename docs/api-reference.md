@@ -26,6 +26,7 @@ Current implementation anchors:
 - `POST /reputation/update`
 - `GET /reputation/:agentId`
 - `POST /policy/evaluate`
+- `POST /delegations`
 - `POST /sessions`
 - `GET /sessions/:id`
 - `POST /sessions/:id/verify`
@@ -124,12 +125,14 @@ flags. Trust and reputation are signals only; policy decisions still do not
 execute capabilities and allowed decisions require a scoped SessionGrant before
 invocation.
 
-`POST /sessions` issues a local `SessionGrant` only after policy allows or
-limits the action to dry-run. `POST /invoke` verifies the session, runs the
-policy preflight path, validates the capability context, and returns an
-`InvocationResult`. The current root implementation is in-memory and intended
-for local daemon DX; durable storage and signed invocation results remain
-follow-up hardening work.
+`POST /delegations` creates a local unsigned `DelegationToken` intent and
+returns `authorityGranted: false`; it must still be signed and converted into a
+policy-checked SessionGrant before invocation. `POST /sessions` issues a local
+`SessionGrant` only after policy allows or limits the action to dry-run.
+`POST /invoke` verifies the session, runs the policy preflight path, validates
+the capability context, and returns an `InvocationResult`. The current root
+implementation is in-memory and intended for local daemon DX; durable storage
+and signed invocation results remain follow-up hardening work.
 
 `POST /approvals` creates an approval request and records approval decisions
 through `/approvals/:id/approve` or `/approvals/:id/deny`. Approval records do

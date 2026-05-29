@@ -29,6 +29,7 @@ import {
   createInvocationRequest,
   createInvocationResult,
   createKillSwitchRule,
+  createDelegationToken,
   createPrincipalIdentity,
   createPublisherIdentity,
   createRevocationRecordV2,
@@ -49,6 +50,7 @@ import {
   type AgentCard,
   type ApprovalDecision,
   type ApprovalRequest,
+  type DelegationConstraint,
   type IncidentRecord,
   type IncidentRecordV2,
   type KillSwitchRule,
@@ -110,6 +112,7 @@ interface LocalRegisteredAgent {
 const localAgents = new Map<string, LocalRegisteredAgent>()
 const localTrustResults = new Map<string, TrustResult>()
 const localReputationRecords = new Map<string, ReputationRecord>()
+const localDelegationTokens = new Map<string, DelegationToken>()
 const localApprovals = new Map<string, ApprovalRequest>()
 const localApprovalDecisions = new Map<string, ApprovalDecision>()
 const localKillSwitchRules = new Map<string, KillSwitchRule>()
@@ -936,6 +939,53 @@ app.post('/policy/evaluate', async (c) => {
     requiresSessionGrant: policy.decision === 'allow',
     explanation: 'Policy decisions do not execute capabilities. Allowed decisions require a scoped SessionGrant before invocation.',
   })
+})
+
+app.post('/delegations', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const delegator = typeof body.delegator === 'string'
+    ? body.delegator
+    : typeof body.principalId === 'string'
+      ? body.principalId
+      : undefined
+  const delegatee = typeof body.delegatee === 'string'
+    ? body.delegatee
+    : typeof body.requesterAgentId === 'string'
+      ? body.requesterAgentId
+      : typeof body.agentId === 'string'
+        ? body.agentId
+        : undefined
+  const capabilities = Array.isArray(body.capabilities)
+    ? body.capabilities.map(String)
+    : typeof body.capability === 'string'
+      ? [body.capability]
+      : []
+
+  if (!delegator || !delegatee || capabilities.length === 0) {
+    return c.json({ error: 'delegator, delegatee, and capabilities are required' }, 400)
+  }
+
+  const expiresAt = typeof body.expiresAt === 'string'
+    ? body.expiresAt
+    : new Date(Date.now() + 60 * 60 * 1000).toISOString()
+  const token = createDelegationToken({
+    delegator,
+    delegatee,
+    capabilities,
+    constraints: typeof body.constraints === 'object' && body.constraints !== null
+      ? body.constraints as DelegationConstraint
+      : {},
+    expiresAt,
+    audience: Array.isArray(body.audience) ? body.audience.map(String) : undefined,
+  })
+  localDelegationTokens.set(token.id, token)
+
+  return c.json({
+    token,
+    signed: false,
+    authorityGranted: false,
+    explanation: 'Delegation records scoped authorization intent. It must be signed and converted into a policy-checked SessionGrant before invocation.',
+  }, 201)
 })
 
 app.post('/sessions', async (c) => {

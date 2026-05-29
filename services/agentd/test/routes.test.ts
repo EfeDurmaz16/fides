@@ -445,6 +445,38 @@ describe('Agentd Service Routes', () => {
       expect(policyData.requiresSessionGrant).toBe(true)
     })
 
+    it('creates local delegation tokens without granting invocation authority', async () => {
+      const delegation = await app.request('/delegations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          delegator: 'did:fides:principal:local',
+          delegatee: 'did:fides:requester:local',
+          capabilities: ['invoice.reconcile'],
+          constraints: { maxActions: 1 },
+          audience: ['did:fides:invoice-agent'],
+        }),
+      })
+      expect(delegation.status).toBe(201)
+      const data = await delegation.json()
+      expect(data.authorityGranted).toBe(false)
+      expect(data.signed).toBe(false)
+      expect(data.token).toMatchObject({
+        delegator: 'did:fides:principal:local',
+        delegatee: 'did:fides:requester:local',
+        capabilities: ['invoice.reconcile'],
+        audience: ['did:fides:invoice-agent'],
+      })
+      expect(data.token.signature).toBe('')
+
+      const invalid = await app.request('/delegations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ delegator: 'did:fides:principal:local' }),
+      })
+      expect(invalid.status).toBe(400)
+    })
+
     it('issues root scoped sessions and invokes capabilities through policy preflight', async () => {
       const identityResponse = await app.request('/identities', {
         method: 'POST',

@@ -48,6 +48,7 @@ import {
   hashProtocolPayload,
   isKillSwitchRuleActive,
   MockTEEProvider as CoreMockTEEProvider,
+  negotiateProtocolVersion,
   resolveIncidentRecordV2,
   signAgentCard,
   signDHTPointerRecord,
@@ -77,6 +78,7 @@ import {
   type SessionGrantV2,
   type SignedAgentCard,
   type TrustResult,
+  type VersionNegotiationRecord,
 } from '@fides/core'
 import { createAuthorityStore, createLocalDaemonStateStore, emptyLocalDaemonStateSnapshot } from './storage.js'
 import type {
@@ -946,12 +948,29 @@ app.get('/agents/:id', (c) => {
   })
 })
 
+function stringArray(value: unknown): string[] | undefined {
+  return Array.isArray(value) ? value.map(String) : undefined
+}
+
+function discoveryVersionNegotiation(
+  body: Record<string, unknown>,
+  card: AgentCard
+): VersionNegotiationRecord {
+  return negotiateProtocolVersion({
+    localSupported: stringArray(body.supported_versions ?? body.supportedVersions),
+    localRequired: stringArray(body.required_versions ?? body.requiredVersions),
+    peerSupported: card.protocolVersions?.length ? card.protocolVersions : ['fides.v2.0'],
+    peerRequired: stringArray((card as unknown as Record<string, unknown>).required_versions),
+  })
+}
+
 function localDiscoveryResult(body: Record<string, unknown>, provider = 'local') {
   const capability = typeof body.capability === 'string' ? body.capability : undefined
   if (!capability) {
     return { error: 'capability is required' as const }
   }
 
+  const rejectedCandidates: Array<Record<string, unknown>> = []
   const candidates = Array.from(localAgents.values()).flatMap((record) => {
     const card = localAgentCards.get(record.cardId)
     if (!card) return []
@@ -959,12 +978,30 @@ function localDiscoveryResult(body: Record<string, unknown>, provider = 'local')
     const descriptor = card.capabilities.find(candidate => candidate.id === capability)
     if (!descriptor) return []
 
+    const versionNegotiation = discoveryVersionNegotiation(body, card)
+    if (!versionNegotiation.compatible) {
+      rejectedCandidates.push({
+        agentId: record.agentId,
+        cardId: record.cardId,
+        capability,
+        authorityGranted: false,
+        versionNegotiation,
+        reasons: [
+          'candidate_matched_capability',
+          'protocol_version_incompatible',
+          'discovery_does_not_grant_authority',
+        ],
+      })
+      return []
+    }
+
     return [{
       agentId: record.agentId,
       cardId: record.cardId,
       capability,
       signed: localSignedAgentCards.has(record.cardId),
       authorityGranted: false,
+      versionNegotiation,
       resolution: {
         mode: provider === 'well-known' ? 'local_well_known_agent_card' : 'local_agent_card',
         provider,
@@ -976,6 +1013,7 @@ function localDiscoveryResult(body: Record<string, unknown>, provider = 'local')
       card,
       reasons: [
         'candidate_matched_capability',
+        'protocol_version_compatible',
         'discovery_does_not_grant_authority',
         'url_not_required_for_local_discovery',
       ],
@@ -986,6 +1024,7 @@ function localDiscoveryResult(body: Record<string, unknown>, provider = 'local')
     query: body,
     provider,
     candidates,
+    rejectedCandidates,
     count: candidates.length,
     authorityGranted: false,
     explanation: 'Discovery returns candidates only. Policy evaluation and scoped session grants are required before invocation.',

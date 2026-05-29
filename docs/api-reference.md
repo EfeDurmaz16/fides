@@ -152,7 +152,11 @@ candidate resolution only, and invocation authority still requires policy
 evaluation and scoped session grants. Local discovery does not require an
 endpoint URL; daemon-held AgentCards can resolve by capability with
 `resolution.urlRequired: false`. Endpoint URLs remain optional transport
-metadata, not authority.
+metadata, not authority. Local and well-known discovery also negotiate protocol
+compatibility between query `supported_versions` / `required_versions` and the
+candidate AgentCard `protocolVersions`; incompatible candidates are omitted from
+`candidates` and reported under `rejectedCandidates` with
+`VERSION_INCOMPATIBLE`.
 
 `POST /trust/evaluate` computes a local capability-scoped trust result for a
 registered candidate. `POST /reputation/update` stores capability-specific

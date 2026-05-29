@@ -414,6 +414,10 @@ describe('Agentd Service Routes', () => {
           agentId: identity.did,
           capability: 'invoice.reconcile',
           signed: true,
+          versionNegotiation: expect.objectContaining({
+            compatible: true,
+            negotiated_version: 'fides.v2.0',
+          }),
           resolution: expect.objectContaining({
             mode: 'local_agent_card',
             urlRequired: false,
@@ -422,6 +426,7 @@ describe('Agentd Service Routes', () => {
         }),
       ]))
       expect(discoveredData.candidates[0].reasons).toContain('url_not_required_for_local_discovery')
+      expect(discoveredData.candidates[0].reasons).toContain('protocol_version_compatible')
 
       const localDiscovered = await app.request('/discover/local', {
         method: 'POST',
@@ -446,6 +451,59 @@ describe('Agentd Service Routes', () => {
         authorityGranted: false,
         count: 1,
       })
+    })
+
+    it('filters discovery candidates with incompatible protocol versions', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Legacy Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: 'legacy.reconcile', requiredScopes: ['invoice:read'] }],
+          endpoints: [],
+          protocolVersions: ['fides.v1'],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const discovered = await app.request('/discover/local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          capability: 'legacy.reconcile',
+          supported_versions: ['fides.v2.0'],
+          required_versions: ['fides.v2.0'],
+        }),
+      })
+
+      expect(discovered.status).toBe(200)
+      const data = await discovered.json()
+      expect(data.count).toBe(0)
+      expect(data.candidates).toEqual([])
+      expect(data.rejectedCandidates).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          agentId: identity.did,
+          versionNegotiation: expect.objectContaining({
+            compatible: false,
+            errors: expect.arrayContaining([
+              expect.objectContaining({ code: 'VERSION_INCOMPATIBLE' }),
+            ]),
+          }),
+          reasons: expect.arrayContaining(['protocol_version_incompatible']),
+        }),
+      ]))
+      expect(data.authorityGranted).toBe(false)
     })
 
     it('evaluates root trust, reputation, and policy for a registered local candidate', async () => {

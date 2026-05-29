@@ -24,6 +24,9 @@ export const fullDemoSteps = [
   'publish_invoice_agent_to_registry',
   'publish_calendar_agent_to_relay',
   'publish_payment_pointer_to_dht',
+  'verify_signed_registry_index_record',
+  'verify_signed_relay_agent_card_reference',
+  'verify_signed_dht_pointer_record',
   'discover_calendar_locally',
   'discover_invoice_through_registry',
   'discover_payment_through_dht',
@@ -49,7 +52,7 @@ export const fullDemoSteps = [
 export function describeFullDemo(): { status: 'manifest'; execution: string; steps: readonly string[] } {
   return {
     status: 'manifest',
-    execution: 'agentd demo run executes this contract against local daemon state',
+    execution: 'agentd demo run executes this contract against local daemon state and verifies signed provider records without granting discovery authority',
     steps: fullDemoSteps,
   }
 }

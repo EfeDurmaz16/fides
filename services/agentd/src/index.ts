@@ -2532,13 +2532,25 @@ async function runLocalFullDemo() {
   if (registryRecord) localRegistryRecords.set(String(registryRecord.id), registryRecord)
   const relayRecord = localRelayRecordFor(calendar.card.identity.did, ['local://calendar-agent'])
   if (relayRecord) localRelayRecords.set(calendar.card.identity.did, relayRecord)
-  const dhtPointer = {
-    id: crypto.randomUUID(),
+  const dhtPointerRecord = await signDHTPointerRecord(createDHTPointerRecord({
     capability: paymentCapability.id,
     agentId: payment.card.identity.did,
     agentCardUrl: `local://agent-cards/${payment.card.id}`,
+    agentCardHash: hashAgentCard(payment.card),
+    publisherId: publisher.identity.did,
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+  }), Buffer.from(payment.identity.privateKeyHex, 'hex'), payment.card.identity.did)
+  const dhtPointer = {
+    ...dhtPointerRecord,
+    id: crypto.randomUUID(),
+    agentId: dhtPointerRecord.agent_id,
+    agentCardUrl: dhtPointerRecord.agent_card_url,
+    agentCardHash: dhtPointerRecord.agent_card_hash,
+    publisherId: dhtPointerRecord.publisher_id,
+    cardId: payment.card.id,
+    signed: true,
     publishedAt: new Date().toISOString(),
-    source: 'agentd-in-memory-dht',
+    source: 'agentd-demo-signed-dht-pointer',
   }
   localDhtPointers.push(dhtPointer)
 

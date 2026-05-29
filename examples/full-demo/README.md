@@ -20,6 +20,13 @@ computes trust and reputation, evaluates policy, issues scoped sessions, invokes
 the invoice and payment dry-run paths, records incident and revocation state, and
 verifies the local EvidenceEvent hash chain.
 
+The demo also exercises the signed provider metadata surfaces:
+
+- registry discovery returns a verified signed `RegistryIndexRecord`
+- relay discovery returns a signed AgentCard reference and AgentCard hash
+- DHT discovery returns a signed pointer record with valid pointer verification
+- all discovery/provider results keep `authorityGranted: false`
+
 Current limitations:
 
 - DHT, relay, and registry are local mock providers.

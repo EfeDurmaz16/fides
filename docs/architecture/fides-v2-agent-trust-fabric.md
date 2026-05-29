@@ -1,402 +1,594 @@
-# FIDES v2 / Agent Trust Fabric — Architecture
+# FIDES v2 Agent Trust Fabric
 
-## 1. Should FIDES Become the Main Home for Agent Trust Fabric?
+FIDES v2 is the trust, authority, policy, delegation, runtime attestation, and evidence layer for agent-to-agent systems.
 
-**Yes.**
+It is not an agent app store. It is not a naive agent directory. Discovery is only the first step. A discovered agent is a candidate, not an authority.
 
-FIDES is the only repository among the five with a complete runtime: services (discovery, trust-graph), SDK (`@fides/sdk`), CLI (`fides`), tests, CI/CD, and Docker deployment. AGIT, OSP, OAPS, and Sardis each have significant gaps (stub implementations, missing CI, incomplete Rust core, or payment-specific scope creep). FIDES should evolve into the Agent Trust Fabric, absorbing reusable concepts from the other repos while keeping their domain-specific implementations separate.
+## Thesis
 
----
+Agents should not just call each other. They should know:
 
-## 2. Which Packages Should Remain in FIDES?
+- who they are calling,
+- who published that agent,
+- who the request is on behalf of,
+- what capability is being requested,
+- whether the agent is trusted for that specific capability,
+- what policy applies,
+- what authority was delegated,
+- what runtime or build evidence exists,
+- what revocations or incidents apply,
+- what evidence is left behind.
 
-All existing FIDES packages remain and are extended:
+Discovery without trust becomes spam.
+Trust without authority becomes unsafe.
+Authority without evidence becomes unauditable.
 
-- `@fides/sdk` — Core protocol (identity, signing, trust, discovery)
-- `@fides/shared` — Shared types, constants, errors
-- `@fides/cli` — CLI extended with new commands
+## ARP Analogy
 
-New packages:
+ARP answers: "Who has this IP address?"
 
-- `@fides/core` — Identity v2, AgentCards, capabilities, delegation, policy, evidence primitives
-- `@fides/discovery` — Discovery provider architecture (local, well-known, registry, relay, DHT)
-- `@fides/runtime` — Runtime attestation, TEE adapters, session grants
-- `@fides/evidence` — Evidence ledger, hash chain, event streaming
+FIDES v2 answers: "Who can perform this capability under these constraints, and can they prove identity, trust, authority, safety, and evidence?"
 
-Services:
+Mapping:
 
-- `discovery` — Extended with registry + federation
-- `trust-graph` — Extended with reputation v2 + incidents
-- `policy-engine` — Standalone policy evaluation service
-- `registry` — New (or merged into discovery)
-- `relay` — New mock relay server
-- `agentd` — New local daemon
+- ARP resolves IP address to MAC address.
+- FIDES resolves capability plus constraints to verified agent candidates.
+- ARP assumes a local broadcast domain.
+- FIDES supports local, well-known, registry, relay, DHT, and federation-ready discovery.
+- ARP has weak trust.
+- FIDES verifies signatures, AgentCards, publisher identity, trust anchors, reputation, runtime attestation, revocations, incidents, and policy constraints.
+- ARP returns an address.
+- FIDES returns candidates, explanations, policy decisions, scoped session grants, and evidence.
 
----
+The ARP-like step is only discovery. Authority comes later through policy and session grants.
 
-## 3. Which Concepts Should Be Imported from AGIT?
+## Hard Constraints
 
-- **Hash-chained audit log** (`compute_audit_hash` pattern) → `@fides/evidence`
-- **Canonical JSON + SHA-256 content addressing** → `@fides/core` canonical object signing
-- **Guard framework** (Allow/Warn/Block) → `@fides/policy` guard concept
-- **ApprovalStore pattern** → `@fides/core` ApprovalRequest/ApprovalDecision
-- **Merkle tree construction** → `@fides/evidence` Merkle proof support
+- FIDES v2 is TS-first and Rust adapter-ready.
+- AGIT Rust may later be used through adapters for evidence chains, canonicalization, hashing, Merkle/DAG primitives, and performance-sensitive work.
+- Rust is not required for the first working v2.
+- OAPS concepts are ported into FIDES-owned runtime types.
+- FIDES must not depend on `@oaps/core` as a runtime dependency.
+- Sardis contributes generic patterns only: policy-before-execution, guardrails, evidence, approvals, kill switch, high-risk handling, mandate-chain abstraction.
+- Payment-specific domain stays in Sardis: stablecoins, MPC wallets, rails, merchants, compliance, spending limits, payment-specific mandates.
+- Effect may be used internally for services, workflows, typed errors, dependency injection, provider orchestration, daemon and CLI workflows.
+- Protocol objects, schemas, crypto, canonical JSON, signing, AgentCards, EvidenceEvents, DHT records, SessionGrants, attestations, revocations, and incidents remain framework-agnostic.
+- Public SDK APIs are Promise-based. Effect-native APIs may be added later.
 
-**Not imported:** Full VCS (commit/branch/merge), SQLite/Postgres/S3 storage backends, Python ExecutionEngine, three-way merge.
+## Current Baseline
 
----
+The repo is already a TypeScript monorepo with:
 
-## 4. Which Concepts Should Be Imported from OSP?
+- `packages/core` for identity, signing, AgentCards, capabilities, delegation, sessions, revocation, incidents, trust anchors, domain/passkey verification.
+- `packages/evidence` for hash-chained evidence and Merkle roots.
+- `packages/runtime` for MockTEE, attestation adapters, and kill switch.
+- `packages/discovery` for local, well-known, registry, relay, and DHT providers.
+- `packages/policy` and `packages/guard` for policy and pre-execution decisions.
+- `packages/sdk` and `packages/cli` for developer surfaces.
+- `services/agentd`, `discovery`, `trust-graph`, `registry`, `relay`, `policy-engine`, and `platform-api`.
 
-- **Registry server pattern** (Axum-based) → FIDES registry service (Hono-based)
-- **Service lifecycle semantics** (provision, rotate, deprovision, status) → FIDES agent lifecycle
-- **JSON Schema discipline** → All FIDES v2 protocol objects get JSON Schema
-- **Credential rotation pattern** → FIDES key rotation and delegation token rotation
-- **URI scheme pattern** (`osp://`) → FIDES `fides://` URI scheme for referencing agents/capabilities
-
-**Not imported:** Provider adapters, service provisioning, encrypted credential delivery, payment rails.
-
----
-
-## 5. Which Concepts Should Be Imported from OAPS?
-
-- **ActorCard** → FIDES `AgentCard`
-- **CapabilityCard** → FIDES `CapabilityDescriptor`
-- **DelegationToken** → `@fides/core` DelegationToken
-- **PolicyBundle + evaluatePolicy** → `@fides/policy` PolicyBundle + evaluator
-- **EvidenceEvent + EvidenceChain** → `@fides/evidence`
-- **ApprovalRequest + ApprovalDecision** → `@fides/core`
-- **Version negotiation** (`negotiateVersion`) → `@fides/core`
-- **Error taxonomy** (`ErrorObject` with 12 categories) → `@fides/shared` error hierarchy
-- **Handshake protocol** → `@fides/runtime` session establishment
-- **Well-known discovery** (`.well-known/aicp.json`) → FIDES `.well-known/fides.json`
-
-**Not imported:** Full AICP interaction/task lifecycle, WebSocket binding, payment adapters (x402, MPP, AP2), commerce domain schemas.
-
----
-
-## 6. Which Concepts Should Be Imported from Sardis?
-
-- **Pre-execution pipeline pattern** → `@fides/policy` PolicyEngine
-- **Kill switch primitive** → `@fides/runtime` KillSwitch
-- **Approval flow pattern** → `@fides/core` ApprovalRequest/ApprovalDecision
-- **Evidence ledger pattern** → `@fides/evidence`
-- **Mandate chain abstraction** → `@fides/core` MandateChain
-- **High-risk action handling** → `@fides/policy` risk taxonomy
-
-**Not imported:** Payment-specific models (stablecoin, MPC wallet, spending limits, merchants, compliance/KYA/AML, AP2/TAP/x402 settlement).
-
----
-
-## 7. What Should Remain Separate and Only Be Integrated Through Adapters?
-
-| Domain | Repo | Adapter Interface |
-|--------|------|-------------------|
-| Agent VCS / state versioning | AGIT | `AgitEvidenceAdapter` |
-| Service provisioning / provider adapters | OSP | `OSPProvisioningAdapter` |
-| Payment execution / stablecoin | Sardis | `SardisPaymentAdapter` |
-| A2A protocol runtime | Google A2A | `A2AAdapter` |
-| MCP server runtime | MCP | `MCPAdapter` |
-| x402 payment challenges | x402 | `X402Adapter` |
-| TEE attestation (Nitro, SGX, SEV) | Vendor SDKs | `TEEAttestationAdapter` |
-| On-chain anchoring | EVM / Solana | `LedgerAnchorAdapter` |
-
----
-
-## 8. Final Package Structure
-
-```
-fides/
-├── packages/
-│   ├── @fides/sdk/              # Existing: identity, signing, trust, discovery client
-│   ├── @fides/shared/           # Existing: types, constants, errors (extended)
-│   ├── @fides/cli/              # Existing: CLI (extended)
-│   ├── @fides/core/             # NEW: identity v2, AgentCard, CapabilityDescriptor,
-│   │                             #      DelegationToken, SessionGrant, PolicyBundle,
-│   │                             #      ApprovalRequest, ApprovalDecision, MandateChain,
-│   │                             #      canonical object signing, version negotiation
-│   ├── @fides/discovery/        # NEW: discovery providers (local, well-known, registry,
-│   │                             #      relay, DHT), provider orchestration
-│   ├── @fides/runtime/          # NEW: runtime attestation, TEE adapters, session grants,
-│   │                             #      kill switch
-│   ├── @fides/evidence/         # NEW: evidence ledger, hash chain, Merkle proofs,
-│   │                             #      event streaming, privacy model
-│   └── @fides/policy/           # NEW: policy engine, risk taxonomy, guardrails,
-│                                 #      pre-execution pipeline
-├── services/
-│   ├── discovery/               # Extended: identity + agent registry, well-known,
-│   │                             #      federation peering
-│   ├── trust-graph/             # Extended: reputation v2, incident penalties,
-│   │                             #      novelty penalties, runtime safety score
-│   ├── policy-engine/           # Full implementation: evaluate policies, approvals,
-│   │                             #      kill switch enforcement
-│   ├── registry/                # NEW: hosted registry (public/private mode)
-│   ├── relay/                   # NEW: mock relay server for discovery
-│   └── agentd/                  # NEW: local daemon (HTTP API, SDK proxy)
-├── apps/
-│   └── web/                     # Future: trust fabric dashboard
-├── schemas/                     # NEW: JSON Schemas for all protocol objects
-├── examples/                    # NEW: demo agents, end-to-end scripts
-└── tests/
-    ├── e2e/                     # Extended: full trust fabric flows
-    └── adversarial/             # NEW: adversarial simulation harness
-```
-
----
-
-## 9. Final Protocol Model
-
-### Protocol Object Hierarchy
-
-```
-SignedObject (abstract)
-├── AgentCard
-├── CapabilityDescriptor
-├── TrustAttestation
-├── DelegationToken
-├── SessionGrant
-├── PolicyBundle
-├── ApprovalRequest
-├── ApprovalDecision
-├── EvidenceEvent
-├── RevocationRecord
-├── IncidentRecord
-├── RuntimeAttestation
-└── MandateChain
-```
-
-### Canonical Signing Model
-
-Every signed protocol object follows this pattern:
-
-```typescript
-interface SignedObject<T> {
-  payload: T;
-  proof: {
-    type: "Ed25519Signature2024";
-    created: string;          // ISO 8601
-    verificationMethod: DID;  // did:fides:<pubkey>
-    proofPurpose: "assertionMethod" | "authentication" | "delegation" | "capabilityInvocation";
-    canonicalizationAlgorithm: "https://fides.dev/canonical-json/v1";
-    proofValue: string;       // base58-encoded signature
-  };
-}
-```
-
-Canonicalization: deterministic JSON (sorted keys, no whitespace, explicit nulls) → SHA-256 digest → Ed25519 sign.
-
-### Protocol Version
-
-- Current protocol version: `fides-v2.0.0`
-- Version negotiation: OAPS `negotiateVersion` pattern adapted
-- Compatibility promise: minor versions are additive; major versions require explicit handshake
-
----
-
-## 10. Implementation Order
-
-### Phase 0: Foundation (Milestones 1-3)
-1. Stabilize FIDES core (fix spec/impl discrepancies)
-2. Identity v2 (agent, publisher, principal)
-3. AgentCards and capabilities
-
-### Phase 1: Discovery & Registry (Milestones 4-6)
-4. Discovery provider architecture
-5. Registry and relay
-6. DHT discovery
-
-### Phase 2: Trust & Policy (Milestones 7-9)
-7. Trust and reputation v2
-8. Policy engine
-9. Delegation and sessions
-
-### Phase 3: Evidence & Runtime (Milestones 10-12)
-10. Evidence ledger
-11. Revocation and incidents
-12. Runtime attestation
-
-### Phase 4: Developer Surface (Milestones 13-15)
-13. CLI and API
-14. Examples and full demo
-15. Docs and tests
-
----
+The baseline is strong but uneven: several objects are present as prototypes, not final protocol contracts.
 
 ## Protocol Layers
 
 ### 1. Identity Layer
-- AgentIdentity, PublisherIdentity, PrincipalIdentity
-- Domainless individual identity
-- Platform-hosted identity
-- Domain-verified identity
-- Organization-verified identity
-- Trust anchors
+
+Owns:
+
+- `AgentIdentity`
+- `PublisherIdentity`
+- `PrincipalIdentity`
+- domainless identity
+- platform-hosted identity
+- domain-verified identity
+- organization-verified identity
+- trust anchors
+
+Rules:
+
+- Domain must not be required.
+- Identity must not equal trust.
+- A valid cryptographic identity can still be low trust.
+- Publisher identity and principal identity must be separate from agent identity.
+
+Current anchors:
+
+- `packages/core/src/identity.ts`
+- `packages/core/src/trust-anchor.ts`
+- `packages/core/src/domain-verifier.ts`
+- `packages/core/src/passkey.ts`
+
+Required hardening:
+
+- Replace loose identity creation with real Ed25519 keypair issuance.
+- Add publisher type taxonomy.
+- Add non-domain trust anchors: GitHub, email, npm, PyPI, wallet, passkey, organization invitation, runtime attestation, build attestation, peer attestation.
 
 ### 2. Attestation Layer
-- Trust attestation creation/verification
-- Signed AgentCards
-- Capability attestations
-- Canonical object signing
+
+Owns:
+
+- trust attestations,
+- identity attestations,
+- runtime attestations,
+- build/container attestations,
+- peer attestations,
+- MockTEE.
+
+Rules:
+
+- Attestation is evidence, not automatic authority.
+- High-risk capabilities may require valid runtime attestation or approval.
+
+Current anchors:
+
+- `packages/runtime/src/index.ts`
+- `packages/core/src/trust-anchor.ts`
+
+Required hardening:
+
+- Add signed `Attestation` and `RuntimeAttestation` protocol objects.
+- Add `NullAttestationProvider`.
+- Integrate runtime/build attestation into trust and policy scoring.
 
 ### 3. Agent Metadata Layer
-- AgentCard schema and validation
-- CapabilityDescriptor schema and validation
-- Endpoint metadata
-- Transport metadata
-- Policy requirements
+
+Owns:
+
+- signed AgentCards,
+- capability descriptors,
+- capability ontology,
+- risk taxonomy,
+- endpoint metadata,
+- transport metadata,
+- policy requirements.
+
+Rules:
+
+- AgentCards are signed metadata, not authority.
+- Capability reputation is scoped by capability.
+
+Current anchors:
+
+- `packages/core/src/agent-card.ts`
+- `packages/core/src/capability.ts`
+
+Required hardening:
+
+- Add required v2 AgentCard fields: agent id, publisher, public keys, trust anchors, runtime attestations, protocol versions, revocation URL/ref, expiry, signature.
+- Add capability namespace/action/resource fields and supported controls.
+- Add ontology entries and risk classes.
 
 ### 4. Discovery Layer
-- LocalDiscoveryProvider
-- WellKnownDiscoveryProvider
-- RegistryDiscoveryProvider
-- RelayDiscoveryProvider
-- DHTDiscoveryProvider
-- Provider orchestration
+
+Owns:
+
+- local discovery,
+- well-known discovery,
+- hosted/private/public registry discovery,
+- relay discovery,
+- DHT discovery,
+- federation-ready discovery,
+- discovery orchestration.
+
+Rules:
+
+- Discovery never grants authority.
+- DHT and relay must never be trust sources.
+- Discovery results must include verification and explainability.
+
+Current anchors:
+
+- `packages/discovery/src/provider.ts`
+- `packages/discovery/src/orchestrator.ts`
+- `packages/discovery/src/local-provider.ts`
+- `packages/discovery/src/well-known-provider.ts`
+- `packages/discovery/src/registry-provider.ts`
+- `packages/discovery/src/relay-provider.ts`
+- `packages/discovery/src/dht-provider.ts`
+
+Required hardening:
+
+- Change provider API from DID-only resolution to capability-query discovery.
+- Verify signed records and AgentCards.
+- Filter by version and capability compatibility.
+- Compute trust and policy candidate explanations.
+- Emit evidence for discovery.
 
 ### 5. Trust Layer
-- Trust graph v2
-- Direct trust edges
-- Transitive trust with decay
-- Trust anchors
+
+Owns:
+
+- trust graph,
+- trust score,
+- trust bands,
+- trust reasons,
+- context-specific scoring,
+- runtime safety score.
+
+Rules:
+
+- Trust score is a signal.
+- Policy is the authority.
+
+Current anchors:
+
+- `services/trust-graph/src/services/trust-service.ts`
+- `services/trust-graph/src/services/graph.ts`
+- `services/trust-graph/src/services/capability-scoring.ts`
+
+Required hardening:
+
+- Add componentized `TrustResult`: IdentityScore, PublisherScore, TrustAnchorScore, CapabilityFitScore, EvidenceScore, PolicyComplianceScore, RuntimeSafetyScore, PeerAttestationScore, IncidentPenalty, NoveltyPenalty, ContextBoundaryPenalty.
+- Add trust bands: unknown, low, medium, high, verified.
+- Make explanations first-class and machine-readable.
 
 ### 6. Reputation Layer
-- Capability-specific reputation
-- Context-specific trust
-- Incident penalties
-- Novelty penalties
-- Runtime safety score
+
+Owns:
+
+- capability-specific reputation,
+- principal-specific reputation where possible,
+- publisher-weighted reputation,
+- incident penalty,
+- novelty penalty,
+- context boundary penalty.
+
+Rules:
+
+- No global popularity score.
+- `calendar.schedule` reputation must not imply `payments.execute` reputation.
+
+Current anchors:
+
+- `services/trust-graph/src/db/migrations/003_capability_scoring.sql`
+- `services/trust-graph/src/services/capability-scoring.ts`
+
+Required hardening:
+
+- Add time-aware and context-aware reputation record.
+- Add publisher-weight and principal-scope inputs.
+- Integrate incidents and revocations.
 
 ### 7. Policy Layer
-- PolicyBundle evaluation
-- Risk taxonomy
-- Guardrails (Allow / Warn / Block)
-- Pre-execution pipeline
-- High-risk capability handling
-- Revoked agent denial
-- Invalid runtime attestation denial
+
+Owns:
+
+- policy-before-execution,
+- guardrails,
+- risk model,
+- kill switch,
+- approval model,
+- pure evaluator,
+- optional Effect workflow wrapper.
+
+Rules:
+
+- Every decision includes machine-readable reasons, human-readable reasons, required controls, and evidence refs.
+- No policy decision may return only a boolean.
+- Kill switch overrides normal trust and policy.
+
+Current anchors:
+
+- `packages/policy/src/index.ts`
+- `packages/guard/src/index.ts`
+- `services/policy-engine/src/index.ts`
+
+Required hardening:
+
+- Add decision actions: allow, deny, require_approval, dry_run_only, scope_limit, risk_limit.
+- Add requested policy inputs.
+- Normalize `approve-required` / `dry-run` compatibility names.
+- Add first-class approval and kill switch objects.
 
 ### 8. Delegation Layer
-- DelegationToken
-- SessionGrant
-- Scoped authority
-- Expiry
-- Nonce / replay protection
-- Audience restriction
+
+Owns:
+
+- `DelegationToken`,
+- `SessionGrant`,
+- scoped authority,
+- expiry,
+- audience restriction,
+- nonce/replay protection,
+- principal-to-agent delegation,
+- agent-to-agent delegation.
+
+Current anchors:
+
+- `packages/core/src/delegation.ts`
+- `packages/core/src/session-store.ts`
+- `services/agentd/src/index.ts`
+
+Required hardening:
+
+- Add requested v2 `SessionGrant` fields.
+- Bind session grants to policy hash and trust result hash.
+- Sign grants with canonical model.
+- Enforce replay protection consistently.
 
 ### 9. Invocation Layer
-- Capability invocation authorization
-- Mandate chain verification
-- Approval gating
-- Kill switch enforcement
+
+Owns:
+
+- capability invocation,
+- input validation,
+- output validation,
+- dry-run,
+- approval-gated execution,
+- policy-before-execution.
+
+Current anchors:
+
+- `packages/guard/src/index.ts`
+- `services/agentd/src/index.ts`
+
+Required hardening:
+
+- Add signed `InvocationRequest` and `InvocationResult`.
+- Verify `SessionGrant`.
+- Validate schemas.
+- Check revocations and kill switch.
+- Emit evidence for every state transition.
 
 ### 10. Evidence Layer
-- EvidenceEvent
-- Hash chain
-- Merkle proofs
-- Privacy model (public, private, redacted, hash-only)
-- Evidence export
+
+Owns:
+
+- EvidenceEvent,
+- hash chain,
+- verification,
+- export,
+- redacted/hash-only evidence,
+- privacy model,
+- tamper detection.
+
+Rules:
+
+- Default to hash-only or redacted for sensitive input/output.
+- Store hashes and metadata by default.
+
+Current anchors:
+
+- `packages/evidence/src/index.ts`
+- `services/agentd/src/storage.ts`
+
+Required hardening:
+
+- Add requested event fields and event taxonomy.
+- Sign evidence events.
+- Add evidence refs.
+- Add Merkle proofs and stronger export format.
+- Add AGIT adapter-ready interface.
 
 ### 11. Revocation Layer
-- RevocationRecord
-- CRL-style lists
-- On-chain revocation registry (adapter)
-- Propagation interfaces
+
+Owns:
+
+- key revocation,
+- identity revocation,
+- AgentCard revocation,
+- capability revocation,
+- session revocation,
+- attestation revocation,
+- publisher revocation.
+
+Current anchors:
+
+- `packages/core/src/revocation.ts`
+- `services/agentd/src/index.ts`
+- `services/trust-graph/src/db/migrations/002_revocations.sql`
+
+Required hardening:
+
+- Add revocation target taxonomy.
+- Make revocations first-class signed protocol objects with schema versions.
+- Propagate revocations across registry/relay/DHT/federation interfaces.
 
 ### 12. Incident Layer
-- IncidentRecord
-- Classification taxonomy
-- Policy impact
-- Trust impact
-- Automated response
+
+Owns:
+
+- incident records,
+- severity,
+- categories,
+- evidence refs,
+- resolution,
+- trust/policy impact.
+
+Current anchors:
+
+- `packages/core/src/revocation.ts`
+- `services/agentd/src/index.ts`
+- `services/trust-graph/src/db/migrations/002_revocations.sql`
+
+Required hardening:
+
+- Add requested categories.
+- Add resolution status.
+- Integrate into trust, reputation, discovery filtering, and policy.
 
 ### 13. Registry Layer
-- Hosted registry (public/private)
-- Federation peering
-- Relay discovery
-- DHT pointers
+
+Owns:
+
+- hosted registry,
+- public registry mode,
+- private registry mode,
+- signed RegistryIndexRecord,
+- RegistryPeerRecord,
+- federation peering,
+- revocation/incident propagation.
+
+Current anchors:
+
+- `services/registry/src/`
+- `packages/discovery/src/registry-provider.ts`
+
+Required hardening:
+
+- Add signed index and peer records.
+- Add federation interfaces and local mock federation provider.
+- Add propagation for revocations and incidents.
 
 ### 14. Transport Layer
-- HTTP + RFC 9421 signatures
-- WebSocket (adapter-ready)
-- DHT/relay (adapter-ready)
 
-### 15. Developer Layer
-- CLI (`fides`)
-- SDK (`@fides/sdk`, `@fides/core`)
-- Local daemon (`agentd`)
-- Examples and demos
-- Documentation and specs
+Owns:
 
----
+- HTTP API,
+- relay protocol,
+- DHT pointer resolution,
+- adapter boundaries for MCP/A2A/OAPS/OSP/AP2/x402/Sardis.
 
-## Protocol Hardening Components
+Current anchors:
 
-### 1. Canonical Object Signing Model
-- **Schema:** `schemas/signed-object.schema.json`
-- **Interface:** `CanonicalSigner<T>` / `CanonicalVerifier<T>` in `@fides/core`
-- **Docs:** `docs/protocol/canonical-signing.md`
-- **Implementation:** Pure TypeScript, `@noble/ed25519`, deterministic JSON canonicalization
-- **Integration:** All protocol objects inherit from `SignedObject`
+- `services/agentd/src/index.ts`
+- `services/relay/src/index.ts`
+- `packages/sdk/src/*/client.ts`
 
-### 2. Protocol Version Negotiation
-- **Schema:** `schemas/version-negotiation.schema.json`
-- **Interface:** `negotiateVersion(supported: VersionSupport[], requested: VersionSupport[]): VersionNegotiationResult`
-- **Docs:** `docs/protocol/version-negotiation.md`
-- **Implementation:** Ported from OAPS `@oaps/core`
-- **Integration:** Handshake protocol, discovery, WebSocket binding
+Required hardening:
 
-### 3. Stable Typed Error Vocabulary
-- **Schema:** `schemas/error-object.schema.json`
-- **Interface:** `FidesError` hierarchy extended with OAPS categories
-- **Docs:** `docs/protocol/errors.md`
-- **Implementation:** `@fides/shared/src/errors.ts` extended
-- **Integration:** All packages throw typed errors; CLI maps to exit codes
+- Add explicit adapter interfaces.
+- Keep transport-specific signing separate from canonical protocol-object signing.
 
-### 4. Privacy Model for Evidence
-- **Schema:** `schemas/evidence-privacy.schema.json`
-- **Interface:** `EvidencePrivacy { level: "public" | "private" | "redacted" | "hash-only"; redactionKey?: string; }`
-- **Docs:** `docs/protocol/evidence-privacy.md`
-- **Implementation:** `@fides/evidence` applies privacy level before appending to chain
-- **Integration:** Evidence export, compliance, audit
+### 15. Runtime Layer
 
-### 5. Trust and Policy Explainability
-- **Schema:** `schemas/decision-explanation.schema.json`
-- **Interface:** `DecisionExplanation { decision: "allow" | "deny" | "approve-required"; factors: ExplanationFactor[]; }`
-- **Docs:** `docs/protocol/explainability.md`
-- **Implementation:** Policy engine and trust graph return explanations with every decision
-- **Integration:** CLI `fides explain`, SDK `policy.evaluateWithExplanation()`
+Owns:
 
-### 6. Adversarial Simulation Harness
-- **Schema:** `schemas/adversarial-scenario.schema.json`
-- **Interface:** `SimulationHarness { run(scenario: Scenario): SimulationResult; }`
-- **Docs:** `docs/testing/adversarial.md`
-- **Implementation:** `tests/adversarial/` — Sybil attacks, replay attacks, policy bypass attempts
-- **Integration:** CI runs adversarial suite on every PR
+- daemon workflows,
+- service orchestration,
+- storage,
+- local-first runtime,
+- optional Effect service layers.
 
-### 7. Capability Ontology and Risk Taxonomy
-- **Schema:** `schemas/capability-ontology.schema.json`, `schemas/risk-taxonomy.schema.json`
-- **Interface:** `CapabilityClassifier`, `RiskAssessor`
-- **Docs:** `docs/protocol/capabilities.md`, `docs/protocol/risk.md`
-- **Implementation:** `@fides/policy` — deterministic risk classification for every capability
-- **Integration:** Policy engine, approval gating, kill switch
+Current anchors:
 
-### 8. ApprovalRequest and ApprovalDecision Primitives
-- **Schema:** `schemas/approval-request.schema.json`, `schemas/approval-decision.schema.json`
-- **Interface:** `ApprovalRequest`, `ApprovalDecision` in `@fides/core`
-- **Docs:** `docs/protocol/approvals.md`
-- **Implementation:** Ported from OAPS, extended with FIDES signing
-- **Integration:** Policy engine, high-risk action handling, SDK
+- `services/agentd`
+- `packages/runtime`
 
-### 9. Kill Switch Primitives
-- **Schema:** `schemas/kill-switch.schema.json`
-- **Interface:** `KillSwitch { engage(target: KillSwitchTarget): void; disengage(target: KillSwitchTarget): void; isEngaged(target: KillSwitchTarget): boolean; }`
-- **Docs:** `docs/protocol/kill-switch.md`
-- **Implementation:** `@fides/runtime` — in-memory + persistent state
-- **Integration:** Policy engine, daemon, CLI `fides killswitch`
+Required hardening:
 
-### 10. Adapter Interfaces
-- **Schema:** `schemas/adapter-manifest.schema.json`
-- **Interface:** `ProtocolAdapter { readonly protocol: string; handshake(): Promise<void>; invoke(capability: string, params: unknown): Promise<unknown>; }`
-- **Docs:** `docs/adapters/README.md`
-- **Implementation:** `@fides/core` base adapter class + per-protocol adapters in `packages/adapters/`
-- **Integration:** MCP, A2A, OAPS, OSP, AP2, x402, Sardis
+- Add local SQLite storage target under `~/.fides/`.
+- Add migrations and local config.
+- Preserve Postgres service stores where already used by services.
+
+### 16. Developer Layer
+
+Owns:
+
+- CLI,
+- SDK,
+- examples,
+- docs,
+- demos,
+- adversarial simulation.
+
+Current anchors:
+
+- `packages/cli`
+- `packages/sdk`
+- `examples`
+- `tests/adversarial`
+
+Required hardening:
+
+- Add `agentd` command surface or alias.
+- Add full demo.
+- Add manual DX runbook.
+- Add complete SDK examples.
+
+### 17. Interop Layer
+
+Owns adapter interfaces for:
+
+- MCP,
+- A2A,
+- OAPS,
+- OSP,
+- AP2,
+- x402,
+- Sardis.
+
+Rules:
+
+- These adapters map identity, cards, capabilities, delegation, policy, evidence, invocation, and payment/action flows where relevant.
+- Payment execution remains Sardis-specific.
+
+Required hardening:
+
+- Add `packages/adapters` with interface-only first pass.
+- Add mapping docs and example adapters.
+
+## Target Package Structure
+
+The target shape is:
+
+```text
+packages/
+  core/
+  crypto/
+  identity/
+  attestations/
+  cards/
+  discovery/
+  dht/
+  relay/
+  registry/
+  trust/
+  reputation/
+  policy/
+  delegation/
+  invocation/
+  evidence/
+  revocation/
+  incidents/
+  runtime-effect/
+  adapters/
+  daemon/
+  cli/
+  sdk/
+examples/
+  calendar-agent/
+  invoice-agent/
+  payment-agent/
+  malicious-agent/
+  requester-agent/
+  full-demo/
+docs/
+  inspection/
+  architecture/
+  protocol/
+  api/
+  cli/
+  sdk/
+  threat-model/
+  adr/
+```
+
+Implementation should respect existing package names first. Split packages only when it removes real complexity or matches the target architecture cleanly. Do not churn package names just to match the tree.
+
+## Security Rules
+
+- Deny by default for invalid signatures, active revocations, active kill switch, expired sessions, and broken evidence chains.
+- Discovery result never grants authority.
+- Trust score never grants permission.
+- Policy-before-execution is mandatory for invocation.
+- Evidence defaults to hash-only or redacted for sensitive payloads.
+- Signed objects use one canonical signing model.
+- DHT pointers are not trust roots.
+- Relay presence is not trust.
+
+## First Publishable Slice
+
+The first publishable v2 slice should include:
+
+1. Consolidated protocol object model.
+2. Canonical signer hardening.
+3. Version negotiation and typed error vocabulary.
+4. Identity v2 hardening.
+5. Signed AgentCards and capability ontology.
+6. Evidence v2 with signed events.
+7. Capability-query discovery with local/registry/well-known providers.
+8. DHT signed pointer records.
+9. Policy/trust/reputation v2 decision explanations.
+10. CLI/API/SDK demo path.

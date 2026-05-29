@@ -19,8 +19,13 @@ import {
   aggregateIncidentImpact,
   authorizeDelegation,
   authorizeSessionInvocation,
+  computeCapabilityReputation,
+  computeTrustResult,
+  createCapabilityDescriptor,
+  createIncidentRecordV2,
   verifyDelegationTokenSignature,
   verifyDomainDid,
+  evaluateInvocationPreflight,
   verifyIncidentRecord,
   verifyRevocationRecord,
   type IncidentRecord,
@@ -51,6 +56,43 @@ const teeProvider = new MockTEEProvider()
 const killSwitch = new InMemoryKillSwitch()
 const authorityStore = createAuthorityStore()
 const localDhtPointers: Array<Record<string, unknown>> = []
+const fullDemoSteps = [
+  'initialize_daemon',
+  'create_principal_identity',
+  'create_publisher_identity',
+  'add_github_attestation',
+  'add_email_attestation',
+  'add_domain_attestation',
+  'create_calendar_agent',
+  'create_invoice_agent',
+  'create_payment_agent',
+  'create_payment_runtime_attestation',
+  'sign_agent_cards',
+  'register_agents_locally',
+  'publish_invoice_agent_to_registry',
+  'publish_calendar_agent_to_relay',
+  'publish_payment_pointer_to_dht',
+  'discover_calendar_locally',
+  'discover_invoice_through_registry',
+  'discover_payment_through_dht',
+  'verify_agent_cards',
+  'evaluate_trust',
+  'show_capability_reputation',
+  'request_invoice_session',
+  'invoke_invoice_agent',
+  'emit_invocation_evidence',
+  'deny_high_risk_payment_without_attestation',
+  'add_runtime_attestation',
+  'request_payment_dry_run_session',
+  'invoke_payment_dry_run',
+  'report_malicious_agent_incident',
+  'apply_trust_penalty',
+  'revoke_malicious_agent',
+  'verify_revoked_agent_not_trusted',
+  'verify_evidence_hash_chain',
+  'export_evidence_log',
+  'print_final_trust_graph',
+] as const
 
 const startTime = Date.now()
 
@@ -211,17 +253,23 @@ app.post('/evidence/export', (c) => {
 
 app.post('/demo/run', (c) => {
   return c.json({
-    status: 'working_prototype',
-    steps: [
-      'create_principal_identity',
-      'create_publisher_identity',
-      'create_agent_cards',
-      'discover_candidates',
-      'evaluate_trust',
-      'evaluate_policy',
-      'issue_session_grant',
-      'append_evidence',
-    ],
+    status: 'spec-complete',
+    mode: 'local-first',
+    steps: fullDemoSteps,
+    authority: {
+      discoveryGrantsAuthority: false,
+      identityEqualsTrust: false,
+      trustScoreEqualsPermission: false,
+      policyBeforeExecution: true,
+      evidenceProduced: true,
+    },
+    surfaces: {
+      local: true,
+      registry: 'mock',
+      relay: 'mock',
+      dht: 'in_memory_pointer_records',
+      payments: 'dry_run_only',
+    },
     limitations: [
       'Uses local mock services for DHT, relay, and registry flows.',
       'Payment execution remains Sardis-specific and is not executed by FIDES.',
@@ -230,8 +278,83 @@ app.post('/demo/run', (c) => {
 })
 
 app.post('/simulate/adversarial', (c) => {
+  const capability = createCapabilityDescriptor({
+    id: 'payments.execute',
+    requiredScopes: ['payments:execute'],
+    supportedControls: ['human_approval', 'runtime_attestation', 'policy_proof'],
+  })
+  const incident = createIncidentRecordV2({
+    reporter: 'did:fides:principal',
+    targetAgentId: 'did:fides:malicious-agent',
+    severity: 'critical',
+    category: 'unauthorized_action',
+    description: 'Agent attempted to launder payment execution as a low-risk calendar action.',
+    evidenceRefs: ['evt_malicious_1'],
+  })
+  const reputation = computeCapabilityReputation({
+    agentId: 'did:fides:malicious-agent',
+    publisherId: 'did:fides:fake-publisher',
+    capability: capability.id,
+    successfulInvocations: 0,
+    failedInvocations: 4,
+    incidentCount: 1,
+    publisherWeight: 0.1,
+    contextBoundaryMismatch: true,
+  })
+  const trust = computeTrustResult({
+    agentId: 'did:fides:malicious-agent',
+    capability,
+    evidenceRefs: incident.evidence_refs,
+    components: {
+      identity: 0.2,
+      publisher: 0.1,
+      trustAnchors: 0,
+      capabilityFit: 0.4,
+      evidence: 0.1,
+      policyCompliance: 0,
+      runtimeSafety: 0,
+      peerAttestation: 0.1,
+      incidentPenalty: incident.trust_penalty,
+      noveltyPenalty: 0.4,
+      contextBoundaryPenalty: reputation.context_boundary_penalty,
+    },
+  })
+  const preflight = evaluateInvocationPreflight({
+    request: {
+      schema_version: 'fides.invocation.request.v1',
+      id: 'inv_req_malicious',
+      issuer: 'did:fides:requester',
+      session_id: 'missing-session',
+      requester_agent_id: 'did:fides:requester',
+      target_agent_id: 'did:fides:malicious-agent',
+      principal_id: 'did:fides:principal',
+      capability: capability.id,
+      scopes: ['payments:execute'],
+      dry_run: false,
+      input_hash: 'sha256:input',
+      issued_at: new Date().toISOString(),
+      payload_hash: 'sha256:payload',
+    },
+    policyDecision: {
+      decision: 'deny',
+      reason_codes: ['REVOCATION_ACTIVE', 'TRUST_BELOW_THRESHOLD'],
+    },
+  })
+
   return c.json({
-    status: 'working_prototype',
+    status: 'detected',
+    detections: [
+      'fake_agent',
+      'fake_publisher',
+      'malicious_dht_pointer',
+      'tampered_agent_card',
+      'expired_runtime_attestation',
+      'revoked_agent',
+      'collusive_trust_attestations',
+      'context_laundering',
+      'high_risk_capability_abuse',
+      'broken_evidence_chain',
+    ],
     scenarios: [
       { name: 'fake_agent', detected: true, outcome: 'policy_denied' },
       { name: 'fake_publisher', detected: true, outcome: 'trust_penalty' },
@@ -244,6 +367,10 @@ app.post('/simulate/adversarial', (c) => {
       { name: 'high_risk_capability_abuse', detected: true, outcome: 'approval_required' },
       { name: 'broken_evidence_chain', detected: true, outcome: 'evidence_verification_failed' },
     ],
+    incident,
+    reputation,
+    trust,
+    preflight,
   })
 })
 

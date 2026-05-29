@@ -248,13 +248,24 @@ describe('Agentd Service Routes', () => {
     it('serves demo and adversarial simulation endpoints', async () => {
       const demo = await app.request('/demo/run', { method: 'POST' })
       expect(demo.status).toBe(200)
-      expect((await demo.json()).status).toBe('working_prototype')
+      const demoData = await demo.json()
+      expect(demoData.status).toBe('spec-complete')
+      expect(demoData.steps).toContain('discover_payment_through_dht')
+      expect(demoData.steps).toContain('verify_evidence_hash_chain')
+      expect(demoData.authority).toMatchObject({
+        discoveryGrantsAuthority: false,
+        policyBeforeExecution: true,
+      })
 
       const sim = await app.request('/simulate/adversarial', { method: 'POST' })
       expect(sim.status).toBe(200)
       const data = await sim.json()
+      expect(data.status).toBe('detected')
       expect(data.scenarios.map((scenario: any) => scenario.name)).toContain('tampered_agent_card')
       expect(data.scenarios.every((scenario: any) => scenario.detected)).toBe(true)
+      expect(data.detections).toContain('context_laundering')
+      expect(data.trust.band).toBe('unknown')
+      expect(data.preflight.status).toBe('denied')
     })
 
     it('serves root evidence verify/export aliases', async () => {

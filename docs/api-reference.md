@@ -17,6 +17,10 @@ Current implementation anchors:
 - `POST /agent-cards/:id/sign`
 - `POST /agent-cards/:id/verify`
 - `GET /agent-cards/:id`
+- `POST /agents/register`
+- `GET /agents`
+- `GET /agents/:id`
+- `POST /discover`
 - `POST /v1/policy/evaluate`
 - `POST /v1/sessions`
 - `GET /v1/sessions/:id`
@@ -56,3 +60,10 @@ agent identity key using the canonical AgentCard signing model, and
 `POST /agent-cards/:id/verify` verifies the signed card when present. These
 routes are prototype-local until the daemon storage layer is migrated to
 durable SQLite-backed identity/card storage.
+
+`POST /agents/register` registers a locally stored AgentCard as a discovery
+candidate. `GET /agents` and `GET /agents/:id` expose local registration state
+and the associated AgentCard. `POST /discover` searches registered local agents
+by capability. Discovery responses always include `authorityGranted: false`;
+discovery is candidate resolution only, and invocation authority still requires
+policy evaluation and scoped session grants.

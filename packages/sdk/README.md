@@ -60,10 +60,17 @@ const card = await client.cards.create({
 })
 const signed = await client.cards.sign({ id: identity.identity.did })
 const verified = await client.cards.verify(identity.identity.did)
+
+await client.agents.register({ agentCardId: identity.identity.did })
+const agents = await client.agents.list()
+const candidateAgent = await client.agents.inspect(identity.identity.did)
+const candidates = await client.discovery.find({ capability: 'invoice.reconcile' })
 ```
 
 The local identity API returns public identity data only; it does not return
 private keys. AgentCard signing uses the daemon-held local identity key.
+Registration and discovery produce candidate records only; discovery does not
+grant authority to invoke the agent.
 
 ```typescript
 import { AgentdClient } from '@fides/sdk'

@@ -78,6 +78,13 @@ interface LocalIdentityRecord {
 const localIdentities = new Map<string, LocalIdentityRecord>()
 const localAgentCards = new Map<string, AgentCard>()
 const localSignedAgentCards = new Map<string, SignedAgentCard>()
+interface LocalRegisteredAgent {
+  agentId: string
+  cardId: string
+  registeredAt: string
+  signed: boolean
+}
+const localAgents = new Map<string, LocalRegisteredAgent>()
 const fullDemoSteps = [
   'initialize_daemon',
   'create_principal_identity',
@@ -200,6 +207,16 @@ function safeIdentityRecord(record: LocalIdentityRecord): Record<string, unknown
   }
 }
 
+function safeRegisteredAgent(record: LocalRegisteredAgent): Record<string, unknown> {
+  const card = localAgentCards.get(record.cardId)
+  return {
+    ...record,
+    signed: localSignedAgentCards.has(record.cardId) || record.signed,
+    capabilities: card?.capabilities.map(capability => capability.id) ?? [],
+    authorityGranted: false,
+  }
+}
+
 // Global middleware stack
 app.use('*', metricsMiddleware(collector))
 app.use('*', logger())
@@ -250,6 +267,21 @@ app.use('/agent-cards', async (c, next) => {
   return auth(c, next)
 })
 app.use('/agent-cards/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/agents', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/agents/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/discover', async (c, next) => {
   if (c.req.method === 'GET') return next()
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
@@ -447,6 +479,101 @@ app.get('/agent-cards/:id', (c) => {
   return c.json({
     card,
     signed: localSignedAgentCards.get(id) ?? null,
+  })
+})
+
+// ─── Root FIDES v2 Agent Registration and Discovery API ──────────
+app.post('/agents/register', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const cardId = typeof body.agentCardId === 'string'
+    ? body.agentCardId
+    : typeof body.cardId === 'string'
+      ? body.cardId
+      : typeof body.id === 'string'
+        ? body.id
+        : typeof body.agent_id === 'string'
+          ? body.agent_id
+          : undefined
+  if (!cardId) {
+    return c.json({ error: 'agentCardId is required' }, 400)
+  }
+
+  const card = localAgentCards.get(cardId)
+  if (!card) {
+    return c.json({ error: 'AgentCard not found', cardId }, 404)
+  }
+
+  const record: LocalRegisteredAgent = {
+    agentId: card.identity.did,
+    cardId: card.id,
+    registeredAt: new Date().toISOString(),
+    signed: localSignedAgentCards.has(card.id),
+  }
+  localAgents.set(record.agentId, record)
+
+  return c.json({
+    registered: true,
+    ...safeRegisteredAgent(record),
+    reason: 'registration records a candidate only; it does not grant invocation authority',
+  }, 201)
+})
+
+app.get('/agents', (c) => {
+  return c.json({
+    agents: Array.from(localAgents.values()).map(safeRegisteredAgent),
+    authorityGranted: false,
+  })
+})
+
+app.get('/agents/:id', (c) => {
+  const id = c.req.param('id')
+  const record = localAgents.get(id)
+  if (!record) {
+    return c.json({ error: 'agent not registered', id }, 404)
+  }
+
+  return c.json({
+    ...safeRegisteredAgent(record),
+    card: localAgentCards.get(record.cardId) ?? null,
+    signedCard: localSignedAgentCards.get(record.cardId) ?? null,
+  })
+})
+
+app.post('/discover', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const capability = typeof body.capability === 'string' ? body.capability : undefined
+  if (!capability) {
+    return c.json({ error: 'capability is required' }, 400)
+  }
+
+  const candidates = Array.from(localAgents.values()).flatMap((record) => {
+    const card = localAgentCards.get(record.cardId)
+    if (!card) return []
+
+    const descriptor = card.capabilities.find(candidate => candidate.id === capability)
+    if (!descriptor) return []
+
+    return [{
+      agentId: record.agentId,
+      cardId: record.cardId,
+      capability,
+      signed: localSignedAgentCards.has(record.cardId),
+      authorityGranted: false,
+      descriptor,
+      card,
+      reasons: [
+        'candidate_matched_capability',
+        'discovery_does_not_grant_authority',
+      ],
+    }]
+  })
+
+  return c.json({
+    query: body,
+    candidates,
+    count: candidates.length,
+    authorityGranted: false,
+    explanation: 'Discovery returns candidates only. Policy evaluation and scoped session grants are required before invocation.',
   })
 })
 

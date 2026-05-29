@@ -107,4 +107,41 @@ describe('FidesClient', () => {
       'http://localhost:7345/agent-cards/card_1',
     ])
   })
+
+  it('uses root agent registration and discovery APIs served by local agentd', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init })
+      if (String(url).endsWith('/agents/register')) {
+        return new Response(JSON.stringify({ registered: true, agentId: 'did:fides:agent', authorityGranted: false }), { status: 201 })
+      }
+      if (String(url).endsWith('/agents/did%3Afides%3Aagent')) {
+        return new Response(JSON.stringify({ agentId: 'did:fides:agent', card: {} }), { status: 200 })
+      }
+      if (String(url).endsWith('/agents')) {
+        return new Response(JSON.stringify({ agents: [{ agentId: 'did:fides:agent' }] }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ authorityGranted: false, candidates: [{ agentId: 'did:fides:agent' }] }), { status: 200 })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+
+    await expect(client.agents.register({ agentCardId: 'did:fides:agent' })).resolves.toMatchObject({
+      registered: true,
+      authorityGranted: false,
+    })
+    await expect(client.agents.list()).resolves.toMatchObject({ agents: [{ agentId: 'did:fides:agent' }] })
+    await expect(client.agents.inspect('did:fides:agent')).resolves.toMatchObject({ agentId: 'did:fides:agent' })
+    await expect(client.discovery.find({ capability: 'invoice.reconcile' })).resolves.toMatchObject({
+      authorityGranted: false,
+      candidates: [{ agentId: 'did:fides:agent' }],
+    })
+
+    expect(calls.map(call => call.url)).toEqual([
+      'http://localhost:7345/agents/register',
+      'http://localhost:7345/agents',
+      'http://localhost:7345/agents/did%3Afides%3Aagent',
+      'http://localhost:7345/discover',
+    ])
+  })
 })

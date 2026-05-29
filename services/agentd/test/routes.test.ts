@@ -316,6 +316,54 @@ describe('Agentd Service Routes', () => {
       expect((await fetched.json()).card.id).toBe(identity.did)
     })
 
+    it('registers local agents and discovers candidates by capability without granting authority', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Invoice Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: 'invoice.reconcile', requiredScopes: ['invoice:read'] }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+
+      const registered = await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+      expect(registered.status).toBe(201)
+      expect((await registered.json()).authorityGranted).toBe(false)
+
+      const listed = await app.request('/agents')
+      expect(listed.status).toBe(200)
+      expect((await listed.json()).agents).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agentId: identity.did }),
+      ]))
+
+      const discovered = await app.request('/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability: 'invoice.reconcile' }),
+      })
+      expect(discovered.status).toBe(200)
+      const discoveredData = await discovered.json()
+      expect(discoveredData.authorityGranted).toBe(false)
+      expect(discoveredData.candidates).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          agentId: identity.did,
+          capability: 'invoice.reconcile',
+          signed: true,
+        }),
+      ]))
+    })
+
     it('serves local DHT publish and find endpoints', async () => {
       const publish = await app.request('/dht/publish', {
         method: 'POST',

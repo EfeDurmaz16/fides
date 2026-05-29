@@ -1,4 +1,11 @@
-import type { AgentCard, SignedAgentCard } from '@fides/core'
+import {
+  cardSupportsCapability,
+  createDiscoveryCandidate,
+  type AgentCard,
+  type DiscoveryCandidate,
+  type DiscoveryQuery,
+  type SignedAgentCard,
+} from '@fides/core'
 import { DiscoveryProvider } from './provider.js'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -23,6 +30,24 @@ export class LocalDiscoveryProvider implements DiscoveryProvider {
   async resolve(did: string): Promise<AgentCard | null> {
     const store = this.loadStore()
     return store.get(did) || null
+  }
+
+  async discover(query: DiscoveryQuery): Promise<DiscoveryCandidate[]> {
+    return this.list()
+      .filter(card => cardSupportsCapability(card, query.capability))
+      .map((card, index) => createDiscoveryCandidate({
+        provider: this.name,
+        card,
+        capability: query.capability,
+        verified: false,
+        rank: 100 - index,
+        explanations: [
+          query.capability
+            ? `Local AgentCard advertises ${query.capability}`
+            : 'Local AgentCard matched discovery query',
+        ],
+      }))
+      .slice(0, query.limit ?? Number.POSITIVE_INFINITY)
   }
 
   async register(card: SignedAgentCard): Promise<void> {

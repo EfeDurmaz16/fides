@@ -1,9 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
 import { DiscoveryOrchestrator } from '../src/orchestrator.js'
+import { LocalDiscoveryProvider } from '../src/local-provider.js'
 import { WellKnownDiscoveryProvider } from '../src/well-known-provider.js'
 import { RegistryDiscoveryProvider } from '../src/registry-provider.js'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import type { DiscoveryProvider } from '../src/provider.js'
-import type { AgentCard } from '@fides/core'
+import { createCapabilityDescriptor, createDiscoveryQuery, type AgentCard } from '@fides/core'
 
 describe('DiscoveryOrchestrator', () => {
   const mockCard: AgentCard = {
@@ -69,5 +72,71 @@ describe('DiscoveryOrchestrator', () => {
     const result = await orchestrator.resolve('did:fides:agent1')
 
     expect(result).toEqual(mockCard)
+  })
+
+  it('discovers capability candidates through provider discover implementations', async () => {
+    const provider: DiscoveryProvider = {
+      name: 'query-provider',
+      resolve: vi.fn(),
+      discover: vi.fn().mockResolvedValue([{
+        schema_version: 'fides.discovery_candidate.v1',
+        provider: 'query-provider',
+        agentId: mockCard.id,
+        card: mockCard,
+        capability: 'calendar.schedule',
+        verified: true,
+        rank: 10,
+        explanations: ['matched'],
+        errors: [],
+      }]),
+    }
+    const query = createDiscoveryQuery({ capability: 'calendar.schedule' })
+
+    const candidates = await new DiscoveryOrchestrator([provider]).discover(query)
+
+    expect(candidates).toHaveLength(1)
+    expect(provider.discover).toHaveBeenCalledWith(query)
+  })
+
+  it('falls back to legacy DID resolution when requester_agent_id is present', async () => {
+    const card: AgentCard = {
+      ...mockCard,
+      capabilities: [createCapabilityDescriptor({ id: 'calendar.schedule' })],
+    }
+    const provider: DiscoveryProvider = {
+      name: 'legacy-provider',
+      resolve: vi.fn().mockResolvedValue(card),
+    }
+
+    const candidates = await new DiscoveryOrchestrator([provider]).discover(createDiscoveryQuery({
+      capability: 'calendar.schedule',
+      requester_agent_id: card.id,
+    }))
+
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0]).toMatchObject({
+      provider: 'legacy-provider',
+      agentId: card.id,
+      capability: 'calendar.schedule',
+      verified: false,
+    })
+  })
+
+  it('local provider discovers registered cards by capability', async () => {
+    const path = join(tmpdir(), `fides-local-agents-${crypto.randomUUID()}.json`)
+    const provider = new LocalDiscoveryProvider({ storePath: path })
+    const card: AgentCard = {
+      ...mockCard,
+      capabilities: [createCapabilityDescriptor({ id: 'invoice.reconcile' })],
+    }
+    provider.registerCard(card)
+
+    const candidates = await provider.discover(createDiscoveryQuery({
+      capability: 'invoice.reconcile',
+    }))
+
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0].provider).toBe('local')
+    expect(candidates[0].explanations[0]).toContain('invoice.reconcile')
   })
 })

@@ -5,7 +5,8 @@
  */
 
 import type { SignedObject } from './canonical-signer.js'
-import { canonicalDigest } from './canonical-signer.js'
+import { canonicalDigest, signObject, verifyObject } from './canonical-signer.js'
+import { hashProtocolPayload } from './protocol.js'
 import * as ed from '@noble/ed25519'
 import { bytesToHex } from '@noble/hashes/utils'
 
@@ -39,6 +40,27 @@ export interface SessionGrant {
   boundTo?: string
 }
 
+export interface SessionGrantV2 {
+  schema_version: 'fides.session_grant.v1'
+  session_id: string
+  requester_agent_id: string
+  target_agent_id: string
+  principal_id: string
+  capability: string
+  scopes: string[]
+  constraints: Record<string, unknown>
+  policy_hash: string
+  trust_result_hash: string
+  issued_at: string
+  expires_at: string
+  nonce: string
+  audience: string[]
+  issuer: string
+  payload_hash: string
+}
+
+export type SignedSessionGrantV2 = SignedObject<SessionGrantV2>
+
 export interface DelegationInput {
   delegator: string
   delegatee: string
@@ -46,6 +68,22 @@ export interface DelegationInput {
   constraints: DelegationConstraint
   expiresAt: string
   audience?: string[]
+}
+
+export interface SessionGrantV2Input {
+  requesterAgentId: string
+  targetAgentId: string
+  principalId: string
+  capability: string
+  scopes: string[]
+  constraints?: Record<string, unknown>
+  policyHash: string
+  trustResultHash: string
+  audience?: string[]
+  issuer: string
+  issuedAt?: string
+  expiresAt: string
+  nonce?: string
 }
 
 export function createDelegationToken(input: DelegationInput): DelegationToken {
@@ -60,6 +98,31 @@ export function createDelegationToken(input: DelegationInput): DelegationToken {
     nonce: crypto.randomUUID(),
     audience: input.audience,
     signature: '',
+  }
+}
+
+export function createSessionGrantV2(input: SessionGrantV2Input): SessionGrantV2 {
+  const payload = {
+    schema_version: 'fides.session_grant.v1' as const,
+    session_id: crypto.randomUUID(),
+    requester_agent_id: input.requesterAgentId,
+    target_agent_id: input.targetAgentId,
+    principal_id: input.principalId,
+    capability: input.capability,
+    scopes: input.scopes,
+    constraints: input.constraints ?? {},
+    policy_hash: input.policyHash,
+    trust_result_hash: input.trustResultHash,
+    issued_at: input.issuedAt ?? new Date().toISOString(),
+    expires_at: input.expiresAt,
+    nonce: input.nonce ?? crypto.randomUUID(),
+    audience: input.audience ?? [input.targetAgentId],
+    issuer: input.issuer,
+  }
+
+  return {
+    ...payload,
+    payload_hash: hashProtocolPayload(payload),
   }
 }
 
@@ -99,6 +162,10 @@ export function isSessionExpired(session: SessionGrant): boolean {
   return new Date(session.expiresAt) < new Date()
 }
 
+export function isSessionGrantV2Expired(session: SessionGrantV2, now: Date = new Date()): boolean {
+  return new Date(session.expires_at) <= now
+}
+
 export function validateDelegationToken(token: DelegationToken): { valid: boolean; errors: string[] } {
   const errors: string[] = []
   if (!token.id) errors.push('DelegationToken.id is required')
@@ -109,6 +176,36 @@ export function validateDelegationToken(token: DelegationToken): { valid: boolea
   if (!token.signature) errors.push('DelegationToken.signature is required')
   if (isDelegationExpired(token)) errors.push('DelegationToken is expired')
   return { valid: errors.length === 0, errors }
+}
+
+export function validateSessionGrantV2(session: SessionGrantV2): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+  if (session.schema_version !== 'fides.session_grant.v1') errors.push('SessionGrant.schema_version is invalid')
+  if (!session.session_id) errors.push('SessionGrant.session_id is required')
+  if (!session.requester_agent_id) errors.push('SessionGrant.requester_agent_id is required')
+  if (!session.target_agent_id) errors.push('SessionGrant.target_agent_id is required')
+  if (!session.principal_id) errors.push('SessionGrant.principal_id is required')
+  if (!session.capability) errors.push('SessionGrant.capability is required')
+  if (!session.scopes || session.scopes.length === 0) errors.push('SessionGrant.scopes must not be empty')
+  if (!session.policy_hash) errors.push('SessionGrant.policy_hash is required')
+  if (!session.trust_result_hash) errors.push('SessionGrant.trust_result_hash is required')
+  if (!session.nonce) errors.push('SessionGrant.nonce is required')
+  if (!session.issuer) errors.push('SessionGrant.issuer is required')
+  if (!session.expires_at) errors.push('SessionGrant.expires_at is required')
+  if (session.expires_at && isSessionGrantV2Expired(session)) errors.push('SessionGrant is expired')
+  return { valid: errors.length === 0, errors }
+}
+
+export function signSessionGrantV2(
+  session: SessionGrantV2,
+  privateKey: Uint8Array,
+  verificationMethod: string
+): Promise<SignedSessionGrantV2> {
+  return signObject(session, privateKey, { verificationMethod, proofPurpose: 'delegation' })
+}
+
+export function verifySignedSessionGrantV2(signed: SignedSessionGrantV2): Promise<boolean> {
+  return verifyObject(signed)
 }
 
 export interface RevokedSession extends SessionGrant {

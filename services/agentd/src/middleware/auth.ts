@@ -47,7 +47,9 @@ export function agentdScopeForRequest(method: string, path: string): string {
     return AGENTD_API_SCOPES.authorityWrite
   }
   if (path === '/v1/authorize') return AGENTD_API_SCOPES.authorizeWrite
-  if (path === '/v1/evidence' || path === '/evidence/verify' || path === '/evidence/export') return AGENTD_API_SCOPES.evidenceWrite
+  if (path === '/v1/evidence' || path === '/evidence' || path === '/evidence/verify' || path === '/evidence/export') {
+    return AGENTD_API_SCOPES.evidenceWrite
+  }
   if (path === '/v1/attest') return AGENTD_API_SCOPES.attestWrite
   if (path === '/v1/killswitch/engage' || path === '/v1/killswitch/disengage') {
     return AGENTD_API_SCOPES.killSwitchWrite

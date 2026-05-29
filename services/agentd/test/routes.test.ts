@@ -169,6 +169,24 @@ describe('Agentd Service Routes', () => {
       expect((await res.json()).error).toContain('SERVICE_API_KEY is required in production')
     })
 
+    it('fails closed for root evidence creation in production when API key is not configured', async () => {
+      process.env.NODE_ENV = 'production'
+      delete process.env.SERVICE_API_KEY
+
+      const res = await app.request('/evidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'capability.invoked',
+          actor: TEST_DID,
+          input: { secret: 'blocked' },
+        }),
+      })
+
+      expect(res.status).toBe(503)
+      expect((await res.json()).error).toContain('SERVICE_API_KEY is required in production')
+    })
+
     it('enforces scoped agentd API keys when configured', async () => {
       process.env.AGENTD_API_KEYS = JSON.stringify([
         { key: 'evidence-key', scopes: ['agentd:evidence:write'] },
@@ -185,6 +203,17 @@ describe('Agentd Service Routes', () => {
         }),
       })
       expect(accepted.status).toBe(201)
+
+      const rootAccepted = await app.request('/evidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'evidence-key' },
+        body: JSON.stringify({
+          type: 'capability.invoked',
+          actor: TEST_DID,
+          input: { redacted: true },
+        }),
+      })
+      expect(rootAccepted.status).toBe(201)
 
       const forbidden = await app.request('/v1/killswitch/engage', {
         method: 'POST',

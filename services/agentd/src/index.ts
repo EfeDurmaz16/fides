@@ -1981,29 +1981,412 @@ app.get('/evidence/:eventId', (c) => {
   return c.json({ event, authorityGranted: false })
 })
 
-app.post('/demo/run', (c) => {
-  return c.json({
-    status: 'spec-complete',
+async function createDemoAgent(input: {
+  name: string
+  capability: ReturnType<typeof createCapabilityDescriptor>
+  publisher?: PublisherIdentity
+  runtimeAttestations?: RuntimeAttestation[]
+}): Promise<{ identity: LocalIdentityRecord; card: AgentCard; signed: SignedAgentCard; registration: LocalRegisteredAgent }> {
+  const identity = await createLocalIdentity('agent', { name: input.name })
+  localIdentities.set(identity.identity.did, identity)
+  const now = new Date().toISOString()
+  const card: AgentCard = {
+    schema_version: 'fides.agent_card.v1',
+    id: identity.identity.did,
+    agent_id: identity.identity.did,
+    identity: identity.identity as AgentIdentity,
+    ...(input.publisher ? { publisher: input.publisher } : {}),
+    capabilities: [input.capability],
+    endpoints: [],
+    policies: [{
+      requiresRuntimeAttestation: input.capability.requiresRuntimeAttestation,
+      requiresApproval: input.capability.requiresApproval,
+    }],
+    publicKeys: [{ id: `${identity.identity.did}#ed25519`, type: 'Ed25519', publicKey: identity.publicKeyHex }],
+    runtimeAttestations: input.runtimeAttestations ?? [],
+    protocolVersions: ['fides.v2.0'],
+    createdAt: now,
+    updatedAt: now,
+  }
+  localAgentCards.set(card.id, card)
+  const signed = await signAgentCard(card, Buffer.from(identity.privateKeyHex, 'hex'), card.identity.did)
+  localSignedAgentCards.set(card.id, signed)
+  const registration = {
+    agentId: card.identity.did,
+    cardId: card.id,
+    registeredAt: now,
+    signed: true,
+  }
+  localAgents.set(registration.agentId, registration)
+  return { identity, card, signed, registration }
+}
+
+async function runLocalFullDemo() {
+  const principal = await createLocalIdentity('principal', { name: 'Demo Principal' })
+  const publisher = await createLocalIdentity('publisher', { name: 'Demo Publisher', domain: 'demo.fides.local' })
+  const requester = await createLocalIdentity('agent', { name: 'Requester Agent' })
+  localIdentities.set(principal.identity.did, principal)
+  localIdentities.set(publisher.identity.did, publisher)
+  localIdentities.set(requester.identity.did, requester)
+
+  const calendarCapability = createCapabilityDescriptor({
+    id: 'calendar.schedule',
+    riskLevel: 'low',
+    requiredScopes: ['calendar:write'],
+    supportedControls: ['dry_run', 'policy_proof'],
+    supportsDryRun: true,
+    supportsPolicyProof: true,
+  })
+  const invoiceCapability = createCapabilityDescriptor({
+    id: 'invoice.reconcile',
+    riskLevel: 'medium',
+    requiredScopes: ['invoice:read'],
+    supportedControls: ['dry_run', 'policy_proof'],
+    supportsDryRun: true,
+    supportsPolicyProof: true,
+  })
+  const paymentCapability = createCapabilityDescriptor({
+    id: 'payments.prepare',
+    riskLevel: 'high',
+    requiredScopes: ['payments:prepare'],
+    supportedControls: ['dry_run', 'human_approval', 'runtime_attestation', 'policy_proof'],
+    supportsDryRun: true,
+    supportsHumanApproval: true,
+    supportsPolicyProof: true,
+  })
+
+  const calendar = await createDemoAgent({ name: 'Calendar Agent', capability: calendarCapability, publisher: publisher.identity as PublisherIdentity })
+  const invoice = await createDemoAgent({ name: 'Invoice Agent', capability: invoiceCapability, publisher: publisher.identity as PublisherIdentity })
+  const payment = await createDemoAgent({ name: 'Payment Agent', capability: paymentCapability, publisher: publisher.identity as PublisherIdentity })
+
+  const registryRecord = localRegistryRecordFor(invoice.card.id)
+  if (registryRecord) localRegistryRecords.set(String(registryRecord.id), registryRecord)
+  const relayRecord = {
+    id: `relay_${calendar.card.identity.did}`,
+    agentId: calendar.card.identity.did,
+    cardId: calendar.card.id,
+    capabilities: calendar.card.capabilities.map(capability => capability.id),
+    endpointHints: ['local://calendar-agent'],
+    online: true,
+    registeredAt: new Date().toISOString(),
+    authorityGranted: false,
+    source: 'agentd-local-relay',
+  }
+  localRelayRecords.set(calendar.card.identity.did, relayRecord)
+  const dhtPointer = {
+    id: crypto.randomUUID(),
+    capability: paymentCapability.id,
+    agentId: payment.card.identity.did,
+    agentCardUrl: `local://agent-cards/${payment.card.id}`,
+    publishedAt: new Date().toISOString(),
+    source: 'agentd-in-memory-dht',
+  }
+  localDhtPointers.push(dhtPointer)
+
+  const calendarDiscovery = localDiscoveryResult({ capability: calendarCapability.id }, 'local')
+  const invoiceRegistryRecords = Array.from(localRegistryRecords.values()).filter((record) => (
+    (record.capabilities as string[] | undefined)?.includes(invoiceCapability.id)
+  ))
+  const paymentDhtPointers = findLocalDhtPointers(paymentCapability.id)
+  const verifiedCards = await Promise.all([calendar.signed, invoice.signed, payment.signed].map(verifySignedAgentCard))
+
+  const invoiceTrust = computeLocalTrustResult(invoice.card.identity.did, invoiceCapability.id)
+  const invoiceReputation = computeCapabilityReputation({
+    agentId: invoice.card.identity.did,
+    publisherId: publisher.identity.did,
+    capability: invoiceCapability.id,
+    successfulInvocations: 8,
+    failedInvocations: 1,
+    incidentCount: 0,
+    publisherWeight: 0.7,
+  })
+  localReputationRecords.set(localCapabilityKey(invoice.card.identity.did, invoiceCapability.id), invoiceReputation)
+
+  const invoiceSessionTrust = computeLocalTrustResult(invoice.card.identity.did, invoiceCapability.id)
+  const invoicePolicy = evaluateFidesPolicy({
+    principalId: principal.identity.did,
+    requesterAgentId: requester.identity.did,
+    targetAgentId: invoice.card.identity.did,
+    capability: invoiceCapability,
+    trustResult: invoiceSessionTrust!,
+    requestedScopes: ['invoice:read'],
+  })
+  const invoiceSession = createSessionGrantV2({
+    requesterAgentId: requester.identity.did,
+    targetAgentId: invoice.card.identity.did,
+    principalId: principal.identity.did,
+    capability: invoiceCapability.id,
+    scopes: ['invoice:read'],
+    constraints: {},
+    policyHash: hashProtocolPayload(invoicePolicy),
+    trustResultHash: hashProtocolPayload(invoiceSessionTrust),
+    audience: [invoice.card.identity.did],
+    issuer: 'did:fides:agentd:local',
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+  })
+  localSessionGrants.set(invoiceSession.session_id, { session: invoiceSession, policy: invoicePolicy, trust: invoiceSessionTrust! })
+  const invoiceSessionEvidence = appendRootEvidence({
+    type: 'session.granted',
+    actor: requester.identity.did,
+    subject: invoice.card.identity.did,
+    principal: principal.identity.did,
+    capability: invoiceCapability.id,
+    policy: invoicePolicy,
+    decision: invoicePolicy.decision,
+    risk_level: invoiceCapability.riskLevel,
+    privacy_mode: 'hash_only',
+    metadata: { session_id: invoiceSession.session_id, demo: true },
+  })
+
+  const invoiceRequest = createInvocationRequest({
+    issuer: requester.identity.did,
+    sessionGrant: invoiceSession,
+    input: { invoiceId: 'inv_demo_001' },
+    dryRun: false,
+    inputSchema: invoiceCapability.inputSchema,
+    outputSchema: invoiceCapability.outputSchema,
+  })
+  const invoicePreflight = evaluateInvocationPreflight({ request: invoiceRequest, policyDecision: invoicePolicy })
+  const invoiceInvokeEvidence = appendRootEvidence({
+    type: 'capability.invoked',
+    actor: requester.identity.did,
+    subject: invoice.card.identity.did,
+    principal: principal.identity.did,
+    capability: invoiceCapability.id,
+    input: { invoiceId: 'inv_demo_001' },
+    policy_hash: invoiceSession.policy_hash,
+    decision: invoicePolicy.decision,
+    privacy_mode: 'hash_only',
+    metadata: { session_id: invoiceSession.session_id, demo: true },
+  })
+  const invoiceCompleteEvidence = appendRootEvidence({
+    type: 'capability.completed',
+    actor: invoice.card.identity.did,
+    subject: requester.identity.did,
+    principal: principal.identity.did,
+    capability: invoiceCapability.id,
+    output: { reconciled: true },
+    policy_hash: invoiceSession.policy_hash,
+    decision: invoicePreflight.can_execute ? 'completed' : invoicePreflight.status,
+    privacy_mode: 'hash_only',
+    metadata: { session_id: invoiceSession.session_id, demo: true },
+  })
+
+  const paymentTrustMissingAttestation = computeLocalTrustResult(payment.card.identity.did, paymentCapability.id)!
+  const paymentPolicyWithoutAttestation = evaluateFidesPolicy({
+    principalId: principal.identity.did,
+    requesterAgentId: requester.identity.did,
+    targetAgentId: payment.card.identity.did,
+    capability: paymentCapability,
+    trustResult: paymentTrustMissingAttestation,
+    requestedScopes: ['payments:prepare'],
+  })
+  const paymentDeniedEvidence = appendRootEvidence({
+    type: 'session.denied',
+    actor: requester.identity.did,
+    subject: payment.card.identity.did,
+    principal: principal.identity.did,
+    capability: paymentCapability.id,
+    policy: paymentPolicyWithoutAttestation,
+    decision: paymentPolicyWithoutAttestation.decision,
+    risk_level: paymentCapability.riskLevel,
+    privacy_mode: 'hash_only',
+    metadata: { demo: true, reason: 'missing_runtime_attestation' },
+  })
+
+  const paymentAttestation = await runtimeAttestationProvider.issue({
+    agentId: payment.card.identity.did,
+    codeHash: `sha256:${'a'.repeat(64)}`,
+    runtimeHash: `sha256:${'b'.repeat(64)}`,
+    policyHash: `sha256:${'c'.repeat(64)}`,
+  })
+  localRuntimeAttestations.set(paymentAttestation.attestation_id, paymentAttestation)
+  const paymentCard = {
+    ...payment.card,
+    runtimeAttestations: [paymentAttestation],
+    updatedAt: new Date().toISOString(),
+  }
+  localAgentCards.set(paymentCard.id, paymentCard)
+
+  const paymentTrust = computeLocalTrustResult(payment.card.identity.did, paymentCapability.id)!
+  const paymentPolicy = evaluateFidesPolicy({
+    principalId: principal.identity.did,
+    requesterAgentId: requester.identity.did,
+    targetAgentId: payment.card.identity.did,
+    capability: paymentCapability,
+    trustResult: paymentTrust,
+    requestedScopes: ['payments:prepare'],
+    runtimeAttestationValid: await runtimeAttestationProvider.verify(paymentAttestation),
+  })
+  const paymentSession = createSessionGrantV2({
+    requesterAgentId: requester.identity.did,
+    targetAgentId: payment.card.identity.did,
+    principalId: principal.identity.did,
+    capability: paymentCapability.id,
+    scopes: ['payments:prepare'],
+    constraints: { dryRunOnly: true },
+    policyHash: hashProtocolPayload(paymentPolicy),
+    trustResultHash: hashProtocolPayload(paymentTrust),
+    audience: [payment.card.identity.did],
+    issuer: 'did:fides:agentd:local',
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+  })
+  localSessionGrants.set(paymentSession.session_id, { session: paymentSession, policy: paymentPolicy, trust: paymentTrust })
+  const paymentDryRunRequest = createInvocationRequest({
+    issuer: requester.identity.did,
+    sessionGrant: paymentSession,
+    input: { paymentId: 'pay_demo_001', amount: 100, currency: 'USD' },
+    dryRun: true,
+    inputSchema: paymentCapability.inputSchema,
+    outputSchema: paymentCapability.outputSchema,
+  })
+  const paymentDryRunPreflight = evaluateInvocationPreflight({ request: paymentDryRunRequest, policyDecision: paymentPolicy })
+  const paymentDryRunEvidence = appendRootEvidence({
+    type: paymentDryRunPreflight.can_execute ? 'capability.completed' : 'capability.failed',
+    actor: payment.card.identity.did,
+    subject: requester.identity.did,
+    principal: principal.identity.did,
+    capability: paymentCapability.id,
+    output: paymentDryRunPreflight.can_execute ? { dryRun: true, prepared: true } : undefined,
+    policy_hash: paymentSession.policy_hash,
+    decision: paymentDryRunPreflight.can_execute ? 'completed' : paymentDryRunPreflight.status,
+    privacy_mode: 'hash_only',
+    metadata: { session_id: paymentSession.session_id, demo: true },
+  })
+
+  const malicious = await createDemoAgent({
+    name: 'Malicious Fake Agent',
+    capability: createCapabilityDescriptor({ id: 'calendar.schedule', riskLevel: 'low', requiredScopes: ['calendar:write'] }),
+    publisher: publisher.identity as PublisherIdentity,
+  })
+  const incident = createIncidentRecordV2({
+    reporter: principal.identity.did,
+    targetAgentId: malicious.card.identity.did,
+    severity: 'critical',
+    category: 'unauthorized_action',
+    description: 'Demo malicious agent attempted to launder a high-risk action through a low-risk capability.',
+    evidenceRefs: [paymentDeniedEvidence.event_id],
+  })
+  localIncidentRecords.set(incident.id, incident)
+  const maliciousReputation = computeCapabilityReputation({
+    agentId: malicious.card.identity.did,
+    publisherId: publisher.identity.did,
+    capability: 'calendar.schedule',
+    successfulInvocations: 0,
+    failedInvocations: 3,
+    incidentCount: 1,
+    publisherWeight: 0.1,
+    contextBoundaryMismatch: true,
+  })
+  localReputationRecords.set(localCapabilityKey(malicious.card.identity.did, 'calendar.schedule'), maliciousReputation)
+  const revocation = createRevocationRecordV2({
+    issuer: principal.identity.did,
+    targetType: 'agent',
+    targetId: malicious.card.identity.did,
+    reason: 'Demo malicious behavior.',
+    evidenceRefs: [incident.id],
+  })
+  localRevocationRecords.set(revocation.id, revocation)
+  const revokedTrust = computeLocalTrustResult(malicious.card.identity.did, 'calendar.schedule')
+  const revokedPolicy = evaluateFidesPolicy({
+    principalId: principal.identity.did,
+    requesterAgentId: requester.identity.did,
+    targetAgentId: malicious.card.identity.did,
+    capability: malicious.card.capabilities[0]!,
+    trustResult: revokedTrust!,
+    requestedScopes: ['calendar:write'],
+    revocationActive: true,
+    incidentsActive: true,
+  })
+
+  const evidenceValid = verifyEvidenceEventsV2(localEvidenceEvents)
+  return {
+    status: 'executed',
     mode: 'local-first',
     steps: fullDemoSteps,
+    identities: {
+      principal: principal.identity.did,
+      publisher: publisher.identity.did,
+      requester: requester.identity.did,
+      calendar: calendar.card.identity.did,
+      invoice: invoice.card.identity.did,
+      payment: payment.card.identity.did,
+      malicious: malicious.card.identity.did,
+    },
+    discovery: {
+      local: calendarDiscovery,
+      registry: { provider: 'registry', records: invoiceRegistryRecords, authorityGranted: false },
+      dht: { provider: 'dht', ...paymentDhtPointers, authorityGranted: false },
+      relay: { provider: 'relay', records: [relayRecord], authorityGranted: false },
+    },
+    verification: {
+      agentCardsVerified: verifiedCards.every(Boolean),
+      evidenceHashChainValid: evidenceValid,
+      evidenceEventCount: localEvidenceEvents.length,
+      evidenceExport: {
+        format: 'json',
+        lastHash: localEvidenceEvents.at(-1)?.event_hash ?? null,
+      },
+    },
+    trust: {
+      invoice: invoiceTrust,
+      payment: paymentTrust,
+      maliciousAfterIncident: revokedTrust,
+    },
+    reputation: {
+      invoice: invoiceReputation,
+      malicious: maliciousReputation,
+    },
+    policy: {
+      invoice: invoicePolicy,
+      paymentWithoutAttestation: paymentPolicyWithoutAttestation,
+      paymentWithAttestation: paymentPolicy,
+      revokedMalicious: revokedPolicy,
+    },
+    sessions: {
+      invoice: invoiceSession,
+      paymentDryRun: paymentSession,
+    },
+    invocation: {
+      invoice: {
+        preflight: invoicePreflight,
+        evidenceRefs: [invoiceSessionEvidence.event_id, invoiceInvokeEvidence.event_id, invoiceCompleteEvidence.event_id],
+      },
+      paymentDryRun: {
+        preflight: paymentDryRunPreflight,
+        evidenceRefs: [paymentDryRunEvidence.event_id],
+      },
+    },
+    governance: {
+      incident,
+      revocation,
+    },
     authority: {
       discoveryGrantsAuthority: false,
       identityEqualsTrust: false,
       trustScoreEqualsPermission: false,
       policyBeforeExecution: true,
-      evidenceProduced: true,
+      evidenceProduced: localEvidenceEvents.length > 0,
     },
     surfaces: {
       local: true,
-      registry: 'mock',
-      relay: 'mock',
+      registry: 'local_mock',
+      relay: 'local_mock',
       dht: 'in_memory_pointer_records',
       payments: 'dry_run_only',
     },
     limitations: [
       'Uses local mock services for DHT, relay, and registry flows.',
       'Payment execution remains Sardis-specific and is not executed by FIDES.',
+      'Demo state is held in the current daemon process.',
     ],
+  }
+}
+
+app.post('/demo/run', async (c) => {
+  const result = await runLocalFullDemo()
+  return c.json({
+    ...result,
   })
 })
 

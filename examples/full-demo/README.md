@@ -1,6 +1,6 @@
 # Full Demo
 
-This directory captures the target full-demo contract for FIDES v2.
+This directory captures the executable full-demo contract for FIDES v2.
 
 Run the manifest:
 
@@ -8,10 +8,21 @@ Run the manifest:
 pnpm exec tsx examples/full-demo/run.ts
 ```
 
-Run the local daemon prototype endpoint:
+Run the local daemon endpoint:
 
 ```bash
 agentd demo run
 ```
 
-The current manifest is spec-complete. The daemon endpoint is a working local prototype. The remaining hardening step is to execute every manifest step against real local agentd state and evidence events.
+`agentd demo run` creates local demo identities, signs and registers AgentCards,
+publishes candidates through local registry/relay/DHT surfaces, runs discovery,
+computes trust and reputation, evaluates policy, issues scoped sessions, invokes
+the invoice and payment dry-run paths, records incident and revocation state, and
+verifies the local EvidenceEvent hash chain.
+
+Current limitations:
+
+- DHT, relay, and registry are local mock providers.
+- Demo state is held in the current daemon process.
+- Payment execution remains Sardis-specific; FIDES only demonstrates dry-run
+  payment preparation authority.

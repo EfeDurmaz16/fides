@@ -1095,13 +1095,27 @@ describe('Agentd Service Routes', () => {
       const demo = await app.request('/demo/run', { method: 'POST' })
       expect(demo.status).toBe(200)
       const demoData = await demo.json()
-      expect(demoData.status).toBe('spec-complete')
+      expect(demoData.status).toBe('executed')
       expect(demoData.steps).toContain('discover_payment_through_dht')
       expect(demoData.steps).toContain('verify_evidence_hash_chain')
       expect(demoData.authority).toMatchObject({
         discoveryGrantsAuthority: false,
         policyBeforeExecution: true,
       })
+      expect(demoData.verification).toMatchObject({
+        agentCardsVerified: true,
+        evidenceHashChainValid: true,
+      })
+      expect(demoData.policy.paymentWithoutAttestation.decision).toBe('require_approval')
+      expect(demoData.policy.revokedMalicious.decision).toBe('deny')
+      expect(demoData.discovery.registry.records).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agentId: demoData.identities.invoice }),
+      ]))
+      expect(demoData.discovery.dht.pointers).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agentId: demoData.identities.payment }),
+      ]))
+      expect(demoData.invocation.invoice.preflight.can_execute).toBe(true)
+      expect(demoData.verification.evidenceEventCount).toBeGreaterThan(0)
 
       const sim = await app.request('/simulate/adversarial', { method: 'POST' })
       expect(sim.status).toBe(200)

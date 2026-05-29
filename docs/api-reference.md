@@ -113,6 +113,13 @@ default; the daemon records `sha256:` hashes and metadata under `hash_only`
 privacy unless another privacy mode is explicitly requested. Root evidence is
 tamper-evident inside the process, not yet durable across daemon restarts.
 
+`POST /demo/run` executes the local FIDES v2 trust-fabric scenario in the
+current daemon process. It creates demo identities and signed AgentCards,
+publishes candidates through local registry, relay, and DHT surfaces, performs
+provider discovery, verifies AgentCards, evaluates trust/reputation/policy,
+issues scoped sessions, invokes invoice and payment dry-run flows, records an
+incident and revocation, and verifies the local EvidenceEvent hash chain.
+
 `POST /identities` creates local in-memory identities for the daemon prototype
 and returns only public identity data. Private keys are retained inside the
 daemon process and are not returned by `POST /identities`, `GET /identities`, or

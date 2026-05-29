@@ -1,9 +1,9 @@
 /**
- * Full FIDES v2 demo manifest.
+ * Full FIDES v2 demo contract.
  *
  * This is a deterministic, local-first scenario description that mirrors the
- * `agentd demo run` flow. It is intentionally side-effect-light so docs,
- * tests, and future scripts can share the same ordered contract.
+ * executing `agentd demo run` flow. It is intentionally side-effect-light so
+ * docs, tests, and future scripts can share the same ordered contract.
  *
  * Run: pnpm exec tsx examples/full-demo/run.ts
  */
@@ -46,9 +46,10 @@ export const fullDemoSteps = [
   'print_final_trust_graph',
 ] as const
 
-export function describeFullDemo(): { status: 'spec-complete'; steps: readonly string[] } {
+export function describeFullDemo(): { status: 'manifest'; execution: string; steps: readonly string[] } {
   return {
-    status: 'spec-complete',
+    status: 'manifest',
+    execution: 'agentd demo run executes this contract against local daemon state',
     steps: fullDemoSteps,
   }
 }

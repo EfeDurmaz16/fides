@@ -134,6 +134,7 @@ export { metricsMiddleware } from './observability/metrics-middleware.js'
 
 // High-level API
 export { Fides } from './fides.js'
+export { FidesClient, type FidesClientOptions } from './fides-client.js'
 
 // Integration exports
 export {

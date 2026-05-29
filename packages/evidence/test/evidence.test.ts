@@ -1,6 +1,18 @@
 import { describe, it, expect } from 'vitest'
-import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, redactEvent } from '../src/index.js'
+import {
+  appendEvidenceEvent,
+  appendEvidenceEventV2,
+  createEvidenceChain,
+  createEvidenceEventV2,
+  hashEvidenceValue,
+  redactEvent,
+  signEvidenceEventV2,
+  verifyEvidenceChain,
+  verifyEvidenceEventV2,
+  verifyEvidenceEventsV2,
+} from '../src/index.js'
 import type { EvidenceEvent } from '../src/index.js'
+import { createAgentIdentity } from '@fides/core'
 
 describe('Evidence Ledger', () => {
   it('should create an empty chain', () => {
@@ -70,5 +82,60 @@ describe('Evidence Ledger', () => {
     expect(redactEvent(event, 'private').payload).toBeNull()
     expect(redactEvent(event, 'redacted').payload).toBe('[REDACTED]')
     expect(redactEvent(event, 'hash-only').payload).toBeNull()
+  })
+
+  it('creates privacy-aware v2 events with hashes instead of raw payloads', () => {
+    const event = createEvidenceEventV2({
+      type: 'capability.invoked',
+      actor: 'did:fides:agent',
+      principal: 'did:fides:principal',
+      capability: 'invoice.reconcile',
+      input: { invoiceId: 'inv_123', secret: 'hidden' },
+      policy: { id: 'default' },
+      decision: 'allow',
+      risk_level: 'medium',
+    })
+
+    expect(event.schema_version).toBe('fides.evidence_event.v1')
+    expect(event.privacy_mode).toBe('hash_only')
+    expect(event.input_hash).toBe(hashEvidenceValue({ invoiceId: 'inv_123', secret: 'hidden' }))
+    expect(event.policy_hash).toMatch(/^sha256:/)
+    expect(JSON.stringify(event)).not.toContain('hidden')
+  })
+
+  it('signs and verifies v2 events', async () => {
+    const issued = await createAgentIdentity()
+    const event = createEvidenceEventV2({
+      type: 'trust.computed',
+      actor: issued.identity.did,
+      subject: 'did:fides:target',
+      metadata: { score: 0.8 },
+      timestamp: '2026-05-29T00:00:00.000Z',
+    })
+
+    const signed = await signEvidenceEventV2(event, issued.privateKey, issued.identity.did)
+
+    expect(signed.signature).not.toBe('')
+    expect(await verifyEvidenceEventV2(signed)).toBe(true)
+
+    expect(await verifyEvidenceEventV2({ ...signed, metadata: { score: 0.1 } })).toBe(false)
+  })
+
+  it('verifies v2 hash chains and detects broken links', () => {
+    const first = createEvidenceEventV2({
+      type: 'session.requested',
+      actor: 'did:fides:requester',
+      timestamp: '2026-05-29T00:00:00.000Z',
+    })
+    const second = createEvidenceEventV2({
+      type: 'session.granted',
+      actor: 'did:fides:target',
+      timestamp: '2026-05-29T00:00:01.000Z',
+    }, first.event_hash)
+
+    const events = appendEvidenceEventV2(appendEvidenceEventV2([], first), second)
+
+    expect(verifyEvidenceEventsV2(events)).toBe(true)
+    expect(verifyEvidenceEventsV2([{ ...second, prev_event_hash: 'wrong' }])).toBe(false)
   })
 })

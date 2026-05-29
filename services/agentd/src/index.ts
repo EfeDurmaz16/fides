@@ -22,14 +22,18 @@ import {
   createAgentIdentity,
   computeCapabilityReputation,
   computeTrustResult,
+  createApprovalDecision,
+  createApprovalRequest,
   createCapabilityDescriptor,
   createIncidentRecordV2,
   createInvocationRequest,
   createInvocationResult,
+  createKillSwitchRule,
   createPrincipalIdentity,
   createPublisherIdentity,
   createSessionGrantV2,
   hashProtocolPayload,
+  isKillSwitchRuleActive,
   signAgentCard,
   validateAgentCard,
   verifySignedAgentCard,
@@ -40,7 +44,10 @@ import {
   verifyRevocationRecord,
   type AgentIdentity,
   type AgentCard,
+  type ApprovalDecision,
+  type ApprovalRequest,
   type IncidentRecord,
+  type KillSwitchRule,
   type DelegationToken,
   type PrincipalIdentity,
   type PublisherIdentity,
@@ -94,6 +101,9 @@ interface LocalRegisteredAgent {
 const localAgents = new Map<string, LocalRegisteredAgent>()
 const localTrustResults = new Map<string, TrustResult>()
 const localReputationRecords = new Map<string, ReputationRecord>()
+const localApprovals = new Map<string, ApprovalRequest>()
+const localApprovalDecisions = new Map<string, ApprovalDecision>()
+const localKillSwitchRules = new Map<string, KillSwitchRule>()
 interface LocalSessionRecord {
   session: SessionGrantV2
   policy: FidesPolicyDecision
@@ -281,6 +291,25 @@ function computeLocalTrustResult(agentId: string, capabilityId: string): TrustRe
   return trust
 }
 
+function activeLocalKillSwitchFor(input: {
+  agentId: string
+  capability: string
+  principalId: string
+  requesterAgentId: string
+  riskLevel: string
+  sessionId?: string
+}): KillSwitchRule | undefined {
+  return Array.from(localKillSwitchRules.values()).find((rule) => {
+    if (!isKillSwitchRuleActive(rule)) return false
+    if (rule.target_type === 'agent') return rule.target === input.agentId
+    if (rule.target_type === 'capability') return rule.target === input.capability
+    if (rule.target_type === 'principal') return rule.target === input.principalId
+    if (rule.target_type === 'session') return rule.target === input.sessionId
+    if (rule.target_type === 'risk_class') return rule.target === input.riskLevel
+    return false
+  })
+}
+
 // Global middleware stack
 app.use('*', metricsMiddleware(collector))
 app.use('*', logger())
@@ -376,6 +405,26 @@ app.use('/sessions/*', async (c, next) => {
   return auth(c, next)
 })
 app.use('/invoke', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/approvals', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/approvals/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/killswitch', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/killswitch/*', async (c, next) => {
   if (c.req.method === 'GET') return next()
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
@@ -835,13 +884,23 @@ app.post('/sessions', async (c) => {
   }
 
   const requestedScopes = Array.isArray(body.requestedScopes) ? body.requestedScopes.map(String) : []
+  const principalId = typeof body.principalId === 'string' ? body.principalId : 'did:fides:principal:local'
+  const requesterAgentId = typeof body.requesterAgentId === 'string' ? body.requesterAgentId : 'did:fides:requester:local'
+  const activeKillSwitch = activeLocalKillSwitchFor({
+    agentId: targetAgentId,
+    capability: capabilityId,
+    principalId,
+    requesterAgentId,
+    riskLevel: found.capability.riskLevel,
+  })
   const policy = evaluateFidesPolicy({
-    principalId: typeof body.principalId === 'string' ? body.principalId : 'did:fides:principal:local',
-    requesterAgentId: typeof body.requesterAgentId === 'string' ? body.requesterAgentId : 'did:fides:requester:local',
+    principalId,
+    requesterAgentId,
     targetAgentId,
     capability: found.capability,
     trustResult: trust,
     requestedScopes,
+    killSwitchActive: activeKillSwitch !== undefined,
     runtimeAttestationValid: typeof body.runtimeAttestationValid === 'boolean' ? body.runtimeAttestationValid : undefined,
     approvalGranted: typeof body.approvalGranted === 'boolean' ? body.approvalGranted : undefined,
   })
@@ -852,6 +911,7 @@ app.post('/sessions', async (c) => {
       authorityGranted: false,
       policy,
       trust,
+      killSwitch: activeKillSwitch,
     }, 409)
   }
 
@@ -859,9 +919,9 @@ app.post('/sessions', async (c) => {
     ? body.expiresAt
     : new Date(Date.now() + 60 * 60 * 1000).toISOString()
   const session = createSessionGrantV2({
-    requesterAgentId: typeof body.requesterAgentId === 'string' ? body.requesterAgentId : 'did:fides:requester:local',
+    requesterAgentId,
     targetAgentId,
-    principalId: typeof body.principalId === 'string' ? body.principalId : 'did:fides:principal:local',
+    principalId,
     capability: capabilityId,
     scopes: requestedScopes,
     constraints: typeof body.constraints === 'object' && body.constraints !== null ? body.constraints as Record<string, unknown> : {},
@@ -955,6 +1015,170 @@ app.post('/invoke', async (c) => {
     preflight,
     result,
   })
+})
+
+app.post('/approvals', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const requesterAgentId = typeof body.requesterAgentId === 'string' ? body.requesterAgentId : 'did:fides:requester:local'
+  const targetAgentId = typeof body.targetAgentId === 'string'
+    ? body.targetAgentId
+    : typeof body.agentId === 'string'
+      ? body.agentId
+      : 'did:fides:agent:local'
+  const principalId = typeof body.principalId === 'string' ? body.principalId : 'did:fides:principal:local'
+  const capability = typeof body.capability === 'string'
+    ? body.capability
+    : typeof body.capabilityId === 'string'
+      ? body.capabilityId
+      : undefined
+  if (!capability) {
+    return c.json({ error: 'capability is required' }, 400)
+  }
+
+  const approval = createApprovalRequest({
+    requesterAgentId,
+    targetAgentId,
+    principalId,
+    capability,
+    requestedScopes: Array.isArray(body.requestedScopes) ? body.requestedScopes.map(String) : [],
+    riskLevel: body.riskLevel === 'low' || body.riskLevel === 'medium' || body.riskLevel === 'high' || body.riskLevel === 'critical'
+      ? body.riskLevel
+      : 'high',
+    policyDecisionHash: typeof body.policyDecisionHash === 'string' ? body.policyDecisionHash : undefined,
+    evidenceRefs: Array.isArray(body.evidenceRefs) ? body.evidenceRefs.map(String) : [],
+    expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : undefined,
+  })
+  localApprovals.set(approval.id, approval)
+
+  return c.json({
+    approval,
+    authorityGranted: false,
+    explanation: 'Approval records human authorization intent; it does not grant invocation authority without policy and a scoped SessionGrant.',
+  }, 201)
+})
+
+app.get('/approvals', (c) => {
+  return c.json({
+    approvals: Array.from(localApprovals.values()),
+    decisions: Array.from(localApprovalDecisions.values()),
+    authorityGranted: false,
+  })
+})
+
+app.post('/approvals/:id/approve', async (c) => {
+  const id = c.req.param('id')
+  const approval = localApprovals.get(id)
+  if (!approval) {
+    return c.json({ error: 'approval request not found', id }, 404)
+  }
+
+  const body = await c.req.json().catch(() => ({}))
+  const decision = createApprovalDecision({
+    approvalRequestId: id,
+    approverId: typeof body.approverId === 'string' ? body.approverId : 'did:fides:approver:local',
+    decision: 'approved',
+    reason: typeof body.reason === 'string' ? body.reason : 'Approved',
+    constraints: typeof body.constraints === 'object' && body.constraints !== null ? body.constraints as Record<string, unknown> : {},
+    evidenceRefs: Array.isArray(body.evidenceRefs) ? body.evidenceRefs.map(String) : [],
+  })
+  const updated: ApprovalRequest = { ...approval, status: 'approved' }
+  localApprovals.set(id, updated)
+  localApprovalDecisions.set(decision.id, decision)
+
+  return c.json({
+    approval: updated,
+    decision,
+    authorityGranted: false,
+    explanation: 'Approval has been recorded. A policy evaluation and scoped SessionGrant are still required before invocation.',
+  })
+})
+
+app.post('/approvals/:id/deny', async (c) => {
+  const id = c.req.param('id')
+  const approval = localApprovals.get(id)
+  if (!approval) {
+    return c.json({ error: 'approval request not found', id }, 404)
+  }
+
+  const body = await c.req.json().catch(() => ({}))
+  const decision = createApprovalDecision({
+    approvalRequestId: id,
+    approverId: typeof body.approverId === 'string' ? body.approverId : 'did:fides:approver:local',
+    decision: 'denied',
+    reason: typeof body.reason === 'string' ? body.reason : 'Denied',
+    constraints: typeof body.constraints === 'object' && body.constraints !== null ? body.constraints as Record<string, unknown> : {},
+    evidenceRefs: Array.isArray(body.evidenceRefs) ? body.evidenceRefs.map(String) : [],
+  })
+  const updated: ApprovalRequest = { ...approval, status: 'denied' }
+  localApprovals.set(id, updated)
+  localApprovalDecisions.set(decision.id, decision)
+
+  return c.json({
+    approval: updated,
+    decision,
+    authorityGranted: false,
+  })
+})
+
+app.post('/killswitch', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const targetType = typeof body.targetType === 'string'
+    ? body.targetType
+    : typeof body.target_type === 'string'
+      ? body.target_type
+      : undefined
+  if (
+    targetType !== 'agent' &&
+    targetType !== 'publisher' &&
+    targetType !== 'capability' &&
+    targetType !== 'session' &&
+    targetType !== 'principal' &&
+    targetType !== 'risk_class'
+  ) {
+    return c.json({ error: 'targetType must be agent, publisher, capability, session, principal, or risk_class' }, 400)
+  }
+
+  const target = typeof body.target === 'string' ? body.target : undefined
+  if (!target) {
+    return c.json({ error: 'target is required' }, 400)
+  }
+
+  const rule = createKillSwitchRule({
+    issuer: typeof body.issuer === 'string' ? body.issuer : 'did:fides:operator:local',
+    targetType,
+    target,
+    reason: typeof body.reason === 'string' ? body.reason : 'No reason provided',
+    enabled: typeof body.enabled === 'boolean' ? body.enabled : true,
+    expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : undefined,
+  })
+  localKillSwitchRules.set(rule.id, rule)
+
+  return c.json({
+    rule,
+    authorityOverride: true,
+    explanation: 'Kill switch rules override normal trust and policy evaluation while active.',
+  }, 201)
+})
+
+app.get('/killswitch', (c) => {
+  const rules = Array.from(localKillSwitchRules.values())
+  return c.json({
+    rules,
+    active: rules.filter(rule => isKillSwitchRuleActive(rule)),
+  })
+})
+
+app.delete('/killswitch/:id', (c) => {
+  const id = c.req.param('id')
+  const rule = localKillSwitchRules.get(id)
+  if (!rule) {
+    return c.json({ error: 'kill switch rule not found', id }, 404)
+  }
+  const { payload_hash: _payloadHash, ...rulePayload } = rule
+  const disabledPayload = { ...rulePayload, enabled: false }
+  const disabled: KillSwitchRule = { ...disabledPayload, payload_hash: hashProtocolPayload(disabledPayload) }
+  localKillSwitchRules.set(id, disabled)
+  return c.json({ rule: disabled })
 })
 
 // ─── FIDES v2 Local API Aliases ───────────────────────────────────

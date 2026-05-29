@@ -81,6 +81,24 @@ const policy = await client.policy.evaluate({
   capability: 'invoice.reconcile',
   requestedScopes: ['invoice:read'],
 })
+const approval = await client.approvals.create({
+  principalId: 'did:fides:principal',
+  requesterAgentId: 'did:fides:requester',
+  agentId: identity.identity.did,
+  capability: 'payments.prepare',
+  requestedScopes: ['payments:prepare'],
+  riskLevel: 'high',
+})
+await client.approvals.approve(approval.approval.id, {
+  approverId: 'did:fides:approver',
+})
+const killSwitch = await client.killSwitch.enable({
+  issuer: 'did:fides:operator',
+  targetType: 'capability',
+  target: 'deploy.preview',
+  reason: 'Pause preview deploys during incident response.',
+})
+await client.killSwitch.disable(killSwitch.rule.id)
 const session = await client.sessions.request({
   principalId: 'did:fides:principal',
   requesterAgentId: 'did:fides:requester',
@@ -100,7 +118,8 @@ Registration and discovery produce candidate records only; discovery does not
 grant authority to invoke the agent. Trust and reputation are capability-scoped
 signals; policy decisions still require scoped session grants before invocation.
 Root session and invocation helpers use the local daemon preflight path and are
-currently in-memory.
+currently in-memory. Approval and kill switch helpers expose local authority
+controls, with active kill switch rules overriding normal policy.
 
 ```typescript
 import { AgentdClient } from '@fides/sdk'

@@ -499,6 +499,99 @@ describe('Agentd Service Routes', () => {
       expect(invocationData.authorityGranted).toBe(true)
     })
 
+    it('serves root approval request and decision lifecycle', async () => {
+      const request = await app.request('/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: 'did:fides:requester',
+          agentId: 'did:fides:agent',
+          capability: 'payments.prepare',
+          requestedScopes: ['payments:prepare'],
+          riskLevel: 'high',
+        }),
+      })
+      expect(request.status).toBe(201)
+      const requestData = await request.json()
+      expect(requestData.approval.status).toBe('pending')
+      expect(requestData.authorityGranted).toBe(false)
+
+      const listed = await app.request('/approvals')
+      expect(listed.status).toBe(200)
+      expect((await listed.json()).approvals).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: requestData.approval.id, status: 'pending' }),
+      ]))
+
+      const approved = await app.request(`/approvals/${requestData.approval.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approverId: 'did:fides:approver', reason: 'Manual approval for dry-run payment preparation.' }),
+      })
+      expect(approved.status).toBe(200)
+      const approvedData = await approved.json()
+      expect(approvedData.approval.status).toBe('approved')
+      expect(approvedData.decision.decision).toBe('approved')
+      expect(approvedData.authorityGranted).toBe(false)
+    })
+
+    it('serves root kill switch rules and blocks scoped session issuance', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Deploy Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: 'deploy.preview', riskLevel: 'medium', requiredScopes: ['deploy:preview'] }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const enabled = await app.request('/killswitch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issuer: 'did:fides:operator',
+          targetType: 'capability',
+          target: 'deploy.preview',
+          reason: 'Pause preview deploys during incident response.',
+        }),
+      })
+      expect(enabled.status).toBe(201)
+      const enabledData = await enabled.json()
+      expect(enabledData.rule.enabled).toBe(true)
+
+      const blocked = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: 'did:fides:requester',
+          agentId: identity.did,
+          capability: 'deploy.preview',
+          requestedScopes: ['deploy:preview'],
+        }),
+      })
+      expect(blocked.status).toBe(409)
+      const blockedData = await blocked.json()
+      expect(blockedData.policy.reason_codes).toContain('KILL_SWITCH_ACTIVE')
+      expect(blockedData.authorityGranted).toBe(false)
+
+      const disabled = await app.request(`/killswitch/${enabledData.rule.id}`, { method: 'DELETE' })
+      expect(disabled.status).toBe(200)
+      expect((await disabled.json()).rule.enabled).toBe(false)
+    })
+
     it('serves local DHT publish and find endpoints', async () => {
       const publish = await app.request('/dht/publish', {
         method: 'POST',

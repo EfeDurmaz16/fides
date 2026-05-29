@@ -26,6 +26,13 @@ describe('FidesClient', () => {
     await client.trust.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.reputation.update({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.policy.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
+    await client.approvals.create({ agentId: 'did:fides:agent', capability: 'payments.prepare' })
+    await client.approvals.list()
+    await client.approvals.approve('approval_1', { approverId: 'did:fides:approver' })
+    await client.approvals.deny('approval_1', { approverId: 'did:fides:approver' })
+    await client.killSwitch.enable({ targetType: 'capability', target: 'deploy.preview' })
+    await client.killSwitch.list()
+    await client.killSwitch.disable('rule_1')
     await client.sessions.request({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.sessions.get('sess_1')
     await client.sessions.verify('sess_1')
@@ -40,6 +47,13 @@ describe('FidesClient', () => {
       'http://localhost:4817/trust/evaluate',
       'http://localhost:4817/reputation/update',
       'http://localhost:4817/policy/evaluate',
+      'http://localhost:4817/approvals',
+      'http://localhost:4817/approvals',
+      'http://localhost:4817/approvals/approval_1/approve',
+      'http://localhost:4817/approvals/approval_1/deny',
+      'http://localhost:4817/killswitch',
+      'http://localhost:4817/killswitch',
+      'http://localhost:4817/killswitch/rule_1',
       'http://localhost:4817/sessions',
       'http://localhost:4817/sessions/sess_1',
       'http://localhost:4817/sessions/sess_1/verify',
@@ -54,6 +68,13 @@ describe('FidesClient', () => {
       'POST',
       'POST',
       'POST',
+      'POST',
+      'GET',
+      'POST',
+      'POST',
+      'POST',
+      'GET',
+      'DELETE',
       'POST',
       'GET',
       'POST',

@@ -47,6 +47,19 @@ export class FidesClient {
     evaluate: (body: Record<string, unknown>) => this.post('/policy/evaluate', body),
   }
 
+  readonly approvals = {
+    create: (body: Record<string, unknown>) => this.post('/approvals', body),
+    list: () => this.get('/approvals'),
+    approve: (approvalId: string, body: Record<string, unknown> = {}) => this.post(`/approvals/${encodeURIComponent(approvalId)}/approve`, body),
+    deny: (approvalId: string, body: Record<string, unknown> = {}) => this.post(`/approvals/${encodeURIComponent(approvalId)}/deny`, body),
+  }
+
+  readonly killSwitch = {
+    enable: (body: Record<string, unknown>) => this.post('/killswitch', body),
+    list: () => this.get('/killswitch'),
+    disable: (ruleId: string) => this.delete(`/killswitch/${encodeURIComponent(ruleId)}`),
+  }
+
   readonly sessions = {
     request: (body: Record<string, unknown>) => this.post('/sessions', body),
     verify: (sessionId: string) => this.post(`/sessions/${encodeURIComponent(sessionId)}/verify`, {}),
@@ -69,6 +82,10 @@ export class FidesClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
+  }
+
+  private async delete(path: string): Promise<unknown> {
+    return this.request(path, { method: 'DELETE' })
   }
 
   private async request(path: string, init: RequestInit): Promise<unknown> {

@@ -30,6 +30,13 @@ Current implementation anchors:
 - `GET /sessions/:id`
 - `POST /sessions/:id/verify`
 - `POST /invoke`
+- `POST /approvals`
+- `GET /approvals`
+- `POST /approvals/:id/approve`
+- `POST /approvals/:id/deny`
+- `POST /killswitch`
+- `GET /killswitch`
+- `DELETE /killswitch/:id`
 - `POST /v1/policy/evaluate`
 - `POST /v1/sessions`
 - `GET /v1/sessions/:id`
@@ -92,3 +99,11 @@ policy preflight path, validates the capability context, and returns an
 `InvocationResult`. The current root implementation is in-memory and intended
 for local daemon DX; durable storage and signed invocation results remain
 follow-up hardening work.
+
+`POST /approvals` creates an approval request and records approval decisions
+through `/approvals/:id/approve` or `/approvals/:id/deny`. Approval records do
+not grant authority by themselves; they are inputs to policy/session issuance.
+`POST /killswitch` creates an active kill switch rule for an agent, publisher,
+capability, session, principal, or risk class. Active kill switch rules override
+normal trust and policy evaluation and block root session issuance until
+disabled with `DELETE /killswitch/:id`.

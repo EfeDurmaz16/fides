@@ -45,6 +45,24 @@ const policy = await client.policy.evaluate({
   capability: 'invoice.reconcile',
   requestedScopes: ['invoice:read'],
 })
+const approval = await client.approvals.create({
+  principalId: 'did:fides:principal',
+  requesterAgentId: 'did:fides:requester',
+  agentId: identity.identity.did,
+  capability: 'payments.prepare',
+  requestedScopes: ['payments:prepare'],
+  riskLevel: 'high',
+})
+await client.approvals.approve(approval.approval.id, {
+  approverId: 'did:fides:approver',
+})
+const killSwitch = await client.killSwitch.enable({
+  issuer: 'did:fides:operator',
+  targetType: 'capability',
+  target: 'deploy.preview',
+  reason: 'Pause preview deploys during incident response.',
+})
+await client.killSwitch.disable(killSwitch.rule.id)
 const session = await client.sessions.request({
   principalId: 'did:fides:principal',
   requesterAgentId: 'did:fides:requester',
@@ -66,4 +84,6 @@ registration and discovery return candidates only; `authorityGranted` remains
 `false`. Trust and reputation APIs return capability-scoped signals, and policy
 evaluation explains the decision but still requires session grant issuance
 before invocation. Session request and invocation helpers use the same root
-local daemon API. Advanced authority flows can use `AgentdClient`.
+local daemon API. Approval and kill switch helpers expose local authority
+controls, with kill switch rules overriding normal policy while active.
+Advanced authority flows can use `AgentdClient`.

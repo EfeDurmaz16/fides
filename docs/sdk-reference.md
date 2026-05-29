@@ -63,6 +63,21 @@ const killSwitch = await client.killSwitch.enable({
   reason: 'Pause preview deploys during incident response.',
 })
 await client.killSwitch.disable(killSwitch.rule.id)
+const revocation = await client.revocations.create({
+  issuer: 'did:fides:operator',
+  targetType: 'agent',
+  targetId: identity.identity.did,
+  reason: 'Compromised deployment key.',
+})
+await client.revocations.get(revocation.record.id)
+const incident = await client.incidents.report({
+  reporter: 'did:fides:principal',
+  targetAgentId: identity.identity.did,
+  severity: 'high',
+  category: 'unauthorized_action',
+  description: 'Attempted invocation outside delegated authority.',
+})
+await client.incidents.resolve(incident.record.id, { status: 'resolved' })
 const session = await client.sessions.request({
   principalId: 'did:fides:principal',
   requesterAgentId: 'did:fides:requester',
@@ -86,4 +101,6 @@ evaluation explains the decision but still requires session grant issuance
 before invocation. Session request and invocation helpers use the same root
 local daemon API. Approval and kill switch helpers expose local authority
 controls, with kill switch rules overriding normal policy while active.
+Revocation and incident helpers expose local governance records that feed root
+session policy decisions.
 Advanced authority flows can use `AgentdClient`.

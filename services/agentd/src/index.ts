@@ -31,9 +31,11 @@ import {
   createKillSwitchRule,
   createPrincipalIdentity,
   createPublisherIdentity,
+  createRevocationRecordV2,
   createSessionGrantV2,
   hashProtocolPayload,
   isKillSwitchRuleActive,
+  resolveIncidentRecordV2,
   signAgentCard,
   validateAgentCard,
   verifySignedAgentCard,
@@ -47,12 +49,14 @@ import {
   type ApprovalDecision,
   type ApprovalRequest,
   type IncidentRecord,
+  type IncidentRecordV2,
   type KillSwitchRule,
   type DelegationToken,
   type PrincipalIdentity,
   type PublisherIdentity,
   type ReputationRecord,
   type RevocationRecord,
+  type RevocationRecordV2,
   type SessionGrantV2,
   type SignedAgentCard,
   type TrustResult,
@@ -104,6 +108,8 @@ const localReputationRecords = new Map<string, ReputationRecord>()
 const localApprovals = new Map<string, ApprovalRequest>()
 const localApprovalDecisions = new Map<string, ApprovalDecision>()
 const localKillSwitchRules = new Map<string, KillSwitchRule>()
+const localRevocationRecords = new Map<string, RevocationRecordV2>()
+const localIncidentRecords = new Map<string, IncidentRecordV2>()
 interface LocalSessionRecord {
   session: SessionGrantV2
   policy: FidesPolicyDecision
@@ -310,6 +316,34 @@ function activeLocalKillSwitchFor(input: {
   })
 }
 
+function isActiveLocalRevocation(record: RevocationRecordV2): boolean {
+  if (record.status !== 'active') return false
+  return !record.expires_at || new Date(record.expires_at).getTime() > Date.now()
+}
+
+function activeLocalRevocationFor(input: {
+  agentId: string
+  capability: string
+  principalId: string
+  requesterAgentId: string
+  sessionId?: string
+}): RevocationRecordV2 | undefined {
+  return Array.from(localRevocationRecords.values()).find((record) => {
+    if (!isActiveLocalRevocation(record)) return false
+    if (record.target_type === 'agent') return record.target_id === input.agentId
+    if (record.target_type === 'capability') return record.target_id === input.capability
+    if (record.target_type === 'identity') return record.target_id === input.agentId || record.target_id === input.principalId || record.target_id === input.requesterAgentId
+    if (record.target_type === 'session') return record.target_id === input.sessionId
+    return false
+  })
+}
+
+function activeLocalIncidentFor(agentId: string): IncidentRecordV2 | undefined {
+  return Array.from(localIncidentRecords.values()).find((record) => {
+    return record.target_agent_id === agentId && record.resolution_status === 'open'
+  })
+}
+
 // Global middleware stack
 app.use('*', metricsMiddleware(collector))
 app.use('*', logger())
@@ -425,6 +459,26 @@ app.use('/killswitch', async (c, next) => {
   return auth(c, next)
 })
 app.use('/killswitch/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/revocations', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/revocations/*', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/incidents', async (c, next) => {
+  if (c.req.method === 'GET') return next()
+  const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
+  return auth(c, next)
+})
+app.use('/incidents/*', async (c, next) => {
   if (c.req.method === 'GET') return next()
   const auth = apiKeyAuth(agentdScopeForRequest(c.req.method, new URL(c.req.url).pathname))
   return auth(c, next)
@@ -893,6 +947,13 @@ app.post('/sessions', async (c) => {
     requesterAgentId,
     riskLevel: found.capability.riskLevel,
   })
+  const activeRevocation = activeLocalRevocationFor({
+    agentId: targetAgentId,
+    capability: capabilityId,
+    principalId,
+    requesterAgentId,
+  })
+  const activeIncident = activeLocalIncidentFor(targetAgentId)
   const policy = evaluateFidesPolicy({
     principalId,
     requesterAgentId,
@@ -901,6 +962,8 @@ app.post('/sessions', async (c) => {
     trustResult: trust,
     requestedScopes,
     killSwitchActive: activeKillSwitch !== undefined,
+    revocationActive: activeRevocation !== undefined,
+    incidentsActive: activeIncident !== undefined,
     runtimeAttestationValid: typeof body.runtimeAttestationValid === 'boolean' ? body.runtimeAttestationValid : undefined,
     approvalGranted: typeof body.approvalGranted === 'boolean' ? body.approvalGranted : undefined,
   })
@@ -912,6 +975,8 @@ app.post('/sessions', async (c) => {
       policy,
       trust,
       killSwitch: activeKillSwitch,
+      revocation: activeRevocation,
+      incident: activeIncident,
     }, 409)
   }
 
@@ -1179,6 +1244,152 @@ app.delete('/killswitch/:id', (c) => {
   const disabled: KillSwitchRule = { ...disabledPayload, payload_hash: hashProtocolPayload(disabledPayload) }
   localKillSwitchRules.set(id, disabled)
   return c.json({ rule: disabled })
+})
+
+app.post('/revocations', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const targetType = typeof body.targetType === 'string'
+    ? body.targetType
+    : typeof body.target_type === 'string'
+      ? body.target_type
+      : undefined
+  if (
+    targetType !== 'key' &&
+    targetType !== 'identity' &&
+    targetType !== 'agent' &&
+    targetType !== 'agent_card' &&
+    targetType !== 'capability' &&
+    targetType !== 'session' &&
+    targetType !== 'attestation' &&
+    targetType !== 'publisher'
+  ) {
+    return c.json({ error: 'targetType must be key, identity, agent, agent_card, capability, session, attestation, or publisher' }, 400)
+  }
+
+  const targetId = typeof body.targetId === 'string'
+    ? body.targetId
+    : typeof body.target_id === 'string'
+      ? body.target_id
+      : undefined
+  if (!targetId) {
+    return c.json({ error: 'targetId is required' }, 400)
+  }
+
+  const record = createRevocationRecordV2({
+    issuer: typeof body.issuer === 'string' ? body.issuer : 'did:fides:operator:local',
+    targetType,
+    targetId,
+    reason: typeof body.reason === 'string' ? body.reason : 'No reason provided',
+    evidenceRefs: Array.isArray(body.evidenceRefs) ? body.evidenceRefs.map(String) : [],
+    expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : undefined,
+  })
+  localRevocationRecords.set(record.id, record)
+
+  return c.json({
+    record,
+    authorityOverride: true,
+    explanation: 'Active revocation records override normal trust and policy evaluation for matching requests.',
+  }, 201)
+})
+
+app.get('/revocations', (c) => {
+  const records = Array.from(localRevocationRecords.values())
+  return c.json({
+    records,
+    active: records.filter(record => isActiveLocalRevocation(record)),
+  })
+})
+
+app.get('/revocations/:id', (c) => {
+  const id = c.req.param('id')
+  const record = localRevocationRecords.get(id) ?? Array.from(localRevocationRecords.values()).find(item => item.target_id === id)
+  if (!record) {
+    return c.json({ id, revoked: false }, 404)
+  }
+  return c.json({ id, revoked: isActiveLocalRevocation(record), record })
+})
+
+app.post('/incidents', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const severity = typeof body.severity === 'string' ? body.severity : undefined
+  if (severity !== 'low' && severity !== 'medium' && severity !== 'high' && severity !== 'critical') {
+    return c.json({ error: 'severity must be low, medium, high, or critical' }, 400)
+  }
+
+  const category = typeof body.category === 'string' ? body.category : undefined
+  if (
+    category !== 'policy_violation' &&
+    category !== 'data_exfiltration' &&
+    category !== 'malicious_output' &&
+    category !== 'sandbox_escape' &&
+    category !== 'unauthorized_action' &&
+    category !== 'prompt_injection_failure' &&
+    category !== 'payment_error' &&
+    category !== 'suspicious_behavior'
+  ) {
+    return c.json({ error: 'category is invalid' }, 400)
+  }
+
+  const targetAgentId = typeof body.targetAgentId === 'string'
+    ? body.targetAgentId
+    : typeof body.target_agent_id === 'string'
+      ? body.target_agent_id
+      : undefined
+  if (!targetAgentId) {
+    return c.json({ error: 'targetAgentId is required' }, 400)
+  }
+
+  const description = typeof body.description === 'string' ? body.description : undefined
+  if (!description) {
+    return c.json({ error: 'description is required' }, 400)
+  }
+
+  const record = createIncidentRecordV2({
+    reporter: typeof body.reporter === 'string' ? body.reporter : 'did:fides:reporter:local',
+    targetAgentId,
+    severity,
+    category,
+    description,
+    evidenceRefs: Array.isArray(body.evidenceRefs) ? body.evidenceRefs.map(String) : [],
+    trustPenalty: typeof body.trustPenalty === 'number' ? body.trustPenalty : undefined,
+    reputationPenalty: typeof body.reputationPenalty === 'number' ? body.reputationPenalty : undefined,
+  })
+  localIncidentRecords.set(record.id, record)
+
+  return c.json({
+    record,
+    explanation: 'Open incident records require policy review for matching target agents until resolved.',
+  }, 201)
+})
+
+app.get('/incidents', (c) => {
+  const records = Array.from(localIncidentRecords.values())
+  return c.json({
+    records,
+    open: records.filter(record => record.resolution_status === 'open'),
+  })
+})
+
+app.get('/incidents/:id', (c) => {
+  const id = c.req.param('id')
+  const record = localIncidentRecords.get(id)
+  if (!record) {
+    return c.json({ error: 'incident record not found', id }, 404)
+  }
+  return c.json({ record })
+})
+
+app.post('/incidents/:id/resolve', async (c) => {
+  const id = c.req.param('id')
+  const record = localIncidentRecords.get(id)
+  if (!record) {
+    return c.json({ error: 'incident record not found', id }, 404)
+  }
+  const body = await c.req.json().catch(() => ({}))
+  const status = body.status === 'dismissed' || body.status === 'false_positive' ? body.status : 'resolved'
+  const resolved = resolveIncidentRecordV2(record, status)
+  localIncidentRecords.set(id, resolved)
+  return c.json({ record: resolved })
 })
 
 // ─── FIDES v2 Local API Aliases ───────────────────────────────────

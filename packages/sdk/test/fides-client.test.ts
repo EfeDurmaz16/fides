@@ -33,6 +33,13 @@ describe('FidesClient', () => {
     await client.killSwitch.enable({ targetType: 'capability', target: 'deploy.preview' })
     await client.killSwitch.list()
     await client.killSwitch.disable('rule_1')
+    await client.revocations.create({ targetType: 'agent', targetId: 'did:fides:agent' })
+    await client.revocations.list()
+    await client.revocations.get('rev_1')
+    await client.incidents.report({ targetAgentId: 'did:fides:agent', severity: 'high', category: 'unauthorized_action', description: 'test' })
+    await client.incidents.list()
+    await client.incidents.get('inc_1')
+    await client.incidents.resolve('inc_1', { status: 'resolved' })
     await client.sessions.request({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.sessions.get('sess_1')
     await client.sessions.verify('sess_1')
@@ -54,6 +61,13 @@ describe('FidesClient', () => {
       'http://localhost:4817/killswitch',
       'http://localhost:4817/killswitch',
       'http://localhost:4817/killswitch/rule_1',
+      'http://localhost:4817/revocations',
+      'http://localhost:4817/revocations',
+      'http://localhost:4817/revocations/rev_1',
+      'http://localhost:4817/incidents',
+      'http://localhost:4817/incidents',
+      'http://localhost:4817/incidents/inc_1',
+      'http://localhost:4817/incidents/inc_1/resolve',
       'http://localhost:4817/sessions',
       'http://localhost:4817/sessions/sess_1',
       'http://localhost:4817/sessions/sess_1/verify',
@@ -75,6 +89,13 @@ describe('FidesClient', () => {
       'POST',
       'GET',
       'DELETE',
+      'POST',
+      'GET',
+      'GET',
+      'POST',
+      'GET',
+      'GET',
+      'POST',
       'POST',
       'GET',
       'POST',

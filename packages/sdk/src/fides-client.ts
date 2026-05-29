@@ -60,6 +60,19 @@ export class FidesClient {
     disable: (ruleId: string) => this.delete(`/killswitch/${encodeURIComponent(ruleId)}`),
   }
 
+  readonly revocations = {
+    create: (body: Record<string, unknown>) => this.post('/revocations', body),
+    list: () => this.get('/revocations'),
+    get: (recordId: string) => this.get(`/revocations/${encodeURIComponent(recordId)}`),
+  }
+
+  readonly incidents = {
+    report: (body: Record<string, unknown>) => this.post('/incidents', body),
+    list: () => this.get('/incidents'),
+    get: (recordId: string) => this.get(`/incidents/${encodeURIComponent(recordId)}`),
+    resolve: (recordId: string, body: Record<string, unknown> = {}) => this.post(`/incidents/${encodeURIComponent(recordId)}/resolve`, body),
+  }
+
   readonly sessions = {
     request: (body: Record<string, unknown>) => this.post('/sessions', body),
     verify: (sessionId: string) => this.post(`/sessions/${encodeURIComponent(sessionId)}/verify`, {}),

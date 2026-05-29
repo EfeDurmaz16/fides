@@ -99,6 +99,21 @@ const killSwitch = await client.killSwitch.enable({
   reason: 'Pause preview deploys during incident response.',
 })
 await client.killSwitch.disable(killSwitch.rule.id)
+const revocation = await client.revocations.create({
+  issuer: 'did:fides:operator',
+  targetType: 'agent',
+  targetId: identity.identity.did,
+  reason: 'Compromised deployment key.',
+})
+await client.revocations.get(revocation.record.id)
+const incident = await client.incidents.report({
+  reporter: 'did:fides:principal',
+  targetAgentId: identity.identity.did,
+  severity: 'high',
+  category: 'unauthorized_action',
+  description: 'Attempted invocation outside delegated authority.',
+})
+await client.incidents.resolve(incident.record.id, { status: 'resolved' })
 const session = await client.sessions.request({
   principalId: 'did:fides:principal',
   requesterAgentId: 'did:fides:requester',
@@ -119,7 +134,9 @@ grant authority to invoke the agent. Trust and reputation are capability-scoped
 signals; policy decisions still require scoped session grants before invocation.
 Root session and invocation helpers use the local daemon preflight path and are
 currently in-memory. Approval and kill switch helpers expose local authority
-controls, with active kill switch rules overriding normal policy.
+controls, with active kill switch rules overriding normal policy. Revocation
+and incident helpers expose local governance records that feed root session
+policy decisions.
 
 ```typescript
 import { AgentdClient } from '@fides/sdk'

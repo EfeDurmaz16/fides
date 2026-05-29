@@ -592,6 +592,138 @@ describe('Agentd Service Routes', () => {
       expect((await disabled.json()).rule.enabled).toBe(false)
     })
 
+    it('serves root revocation records and blocks scoped session issuance', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Revoked File Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: 'file.delete', riskLevel: 'high', requiredScopes: ['file:delete'] }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const revocation = await app.request('/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issuer: 'did:fides:operator',
+          targetType: 'agent',
+          targetId: identity.did,
+          reason: 'Compromised deployment key.',
+        }),
+      })
+      expect(revocation.status).toBe(201)
+      const revocationData = await revocation.json()
+      expect(revocationData.record.status).toBe('active')
+
+      const listed = await app.request('/revocations')
+      expect(listed.status).toBe(200)
+      expect((await listed.json()).records).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: revocationData.record.id, target_id: identity.did }),
+      ]))
+
+      const shown = await app.request(`/revocations/${revocationData.record.id}`)
+      expect(shown.status).toBe(200)
+      expect((await shown.json()).record.target_id).toBe(identity.did)
+
+      const blocked = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: 'did:fides:requester',
+          agentId: identity.did,
+          capability: 'file.delete',
+          requestedScopes: ['file:delete'],
+          approvalGranted: true,
+          runtimeAttestationValid: true,
+        }),
+      })
+      expect(blocked.status).toBe(409)
+      expect((await blocked.json()).policy.reason_codes).toContain('REVOCATION_ACTIVE')
+    })
+
+    it('serves root incident records and blocks scoped session issuance until resolved', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Incident Code Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: 'code.merge', riskLevel: 'critical', requiredScopes: ['code:merge'] }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const incident = await app.request('/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reporter: 'did:fides:principal',
+          targetAgentId: identity.did,
+          severity: 'critical',
+          category: 'unauthorized_action',
+          description: 'Attempted to merge without delegated authority.',
+          evidenceRefs: ['evidence:merge-attempt'],
+        }),
+      })
+      expect(incident.status).toBe(201)
+      const incidentData = await incident.json()
+      expect(incidentData.record.resolution_status).toBe('open')
+
+      const listed = await app.request('/incidents')
+      expect(listed.status).toBe(200)
+      expect((await listed.json()).records).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: incidentData.record.id, target_agent_id: identity.did }),
+      ]))
+
+      const blocked = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: 'did:fides:requester',
+          agentId: identity.did,
+          capability: 'code.merge',
+          requestedScopes: ['code:merge'],
+          approvalGranted: true,
+          runtimeAttestationValid: true,
+        }),
+      })
+      expect(blocked.status).toBe(409)
+      expect((await blocked.json()).policy.reason_codes).toContain('INCIDENT_REQUIRES_REVIEW')
+
+      const resolved = await app.request(`/incidents/${incidentData.record.id}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'resolved' }),
+      })
+      expect(resolved.status).toBe(200)
+      expect((await resolved.json()).record.resolution_status).toBe('resolved')
+    })
+
     it('serves local DHT publish and find endpoints', async () => {
       const publish = await app.request('/dht/publish', {
         method: 'POST',

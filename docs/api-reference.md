@@ -37,6 +37,13 @@ Current implementation anchors:
 - `POST /killswitch`
 - `GET /killswitch`
 - `DELETE /killswitch/:id`
+- `POST /revocations`
+- `GET /revocations`
+- `GET /revocations/:id`
+- `POST /incidents`
+- `GET /incidents`
+- `GET /incidents/:id`
+- `POST /incidents/:id/resolve`
 - `POST /v1/policy/evaluate`
 - `POST /v1/sessions`
 - `GET /v1/sessions/:id`
@@ -107,3 +114,10 @@ not grant authority by themselves; they are inputs to policy/session issuance.
 capability, session, principal, or risk class. Active kill switch rules override
 normal trust and policy evaluation and block root session issuance until
 disabled with `DELETE /killswitch/:id`.
+
+`POST /revocations` creates a local FIDES v2 revocation record for keys,
+identities, agents, AgentCards, capabilities, sessions, attestations, or
+publishers. Active matching revocations override normal policy and block root
+session issuance. `POST /incidents` records an open incident against a target
+agent; open incidents require policy review for matching session requests until
+resolved with `POST /incidents/:id/resolve`.

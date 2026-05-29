@@ -30,9 +30,16 @@ Examples:
 - `POLICY_DENIED`
 - `APPROVAL_REQUIRED`
 - `SESSION_EXPIRED`
+- `SESSION_NOT_FOUND`
 - `ATTESTATION_INVALID`
 - `DHT_POINTER_TAMPERED`
 - `EVIDENCE_CHAIN_BROKEN`
 - `REVOCATION_ACTIVE`
 - `KILL_SWITCH_ACTIVE`
 - `VERSION_INCOMPATIBLE`
+
+Root `agentd` authority-critical failures return this envelope shape on the
+`error` field for session issuance and invocation failures. Policy-blocked
+session issuance maps kill switch, revocation, approval-required, and generic
+policy denial states to stable machine codes while preserving the full
+`policy.reason_codes` list in `error.details`.

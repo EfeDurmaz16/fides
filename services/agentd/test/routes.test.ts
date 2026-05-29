@@ -787,6 +787,40 @@ describe('Agentd Service Routes', () => {
       ]))
     })
 
+    it('returns typed error envelopes for root session and invocation failures', async () => {
+      const missingCapability = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'did:fides:agent:missing',
+          capability: 'invoice.reconcile',
+        }),
+      })
+      expect(missingCapability.status).toBe(404)
+      await expect(missingCapability.json()).resolves.toMatchObject({
+        error: {
+          code: 'CAPABILITY_NOT_FOUND',
+          category: 'capability',
+          retryable: false,
+        },
+      })
+
+      const missingSession = await app.request('/invoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: 'sess_missing' }),
+      })
+      expect(missingSession.status).toBe(404)
+      await expect(missingSession.json()).resolves.toMatchObject({
+        error: {
+          code: 'SESSION_NOT_FOUND',
+          category: 'session',
+          retryable: false,
+        },
+        sessionId: 'sess_missing',
+      })
+    })
+
     it('serves root approval request and decision lifecycle', async () => {
       const request = await app.request('/approvals', {
         method: 'POST',
@@ -873,6 +907,7 @@ describe('Agentd Service Routes', () => {
       expect(blocked.status).toBe(409)
       const blockedData = await blocked.json()
       expect(blockedData.policy.reason_codes).toContain('KILL_SWITCH_ACTIVE')
+      expect(blockedData.error.code).toBe('KILL_SWITCH_ACTIVE')
       expect(blockedData.authorityGranted).toBe(false)
 
       const disabled = await app.request(`/killswitch/${enabledData.rule.id}`, { method: 'DELETE' })
@@ -940,7 +975,9 @@ describe('Agentd Service Routes', () => {
         }),
       })
       expect(blocked.status).toBe(409)
-      expect((await blocked.json()).policy.reason_codes).toContain('REVOCATION_ACTIVE')
+      const blockedData = await blocked.json()
+      expect(blockedData.policy.reason_codes).toContain('REVOCATION_ACTIVE')
+      expect(blockedData.error.code).toBe('REVOCATION_ACTIVE')
     })
 
     it('serves root incident records and blocks scoped session issuance until resolved', async () => {
@@ -1001,7 +1038,9 @@ describe('Agentd Service Routes', () => {
         }),
       })
       expect(blocked.status).toBe(409)
-      expect((await blocked.json()).policy.reason_codes).toContain('INCIDENT_REQUIRES_REVIEW')
+      const blockedData = await blocked.json()
+      expect(blockedData.policy.reason_codes).toContain('INCIDENT_REQUIRES_REVIEW')
+      expect(blockedData.error.code).toBe('POLICY_DENIED')
 
       const resolved = await app.request(`/incidents/${incidentData.record.id}/resolve`, {
         method: 'POST',
@@ -1046,7 +1085,9 @@ describe('Agentd Service Routes', () => {
         }),
       })
       expect(withoutAttestation.status).toBe(409)
-      expect((await withoutAttestation.json()).policy.reason_codes).toContain('HIGH_RISK_REQUIRES_ATTESTATION_OR_APPROVAL')
+      const withoutAttestationData = await withoutAttestation.json()
+      expect(withoutAttestationData.policy.reason_codes).toContain('HIGH_RISK_REQUIRES_ATTESTATION_OR_APPROVAL')
+      expect(withoutAttestationData.error.code).toBe('APPROVAL_REQUIRED')
 
       const attestation = await app.request('/attestations', {
         method: 'POST',

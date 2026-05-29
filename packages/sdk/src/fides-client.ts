@@ -1,3 +1,5 @@
+import { isErrorEnvelope, type ErrorEnvelope } from '@fides/core'
+
 export interface FidesClientOptions {
   daemonUrl: string
   apiKey?: string
@@ -68,6 +70,19 @@ export interface FidesDhtPublishRequest {
   agentCard?: string
   agentCardUrl?: string
   expiresAt?: string
+}
+
+export class FidesClientError extends Error {
+  readonly name = 'FidesClientError'
+
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly payload: unknown,
+    readonly error?: ErrorEnvelope
+  ) {
+    super(message)
+  }
 }
 
 export class FidesClient {
@@ -233,8 +248,17 @@ export class FidesClient {
     const text = await response.text()
     const payload = text ? JSON.parse(text) : {}
     if (!response.ok) {
-      throw new Error(`FIDES request failed with HTTP ${response.status}: ${JSON.stringify(payload)}`)
+      const envelope = extractErrorEnvelope(payload)
+      const message = envelope?.message ?? `FIDES request failed with HTTP ${response.status}`
+      throw new FidesClientError(message, response.status, payload, envelope)
     }
     return payload
   }
+}
+
+function extractErrorEnvelope(payload: unknown): ErrorEnvelope | undefined {
+  if (isErrorEnvelope(payload)) return payload
+  if (!payload || typeof payload !== 'object') return undefined
+  const error = (payload as { error?: unknown }).error
+  return isErrorEnvelope(error) ? error : undefined
 }

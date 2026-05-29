@@ -165,7 +165,10 @@ they do not convert discovery into authority. Discovery, registry, and relay
 helpers accept `supported_versions` and `required_versions` so callers can
 request protocol compatibility filtering. `dht.publish` can publish a signed
 local pointer without an AgentCard URL when `agentId` or `agentCardId` refers to
-a registered local AgentCard.
+a registered local AgentCard. Failed SDK calls throw `FidesClientError`; when
+the daemon returns a protocol `ErrorEnvelope`, the typed envelope is available
+on `error.error` with stable `code`, `category`, `severity`, `retryable`,
+`message`, and `details` fields.
 Advanced authority flows can use `AgentdClient`. `AgentdClient.health()` reads
 `GET /health` and returns typed authority-store and local-state-store status,
 including the SQLite snapshot path when the daemon exposes it.

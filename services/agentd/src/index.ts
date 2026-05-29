@@ -40,6 +40,7 @@ import {
   createKillSwitchRule,
   createDelegationToken,
   createDHTPointerRecord,
+  createErrorEnvelope,
   createRegistryIndexRecord,
   createPrincipalIdentity,
   createPublisherIdentity,
@@ -506,6 +507,25 @@ function activeLocalRevocationFor(input: {
 function activeLocalIncidentFor(agentId: string): IncidentRecordV2 | undefined {
   return Array.from(localIncidentRecords.values()).find((record) => {
     return record.target_agent_id === agentId && record.resolution_status === 'open'
+  })
+}
+
+function policyErrorEnvelope(policy: FidesPolicyDecision) {
+  const code = policy.reason_codes.includes('KILL_SWITCH_ACTIVE')
+    ? 'KILL_SWITCH_ACTIVE'
+    : policy.reason_codes.includes('REVOCATION_ACTIVE')
+      ? 'REVOCATION_ACTIVE'
+      : policy.reason_codes.includes('HIGH_RISK_REQUIRES_ATTESTATION_OR_APPROVAL') || policy.reason_codes.includes('CRITICAL_REQUIRES_EXPLICIT_APPROVAL')
+        ? 'APPROVAL_REQUIRED'
+        : 'POLICY_DENIED'
+
+  return createErrorEnvelope(code, {
+    message: policy.human_reasons[0] ?? undefined,
+    details: {
+      decision: policy.decision,
+      reason_codes: policy.reason_codes,
+      required_controls: policy.required_controls,
+    },
   })
 }
 
@@ -1333,17 +1353,26 @@ app.post('/sessions', async (c) => {
       : undefined
 
   if (!targetAgentId || !capabilityId) {
-    return c.json({ error: 'agentId and capability are required' }, 400)
+    return c.json({ error: createErrorEnvelope('CAPABILITY_NOT_FOUND', {
+      message: 'agentId and capability are required',
+      details: { agentId: targetAgentId, capability: capabilityId },
+    }) }, 400)
   }
 
   const found = findLocalCapability(targetAgentId, capabilityId)
   if (!found) {
-    return c.json({ error: 'registered agent capability not found', agentId: targetAgentId, capability: capabilityId }, 404)
+    return c.json({ error: createErrorEnvelope('CAPABILITY_NOT_FOUND', {
+      message: 'Registered agent capability was not found',
+      details: { agentId: targetAgentId, capability: capabilityId },
+    }), agentId: targetAgentId, capability: capabilityId }, 404)
   }
 
   const trust = computeLocalTrustResult(targetAgentId, capabilityId)
   if (!trust) {
-    return c.json({ error: 'trust result unavailable', agentId: targetAgentId, capability: capabilityId }, 404)
+    return c.json({ error: createErrorEnvelope('TRUST_BELOW_THRESHOLD', {
+      message: 'Trust result is unavailable',
+      details: { agentId: targetAgentId, capability: capabilityId },
+    }), agentId: targetAgentId, capability: capabilityId }, 404)
   }
 
   const requestedScopes = Array.isArray(body.requestedScopes) ? body.requestedScopes.map(String) : []
@@ -1401,6 +1430,7 @@ app.post('/sessions', async (c) => {
     return c.json({
       authorized: false,
       authorityGranted: false,
+      error: policyErrorEnvelope(policy),
       policy,
       trust,
       killSwitch: activeKillSwitch,
@@ -1456,7 +1486,10 @@ app.post('/sessions', async (c) => {
 app.get('/sessions/:id', (c) => {
   const record = localSessionGrants.get(c.req.param('id'))
   if (!record) {
-    return c.json({ error: 'session not found' }, 404)
+    return c.json({ error: createErrorEnvelope('SESSION_NOT_FOUND', {
+      message: 'Session was not found or is no longer available',
+      details: { sessionId: c.req.param('id') },
+    }) }, 404)
   }
   return c.json({ session: record.session, policy: record.policy, trust: record.trust })
 })
@@ -1464,7 +1497,13 @@ app.get('/sessions/:id', (c) => {
 app.post('/sessions/:id/verify', (c) => {
   const record = localSessionGrants.get(c.req.param('id'))
   if (!record) {
-    return c.json({ valid: false, error: 'session not found' }, 404)
+    return c.json({
+      valid: false,
+      error: createErrorEnvelope('SESSION_NOT_FOUND', {
+        message: 'Session was not found or is no longer available',
+        details: { sessionId: c.req.param('id') },
+      }),
+    }, 404)
   }
 
   return c.json({
@@ -1481,21 +1520,35 @@ app.post('/invoke', async (c) => {
       ? body.session_id
       : undefined
   if (!sessionId) {
-    return c.json({ error: 'sessionId is required' }, 400)
+    return c.json({ error: createErrorEnvelope('SESSION_SCOPE_INVALID', {
+      message: 'sessionId is required',
+    }) }, 400)
   }
 
   const record = localSessionGrants.get(sessionId)
   if (!record) {
-    return c.json({ error: 'session not found', sessionId }, 404)
+    return c.json({ error: createErrorEnvelope('SESSION_NOT_FOUND', {
+      message: 'Session was not found or is no longer available',
+      details: { sessionId },
+    }), sessionId }, 404)
   }
 
   if (new Date(record.session.expires_at).getTime() <= Date.now()) {
-    return c.json({ error: 'session expired', sessionId, authorityGranted: false }, 409)
+    return c.json({ error: createErrorEnvelope('SESSION_EXPIRED', {
+      details: { sessionId, expires_at: record.session.expires_at },
+    }), sessionId, authorityGranted: false }, 409)
   }
 
   const found = findLocalCapability(record.session.target_agent_id, record.session.capability)
   if (!found) {
-    return c.json({ error: 'registered agent capability not found', sessionId, authorityGranted: false }, 404)
+    return c.json({ error: createErrorEnvelope('CAPABILITY_NOT_FOUND', {
+      message: 'Registered agent capability was not found',
+      details: {
+        sessionId,
+        agentId: record.session.target_agent_id,
+        capability: record.session.capability,
+      },
+    }), sessionId, authorityGranted: false }, 404)
   }
 
   const request = createInvocationRequest({

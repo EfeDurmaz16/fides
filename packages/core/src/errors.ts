@@ -72,6 +72,12 @@ export const FIDES_ERROR_CODES = {
     retryable: true,
     message: 'Session is expired',
   },
+  SESSION_NOT_FOUND: {
+    category: 'session',
+    severity: 'error',
+    retryable: false,
+    message: 'Session was not found',
+  },
   SESSION_SCOPE_INVALID: {
     category: 'session',
     severity: 'error',

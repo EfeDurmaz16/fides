@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { FidesClient } from '../src/fides-client.js'
+import { FidesClient, FidesClientError } from '../src/fides-client.js'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -253,6 +253,48 @@ describe('FidesClient', () => {
       'http://localhost:7345/identities/did%3Afides%3Aagent',
     ])
     expect((calls[0].init?.headers as Headers).get('X-API-Key')).toBe('sdk-key')
+  })
+
+  it('throws typed client errors when agentd returns an ErrorEnvelope', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      return new Response(JSON.stringify({
+        error: {
+          code: 'APPROVAL_REQUIRED',
+          category: 'approval',
+          severity: 'warning',
+          retryable: true,
+          message: 'Human approval is required before execution',
+          details: { reason_codes: ['HIGH_RISK_REQUIRES_ATTESTATION_OR_APPROVAL'] },
+        },
+      }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+
+    await expect(client.sessions.request({
+      agentId: 'did:fides:agent',
+      capability: 'payments.prepare',
+    })).rejects.toMatchObject({
+      name: 'FidesClientError',
+      status: 409,
+      error: {
+        code: 'APPROVAL_REQUIRED',
+        retryable: true,
+      },
+    })
+
+    try {
+      await client.sessions.request({ agentId: 'did:fides:agent', capability: 'payments.prepare' })
+    } catch (error) {
+      expect(error).toBeInstanceOf(FidesClientError)
+      expect((error as FidesClientError).message).toBe('Human approval is required before execution')
+      expect((error as FidesClientError).error?.details).toEqual({
+        reason_codes: ['HIGH_RISK_REQUIRES_ATTESTATION_OR_APPROVAL'],
+      })
+    }
   })
 
   it('uses the root AgentCard API served by local agentd', async () => {

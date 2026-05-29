@@ -138,6 +138,7 @@ export { metricsMiddleware } from './observability/metrics-middleware.js'
 export { Fides } from './fides.js'
 export {
   FidesClient,
+  FidesClientError,
   type FidesClientOptions,
   type FidesDiscoveryQuery,
   type FidesDiscoveryResponse,

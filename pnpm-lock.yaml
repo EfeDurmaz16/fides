@@ -34,6 +34,22 @@ importers:
         specifier: ^5.5.0
         version: 5.9.3
 
+  packages/adapters:
+    dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.10)
+
   packages/cli:
     dependencies:
       '@fides/core':

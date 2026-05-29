@@ -16,7 +16,7 @@
 | `policy-engine` | 3300 | None          | Deterministic policy evaluation          |
 | `registry`   | 7346  | PostgreSQL or file | AgentCard registry with durable hosted storage |
 | `relay`      | 7347  | File or memory | Message relay for NAT/firewall traversal |
-| `agentd`     | 7345  | PostgreSQL or file | Local daemon unifying all services and durable authority state |
+| `agentd`     | 7345  | PostgreSQL, file, and local SQLite | Local daemon unifying all services, durable authority state, and local v2 agent state |
 | `platform-api` | 3600 | None          | Platform health, version, and topology metadata |
 
 ---
@@ -64,6 +64,26 @@ cp .env.example .env
 | `AGENTD_DB_POOL_MAX`      | `10`    | no | Agentd authority store connection pool size. Falls back to `DB_POOL_MAX`. |
 | `AGENTD_STATE_STORE_PATH` | _(empty)_ | no | File authority store path. Defaults to `~/.fides/agentd/authority-store.json`. |
 | `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION` | `true` in production, `false` otherwise | no | When `true`, agentd rejects delegation, revocation, and incident writes unless the request includes the corresponding signer public key for canonical signature verification. Set `false` only for transitional deployments that cannot yet send signer public keys. |
+
+### Agentd Local V2 State
+
+This store is separate from the legacy authority store above. It persists the
+root v2 local daemon surfaces: identities, AgentCards, registered agents,
+registry/relay/DHT local records, trust and reputation results, approvals, kill
+switch rules, revocations, incidents, runtime attestations, sessions, and
+EvidenceEvents.
+
+| Variable             | Default | Required | Description |
+| -------------------- | ------- | -------- | ----------- |
+| `AGENTD_LOCAL_STATE` | `sqlite` outside tests, `memory` in tests | no | `sqlite` persists the root v2 local daemon snapshot. `memory` keeps the root v2 prototype ephemeral for local test runs. |
+| `AGENTD_SQLITE_PATH` | `~/.fides/fides.sqlite` | no | SQLite file path for the root v2 local daemon snapshot store. |
+
+The SQLite store currently writes a single schema-versioned snapshot row plus a
+local migration ledger. It is durable across daemon restarts, but it is not yet
+the final normalized table layout. Local identity private key material used for
+prototype signing is included in this snapshot and should be protected by local
+filesystem permissions; OS-backed encryption or hardware-backed key storage is a
+production hardening item.
 
 ### Registry Store
 

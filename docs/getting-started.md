@@ -83,6 +83,11 @@ This starts:
 - **Agent Daemon** on `http://localhost:7345`
 - **Platform API** on `http://localhost:3600`
 
+The local Agent Daemon stores root v2 prototype state in
+`~/.fides/fides.sqlite` by default outside tests. Set
+`AGENTD_SQLITE_PATH=/path/to/fides.sqlite` to use a different file, or
+`AGENTD_LOCAL_STATE=memory` for an ephemeral daemon run.
+
 **Verify services are running:**
 ```bash
 curl http://localhost:3100/.well-known/fides.json

@@ -93,9 +93,12 @@ Current implementation anchors:
 - `POST /evidence/export`
 
 The root v2 endpoints are local-first daemon surfaces. Registry and relay are
-mock/local providers, while root evidence uses an in-memory hash-chained ledger
-for the current daemon process and should be backed by durable storage before
-production use.
+mock/local providers, and the root daemon persists its local v2 state through a
+SQLite-backed snapshot store by default outside tests. The default path is
+`~/.fides/fides.sqlite`; set `AGENTD_SQLITE_PATH` to override it or
+`AGENTD_LOCAL_STATE=memory` to disable persistence for ephemeral local runs.
+This store is a daemon snapshot, not the final normalized SQLite table model for
+production hardening.
 
 `POST /registry/start`, `POST /registry/publish`, `POST /registry/search`, and
 `GET /registry/index` provide a local mock registry over registered AgentCards.
@@ -111,7 +114,8 @@ local well-known metadata for same-host discovery.
 EvidenceEvent ledger. Sensitive inputs and outputs are not stored directly by
 default; the daemon records `sha256:` hashes and metadata under `hash_only`
 privacy unless another privacy mode is explicitly requested. Root evidence is
-tamper-evident inside the process, not yet durable across daemon restarts.
+tamper-evident through the hash chain and is persisted in the local daemon
+snapshot when SQLite state is enabled.
 
 `POST /demo/run` executes the local FIDES v2 trust-fabric scenario in the
 current daemon process. It creates demo identities and signed AgentCards,
@@ -120,18 +124,22 @@ provider discovery, verifies AgentCards, evaluates trust/reputation/policy,
 issues scoped sessions, invokes invoice and payment dry-run flows, records an
 incident and revocation, and verifies the local EvidenceEvent hash chain.
 
-`POST /identities` creates local in-memory identities for the daemon prototype
-and returns only public identity data. Private keys are retained inside the
-daemon process and are not returned by `POST /identities`, `GET /identities`, or
-`GET /identities/:id`. This route is protected by the same production API-key
+`POST /identities` creates local daemon identities and returns only public
+identity data. Private keys are retained in local daemon state for prototype
+signing and are not returned by `POST /identities`, `GET /identities`, or
+`GET /identities/:id`. When SQLite state is enabled, that local signing material
+is included in the daemon snapshot and must be protected by filesystem controls;
+OS-backed encryption or hardware-backed key storage remains production
+hardening work. This route is protected by the same production API-key
 fail-closed behavior as other mutating `agentd` routes.
 
-`POST /agent-cards` creates local in-memory AgentCards bound to local daemon
-identities. `POST /agent-cards/:id/sign` signs the stored card with the local
-agent identity key using the canonical AgentCard signing model, and
+`POST /agent-cards` creates local AgentCards bound to local daemon identities.
+`POST /agent-cards/:id/sign` signs the stored card with the local agent identity
+key using the canonical AgentCard signing model, and
 `POST /agent-cards/:id/verify` verifies the signed card when present. These
-routes are prototype-local until the daemon storage layer is migrated to
-durable SQLite-backed identity/card storage.
+routes are durable across daemon restarts when SQLite local state is enabled,
+but remain prototype-local until the daemon state is migrated from snapshot
+storage to normalized identity/card tables.
 
 `POST /agents/register` registers a locally stored AgentCard as a discovery
 candidate. `GET /agents` and `GET /agents/:id` expose local registration state
@@ -160,9 +168,10 @@ returns `authorityGranted: false`; it must still be signed and converted into a
 policy-checked SessionGrant before invocation. `POST /sessions` issues a local
 `SessionGrant` only after policy allows or limits the action to dry-run.
 `POST /invoke` verifies the session, runs the policy preflight path, validates
-the capability context, and returns an `InvocationResult`. The current root
-implementation is in-memory and intended for local daemon DX; durable storage
-and signed invocation results remain follow-up hardening work.
+the capability context, and returns an `InvocationResult`. Invocation state and
+result evidence are persisted in the local daemon snapshot when SQLite state is
+enabled; signed invocation results and normalized durable tables remain
+follow-up hardening work.
 
 `POST /approvals` creates an approval request and records approval decisions
 through `/approvals/:id/approve` or `/approvals/:id/deny`. Approval records do

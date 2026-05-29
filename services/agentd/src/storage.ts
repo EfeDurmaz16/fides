@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import postgres from 'postgres'
 import type { EvidenceChain } from '@fides/evidence'
 import type {
@@ -31,6 +32,37 @@ export interface AuthorityStoreHealth {
   ok: boolean
   kind: AuthorityStore['kind']
   detail?: string
+}
+
+export interface LocalDaemonStateSnapshot {
+  schemaVersion: 'fides.agentd.local_state.v1'
+  updatedAt: string
+  identities: unknown[]
+  agentCards: unknown[]
+  signedAgentCards: unknown[]
+  agents: unknown[]
+  dhtPointers: unknown[]
+  registryRecords: unknown[]
+  relayRecords: unknown[]
+  trustResults: unknown[]
+  reputationRecords: unknown[]
+  delegationTokens: unknown[]
+  approvals: unknown[]
+  approvalDecisions: unknown[]
+  killSwitchRules: unknown[]
+  revocationRecords: unknown[]
+  incidentRecords: unknown[]
+  runtimeAttestations: unknown[]
+  evidenceEvents: unknown[]
+  sessionGrants: unknown[]
+}
+
+export interface LocalDaemonStateStore {
+  readonly kind: 'memory' | 'sqlite'
+  load(): Promise<LocalDaemonStateSnapshot | null>
+  save(snapshot: LocalDaemonStateSnapshot): Promise<void>
+  healthCheck(): Promise<{ ok: boolean; kind: LocalDaemonStateStore['kind']; path?: string; detail?: string }>
+  close?(): Promise<void>
 }
 
 export type AuthorityPropagationRecordType = 'revocation' | 'incident'
@@ -625,6 +657,158 @@ export function createAuthorityStore(): AuthorityStore {
     return new PostgresAuthorityStore(process.env.AGENTD_DATABASE_URL || process.env.DATABASE_URL)
   }
   return new FileAuthorityStore(process.env.AGENTD_STATE_STORE_PATH)
+}
+
+export class InMemoryLocalDaemonStateStore implements LocalDaemonStateStore {
+  readonly kind = 'memory' as const
+  private snapshot: LocalDaemonStateSnapshot | null = null
+
+  async load(): Promise<LocalDaemonStateSnapshot | null> {
+    return this.snapshot
+  }
+
+  async save(snapshot: LocalDaemonStateSnapshot): Promise<void> {
+    this.snapshot = snapshot
+  }
+
+  async healthCheck(): Promise<{ ok: boolean; kind: 'memory' }> {
+    return { ok: true, kind: this.kind }
+  }
+}
+
+export class SqliteLocalDaemonStateStore implements LocalDaemonStateStore {
+  readonly kind = 'sqlite' as const
+  private db: unknown
+
+  constructor(readonly path = join(homedir(), '.fides', 'fides.sqlite')) {}
+
+  async load(): Promise<LocalDaemonStateSnapshot | null> {
+    const db = await this.database()
+    const row = db.prepare('SELECT snapshot FROM agentd_local_state WHERE id = ?').get('root') as { snapshot?: string } | undefined
+    if (!row?.snapshot) return null
+    return normalizeLocalDaemonStateSnapshot(JSON.parse(row.snapshot))
+  }
+
+  async save(snapshot: LocalDaemonStateSnapshot): Promise<void> {
+    const db = await this.database()
+    const normalized = normalizeLocalDaemonStateSnapshot(snapshot)
+    db.prepare(`
+      INSERT INTO agentd_local_state (id, snapshot, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET snapshot = excluded.snapshot, updated_at = excluded.updated_at
+    `).run('root', JSON.stringify(normalized), normalized.updatedAt)
+  }
+
+  async healthCheck(): Promise<{ ok: boolean; kind: 'sqlite'; path: string; detail?: string }> {
+    try {
+      await this.database()
+      return { ok: true, kind: this.kind, path: this.path }
+    } catch (error) {
+      return {
+        ok: false,
+        kind: this.kind,
+        path: this.path,
+        detail: error instanceof Error ? error.message : String(error),
+      }
+    }
+  }
+
+  async close(): Promise<void> {
+    if (this.db && typeof (this.db as { close?: unknown }).close === 'function') {
+      ;(this.db as { close: () => void }).close()
+      this.db = undefined
+    }
+  }
+
+  private async database(): Promise<{
+    exec(statement: string): void
+    prepare(statement: string): {
+      get(...params: unknown[]): unknown
+      run(...params: unknown[]): unknown
+    }
+    close(): void
+  }> {
+    if (this.db) {
+      return this.db as Awaited<ReturnType<SqliteLocalDaemonStateStore['database']>>
+    }
+
+    await mkdir(dirname(this.path), { recursive: true })
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite')
+    const db = new DatabaseSync(this.path)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS agentd_local_state (
+        id TEXT PRIMARY KEY,
+        snapshot TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS agentd_local_state_migrations (
+        id TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT OR IGNORE INTO agentd_local_state_migrations (id) VALUES ('001_local_state_snapshot');
+    `)
+    this.db = db
+    return db as Awaited<ReturnType<SqliteLocalDaemonStateStore['database']>>
+  }
+}
+
+export function emptyLocalDaemonStateSnapshot(updatedAt = new Date().toISOString()): LocalDaemonStateSnapshot {
+  return {
+    schemaVersion: 'fides.agentd.local_state.v1',
+    updatedAt,
+    identities: [],
+    agentCards: [],
+    signedAgentCards: [],
+    agents: [],
+    dhtPointers: [],
+    registryRecords: [],
+    relayRecords: [],
+    trustResults: [],
+    reputationRecords: [],
+    delegationTokens: [],
+    approvals: [],
+    approvalDecisions: [],
+    killSwitchRules: [],
+    revocationRecords: [],
+    incidentRecords: [],
+    runtimeAttestations: [],
+    evidenceEvents: [],
+    sessionGrants: [],
+  }
+}
+
+export function normalizeLocalDaemonStateSnapshot(value: unknown): LocalDaemonStateSnapshot {
+  const input = value && typeof value === 'object' ? value as Partial<LocalDaemonStateSnapshot> : {}
+  const base = emptyLocalDaemonStateSnapshot(typeof input.updatedAt === 'string' ? input.updatedAt : undefined)
+  return {
+    ...base,
+    schemaVersion: 'fides.agentd.local_state.v1',
+    identities: Array.isArray(input.identities) ? input.identities : [],
+    agentCards: Array.isArray(input.agentCards) ? input.agentCards : [],
+    signedAgentCards: Array.isArray(input.signedAgentCards) ? input.signedAgentCards : [],
+    agents: Array.isArray(input.agents) ? input.agents : [],
+    dhtPointers: Array.isArray(input.dhtPointers) ? input.dhtPointers : [],
+    registryRecords: Array.isArray(input.registryRecords) ? input.registryRecords : [],
+    relayRecords: Array.isArray(input.relayRecords) ? input.relayRecords : [],
+    trustResults: Array.isArray(input.trustResults) ? input.trustResults : [],
+    reputationRecords: Array.isArray(input.reputationRecords) ? input.reputationRecords : [],
+    delegationTokens: Array.isArray(input.delegationTokens) ? input.delegationTokens : [],
+    approvals: Array.isArray(input.approvals) ? input.approvals : [],
+    approvalDecisions: Array.isArray(input.approvalDecisions) ? input.approvalDecisions : [],
+    killSwitchRules: Array.isArray(input.killSwitchRules) ? input.killSwitchRules : [],
+    revocationRecords: Array.isArray(input.revocationRecords) ? input.revocationRecords : [],
+    incidentRecords: Array.isArray(input.incidentRecords) ? input.incidentRecords : [],
+    runtimeAttestations: Array.isArray(input.runtimeAttestations) ? input.runtimeAttestations : [],
+    evidenceEvents: Array.isArray(input.evidenceEvents) ? input.evidenceEvents : [],
+    sessionGrants: Array.isArray(input.sessionGrants) ? input.sessionGrants : [],
+  }
+}
+
+export function createLocalDaemonStateStore(): LocalDaemonStateStore {
+  if (process.env.AGENTD_LOCAL_STATE === 'memory' || process.env.NODE_ENV === 'test') {
+    return new InMemoryLocalDaemonStateStore()
+  }
+  return new SqliteLocalDaemonStateStore(process.env.AGENTD_SQLITE_PATH)
 }
 
 function requiredDatabaseUrl(): string {

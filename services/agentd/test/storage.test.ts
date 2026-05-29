@@ -11,6 +11,8 @@ import {
   InMemoryAuthorityStore,
   PostgresAuthorityStore,
   createAuthorityClient,
+  emptyLocalDaemonStateSnapshot,
+  SqliteLocalDaemonStateStore,
   runAuthorityMigrations,
 } from '../src/storage.js'
 
@@ -137,6 +139,35 @@ describe('agentd authority stores', () => {
 
     expect(revoked?.revoked).toBe(true)
     expect((await store.getSession(grant.id))?.revocationReason).toBe('manual')
+  })
+
+  it('persists root local daemon state to sqlite', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fides-agentd-sqlite-'))
+    tempDirs.push(dir)
+    const path = join(dir, 'fides.sqlite')
+    const store = new SqliteLocalDaemonStateStore(path)
+    const snapshot = {
+      ...emptyLocalDaemonStateSnapshot('2026-01-01T00:00:00.000Z'),
+      identities: [{ did: 'did:fides:agent' }],
+      agentCards: [{ id: 'card-1' }],
+      agents: [{ agentId: 'did:fides:agent', cardId: 'card-1' }],
+      evidenceEvents: [{ event_id: 'evt-1' }],
+    }
+
+    await store.save(snapshot)
+    await store.close?.()
+
+    const reopened = new SqliteLocalDaemonStateStore(path)
+    const loaded = await reopened.load()
+    await reopened.close?.()
+
+    expect(loaded).toMatchObject({
+      schemaVersion: 'fides.agentd.local_state.v1',
+      identities: [{ did: 'did:fides:agent' }],
+      agentCards: [{ id: 'card-1' }],
+      agents: [{ agentId: 'did:fides:agent', cardId: 'card-1' }],
+      evidenceEvents: [{ event_id: 'evt-1' }],
+    })
   })
 
   it('rejects unsafe configured authority schema names', () => {

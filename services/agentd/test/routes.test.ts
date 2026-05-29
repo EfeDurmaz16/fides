@@ -283,7 +283,9 @@ describe('Agentd Service Routes', () => {
       expect(data.checks.trustGraph).toBe('connected')
       expect(data.checks.registry).toBe('connected')
       expect(data.checks.authorityStore).toBe('ready')
+      expect(data.checks.localStateStore).toBe('ready')
       expect(data.authorityStore.kind).toBe('memory')
+      expect(data.localStateStore.kind).toBe('memory')
       expect(data.status).toBe('healthy')
     })
 
@@ -298,6 +300,7 @@ describe('Agentd Service Routes', () => {
       expect(data.checks.trustGraph).toBe('unreachable')
       expect(data.checks.registry).toBe('unreachable')
       expect(data.checks.authorityStore).toBe('ready')
+      expect(data.checks.localStateStore).toBe('ready')
     })
   })
 

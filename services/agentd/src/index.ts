@@ -78,11 +78,12 @@ import {
   type SignedAgentCard,
   type TrustResult,
 } from '@fides/core'
-import { createAuthorityStore } from './storage.js'
+import { createAuthorityStore, createLocalDaemonStateStore, emptyLocalDaemonStateSnapshot } from './storage.js'
 import type {
   AuthorityPropagationRecord,
   AuthorityPropagationRecordType,
   AuthorityPropagationStatus,
+  LocalDaemonStateSnapshot,
 } from './storage.js'
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
@@ -102,6 +103,7 @@ const teeProvider = new RuntimeMockTEEProvider()
 const runtimeAttestationProvider = new CoreMockTEEProvider()
 const killSwitch = new InMemoryKillSwitch()
 const authorityStore = createAuthorityStore()
+const localStateStore = createLocalDaemonStateStore()
 const localDhtPointers: Array<Record<string, unknown>> = []
 type LocalIdentityType = 'agent' | 'publisher' | 'principal'
 interface LocalIdentityRecord {
@@ -139,6 +141,7 @@ interface LocalSessionRecord {
   trust: TrustResult
 }
 const localSessionGrants = new Map<string, LocalSessionRecord>()
+let localStateLoaded = false
 const fullDemoSteps = [
   'initialize_daemon',
   'create_principal_identity',
@@ -192,6 +195,138 @@ function getCorsOrigin(): string {
 
 function bytesToHex(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('hex')
+}
+
+function mapValues<T>(items: T[]): Map<string, T> {
+  return new Map(items.flatMap((item) => {
+    const id = typeof item === 'object' && item !== null
+      ? (item as Record<string, unknown>).id
+      : undefined
+    return typeof id === 'string' ? [[id, item] as const] : []
+  }))
+}
+
+function hydrateLocalState(snapshot: LocalDaemonStateSnapshot): void {
+  localIdentities.clear()
+  for (const record of snapshot.identities as LocalIdentityRecord[]) {
+    if (record?.identity?.did) localIdentities.set(record.identity.did, record)
+  }
+  localAgentCards.clear()
+  for (const card of snapshot.agentCards as AgentCard[]) {
+    if (card?.id) localAgentCards.set(card.id, card)
+  }
+  localSignedAgentCards.clear()
+  for (const signed of snapshot.signedAgentCards as SignedAgentCard[]) {
+    if (signed?.payload?.id) localSignedAgentCards.set(signed.payload.id, signed)
+  }
+  localAgents.clear()
+  for (const record of snapshot.agents as LocalRegisteredAgent[]) {
+    if (record?.agentId) localAgents.set(record.agentId, record)
+  }
+  localDhtPointers.length = 0
+  localDhtPointers.push(...snapshot.dhtPointers as Array<Record<string, unknown>>)
+  localRegistryRecords.clear()
+  for (const record of snapshot.registryRecords as Array<Record<string, unknown>>) {
+    if (typeof record.id === 'string') localRegistryRecords.set(record.id, record)
+  }
+  localRelayRecords.clear()
+  for (const record of snapshot.relayRecords as Array<Record<string, unknown>>) {
+    const id = typeof record.agentId === 'string' ? record.agentId : typeof record.id === 'string' ? record.id : undefined
+    if (id) localRelayRecords.set(id, record)
+  }
+  localTrustResults.clear()
+  for (const trust of snapshot.trustResults as TrustResult[]) {
+    if (trust?.agent_id && trust?.capability) localTrustResults.set(localCapabilityKey(trust.agent_id, trust.capability), trust)
+  }
+  localReputationRecords.clear()
+  for (const record of snapshot.reputationRecords as ReputationRecord[]) {
+    if (record?.agent_id && record?.capability) localReputationRecords.set(localCapabilityKey(record.agent_id, record.capability), record)
+  }
+  localDelegationTokens.clear()
+  for (const token of snapshot.delegationTokens as DelegationToken[]) {
+    if (token?.id) localDelegationTokens.set(token.id, token)
+  }
+  replaceMap(localApprovals, mapValues(snapshot.approvals as ApprovalRequest[]))
+  replaceMap(localApprovalDecisions, mapValues(snapshot.approvalDecisions as ApprovalDecision[]))
+  replaceMap(localKillSwitchRules, mapValues(snapshot.killSwitchRules as KillSwitchRule[]))
+  replaceMap(localRevocationRecords, mapValues(snapshot.revocationRecords as RevocationRecordV2[]))
+  replaceMap(localIncidentRecords, mapValues(snapshot.incidentRecords as IncidentRecordV2[]))
+  localRuntimeAttestations.clear()
+  for (const attestation of snapshot.runtimeAttestations as RuntimeAttestation[]) {
+    if (attestation?.attestation_id) localRuntimeAttestations.set(attestation.attestation_id, attestation)
+  }
+  localEvidenceEvents = snapshot.evidenceEvents as EvidenceEventV2[]
+  localSessionGrants.clear()
+  for (const record of snapshot.sessionGrants as LocalSessionRecord[]) {
+    if (record?.session?.session_id) localSessionGrants.set(record.session.session_id, record)
+  }
+}
+
+function replaceMap<K, V>(target: Map<K, V>, source: Map<K, V>): void {
+  target.clear()
+  for (const [key, value] of source) target.set(key, value)
+}
+
+function localStateSnapshot(): LocalDaemonStateSnapshot {
+  return {
+    ...emptyLocalDaemonStateSnapshot(),
+    identities: Array.from(localIdentities.values()),
+    agentCards: Array.from(localAgentCards.values()),
+    signedAgentCards: Array.from(localSignedAgentCards.values()),
+    agents: Array.from(localAgents.values()),
+    dhtPointers: [...localDhtPointers],
+    registryRecords: Array.from(localRegistryRecords.values()),
+    relayRecords: Array.from(localRelayRecords.values()),
+    trustResults: Array.from(localTrustResults.values()),
+    reputationRecords: Array.from(localReputationRecords.values()),
+    delegationTokens: Array.from(localDelegationTokens.values()),
+    approvals: Array.from(localApprovals.values()),
+    approvalDecisions: Array.from(localApprovalDecisions.values()),
+    killSwitchRules: Array.from(localKillSwitchRules.values()),
+    revocationRecords: Array.from(localRevocationRecords.values()),
+    incidentRecords: Array.from(localIncidentRecords.values()),
+    runtimeAttestations: Array.from(localRuntimeAttestations.values()),
+    evidenceEvents: localEvidenceEvents,
+    sessionGrants: Array.from(localSessionGrants.values()),
+  }
+}
+
+async function ensureLocalStateLoaded(): Promise<void> {
+  if (localStateLoaded) return
+  const snapshot = await localStateStore.load()
+  if (snapshot) hydrateLocalState(snapshot)
+  localStateLoaded = true
+}
+
+async function persistLocalState(): Promise<void> {
+  if (!localStateLoaded) return
+  await localStateStore.save(localStateSnapshot())
+}
+
+function shouldPersistLocalState(method: string, path: string, status: number): boolean {
+  if (status >= 500) return false
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return false
+  return [
+    '/identities',
+    '/agent-cards',
+    '/agents',
+    '/trust',
+    '/reputation',
+    '/delegations',
+    '/sessions',
+    '/invoke',
+    '/approvals',
+    '/killswitch',
+    '/revocations',
+    '/incidents',
+    '/attestations',
+    '/dht',
+    '/registry',
+    '/relay',
+    '/evidence',
+    '/demo',
+    '/simulate',
+  ].some(prefix => path === prefix || path.startsWith(`${prefix}/`))
 }
 
 async function createLocalIdentity(
@@ -382,6 +517,13 @@ app.use('*', cors({
   origin: getCorsOrigin(),
   exposeHeaders: ['X-Request-Id'],
 }))
+app.use('*', async (c, next) => {
+  await ensureLocalStateLoaded()
+  await next()
+  if (shouldPersistLocalState(c.req.method, new URL(c.req.url).pathname, c.res.status)) {
+    await persistLocalState()
+  }
+})
 // Auth on mutating endpoints (skip GET /health)
 app.use('/v1/*', async (c, next) => {
   if (c.req.method === 'GET') return next()
@@ -573,14 +715,15 @@ app.get('/health', async (c) => {
     }
   }
 
-  const [discovery, trustGraph, registry, authority] = await Promise.all([
+  const [discovery, trustGraph, registry, authority, localState] = await Promise.all([
     probe(DISCOVERY_URL),
     probe(TRUST_GRAPH_URL),
     probe(REGISTRY_URL),
     authorityStore.healthCheck(),
+    localStateStore.healthCheck(),
   ])
 
-  const allOk = discovery.reachable && trustGraph.reachable && registry.reachable && authority.ok
+  const allOk = discovery.reachable && trustGraph.reachable && registry.reachable && authority.ok && localState.ok
   const status = allOk ? 'healthy' : 'degraded'
 
   return c.json({
@@ -593,12 +736,14 @@ app.get('/health', async (c) => {
       trustGraph: trustGraph.reachable ? 'connected' : 'unreachable',
       registry: registry.reachable ? 'connected' : 'unreachable',
       authorityStore: authority.ok ? 'ready' : 'unready',
+      localStateStore: localState.ok ? 'ready' : 'unready',
     },
     authorityStore: {
       kind: authority.kind,
       ok: authority.ok,
       detail: authority.detail,
     },
+    localStateStore,
   }, allOk ? 200 : 503)
 })
 

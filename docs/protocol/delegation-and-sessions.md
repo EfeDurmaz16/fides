@@ -10,7 +10,9 @@ Current implementation anchors:
 
 ## SessionGrant Fields
 
+- `id`
 - `session_id`
+- `subject`
 - `requester_agent_id`
 - `target_agent_id`
 - `principal_id`
@@ -25,6 +27,10 @@ Current implementation anchors:
 - `audience`
 - `issuer`
 - canonical signature
+
+`id` and `session_id` are the same value for compatibility with older call
+sites. `subject` is the target agent id, so the shared protocol object envelope
+binds to the same target as the session authority.
 
 Replay protection is required through nonce tracking.
 

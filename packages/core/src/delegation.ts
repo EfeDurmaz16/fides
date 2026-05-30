@@ -42,7 +42,9 @@ export interface SessionGrant {
 
 export interface SessionGrantV2 {
   schema_version: 'fides.session_grant.v1'
+  id: string
   session_id: string
+  subject: string
   requester_agent_id: string
   target_agent_id: string
   principal_id: string
@@ -102,9 +104,12 @@ export function createDelegationToken(input: DelegationInput): DelegationToken {
 }
 
 export function createSessionGrantV2(input: SessionGrantV2Input): SessionGrantV2 {
+  const sessionId = crypto.randomUUID()
   const payload = {
     schema_version: 'fides.session_grant.v1' as const,
-    session_id: crypto.randomUUID(),
+    id: sessionId,
+    session_id: sessionId,
+    subject: input.targetAgentId,
     requester_agent_id: input.requesterAgentId,
     target_agent_id: input.targetAgentId,
     principal_id: input.principalId,
@@ -181,9 +186,17 @@ export function validateDelegationToken(token: DelegationToken): { valid: boolea
 export function validateSessionGrantV2(session: SessionGrantV2): { valid: boolean; errors: string[] } {
   const errors: string[] = []
   if (session.schema_version !== 'fides.session_grant.v1') errors.push('SessionGrant.schema_version is invalid')
+  if (!session.id) errors.push('SessionGrant.id is required')
   if (!session.session_id) errors.push('SessionGrant.session_id is required')
+  if (session.id && session.session_id && session.id !== session.session_id) {
+    errors.push('SessionGrant.id must match SessionGrant.session_id')
+  }
+  if (!session.subject) errors.push('SessionGrant.subject is required')
   if (!session.requester_agent_id) errors.push('SessionGrant.requester_agent_id is required')
   if (!session.target_agent_id) errors.push('SessionGrant.target_agent_id is required')
+  if (session.subject && session.target_agent_id && session.subject !== session.target_agent_id) {
+    errors.push('SessionGrant.subject must match SessionGrant.target_agent_id')
+  }
   if (!session.principal_id) errors.push('SessionGrant.principal_id is required')
   if (!session.capability) errors.push('SessionGrant.capability is required')
   if (!session.scopes || session.scopes.length === 0) errors.push('SessionGrant.scopes must not be empty')

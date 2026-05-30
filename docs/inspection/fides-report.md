@@ -62,7 +62,7 @@ Local evidence:
 | Context-specific trust scoring | Present, evolving | `packages/core/src/trust.ts` defines componentized `TrustResult` scoring with identity, publisher, trust anchor, capability fit, evidence, policy compliance, runtime safety, peer attestation, incident, novelty, and context-boundary components plus canonical `payload_hash`. |
 | Policy engine | Present, simple | `packages/policy/src/index.ts`, `services/policy-engine/src/index.ts`. |
 | Delegation tokens | Present | `packages/core/src/delegation.ts`. |
-| Session grants | Present, not v2-complete | `packages/core/src/delegation.ts`, `packages/core/src/session-store.ts`, `services/agentd/src/index.ts`. |
+| Session grants | Present, evolving | `packages/core/src/delegation.ts` defines scoped v2 `SessionGrant` objects with shared `id`, `issuer`, `subject`, session id, requester, target, principal, capability, scopes, policy/trust hashes, nonce, audience, expiry, and payload hash; `packages/core/src/session-store.ts` and `services/agentd/src/index.ts` use them locally. |
 | Capability invocation | Partial | Guard/agentd authorization exists; no generic signed InvocationRequest/InvocationResult protocol object found. |
 | Runtime attestation | Present | `packages/core/src/runtime-attestation.ts` defines canonical-hashable v2 `RuntimeAttestation` objects; `packages/runtime/src/index.ts` provides MockTEE, HTTP TEE, build, container, package, and GitHub adapter-ready providers. |
 | TEE-ready attestation | Present as adapter boundary | `packages/runtime/src/index.ts`. |

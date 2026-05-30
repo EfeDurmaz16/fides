@@ -87,6 +87,9 @@ pnpm rust-adapter:audit
 delegation-token session creation, all-provider discovery, and adversarial
 simulation.
 
+The CI workflow runs both `pnpm verify` and `pnpm smoke:agentd`, so the same
+local gates are enforced on pull requests before the Docker smoke job runs.
+
 ## Known Limitations
 
 - The full FIDES v2 pivot is not complete.
@@ -98,7 +101,8 @@ simulation.
 - Local key material is prototype-grade and should be hardened before
   production use.
 - Remote CI has not been checked in the current local session unless a PR or CI
-  run explicitly says otherwise.
+  run explicitly says otherwise; the workflow is configured to run the full
+  verify gate and the agentd DX smoke.
 - The branch may need to be pushed before external review.
 
 ## Release Checklist

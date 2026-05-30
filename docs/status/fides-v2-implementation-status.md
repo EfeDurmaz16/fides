@@ -125,6 +125,8 @@ Last verified locally: 2026-05-30.
   docs, demos, and scripts stay aligned with the v2 ontology.
 - CI and npm publish workflows use the same full `pnpm verify` gate used
   locally.
+- CI also runs `pnpm smoke:agentd`, so signed CLI authority flows, local daemon
+  DX, all-provider discovery, demo, and adversarial simulation are PR-gated.
 
 ## Working Prototype
 

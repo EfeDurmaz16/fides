@@ -15,11 +15,12 @@ import {
   validateAgentCard,
   createDelegationToken,
   validateDelegationToken,
+  signDelegationToken,
   type AgentCard,
   type CapabilityDescriptor,
 } from '@fides/core'
 import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
-import { createEvidenceChain, appendEvidenceEvent, buildMerkleRoot, verifyEvidenceChain } from '@fides/evidence'
+import { createEvidenceChain, appendEvidenceEvent, buildMerkleRoot, verifyEvidenceChain, hashEvidenceValue } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateGuard, createTrustContext } from '@fides/guard'
 
@@ -31,7 +32,7 @@ async function demo() {
   console.log('\nStep 1: Creating identities')
   const { identity: alice } = await createAgentIdentity()
   const { identity: bob } = await createAgentIdentity()
-  const { identity: charlie } = await createPrincipalIdentity({
+  const { identity: charlie, privateKey: charliePrivateKey } = await createPrincipalIdentity({
     type: 'individual',
     displayName: 'Charlie User',
   })
@@ -89,17 +90,17 @@ async function demo() {
   }
 
   console.log('\nStep 4: Creating a delegation token')
-  const delegation = createDelegationToken({
+  const delegation = await signDelegationToken(createDelegationToken({
     delegator: charlie.did,
     delegatee: alice.did,
     capabilities: ['email:send', 'calendar:create'],
     constraints: { maxActions: 10, maxSpend: '10.00', allowedContexts: ['work'] },
     expiresAt: new Date(Date.now() + 3600_000).toISOString(),
-  })
-  const delegationValidation = validateDelegationToken({ ...delegation, signature: 'demo-signature' })
+  }), charliePrivateKey)
+  const delegationValidation = validateDelegationToken(delegation)
   console.log(`  Token: ${delegation.id}`)
   console.log(`  Delegator -> delegatee: ${delegation.delegator} -> ${delegation.delegatee}`)
-  console.log(`  Structure valid with demo signature: ${delegationValidation.valid}`)
+  console.log(`  Structure valid with local signature: ${delegationValidation.valid}`)
 
   console.log('\nStep 5: Evaluating policy')
   const policy = {
@@ -131,7 +132,7 @@ async function demo() {
     { id: 'e2', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'calendar:create', payload: {}, privacy: { level: 'hash_only' as const } },
     { id: 'e3', type: 'policy', timestamp: new Date().toISOString(), actor: alice.did, action: 'evaluate', payload: {}, privacy: { level: 'public' as const } },
   ]) {
-    chain = appendEvidenceEvent(chain, event, 'demo-signature')
+    chain = appendEvidenceEvent(chain, event, localEvidenceSignature(event))
   }
   console.log(`  Events: ${chain.events.length}`)
   console.log(`  Chain valid: ${verifyEvidenceChain(chain)}`)
@@ -191,6 +192,10 @@ async function demo() {
   console.log('\n' + '='.repeat(60))
   console.log('  Demo complete - all 9 subsystems exercised')
   console.log('='.repeat(60))
+}
+
+function localEvidenceSignature(event: unknown): string {
+  return `local-evidence:${hashEvidenceValue(event).slice('sha256:'.length)}`
 }
 
 demo().catch((error) => {

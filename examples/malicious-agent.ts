@@ -67,6 +67,7 @@ function main() {
       schema_version: 'fides.invocation.request.v1',
       id: 'inv_req_malicious',
       issuer: 'did:fides:requester',
+      subject: 'did:fides:malicious-agent',
       session_id: 'missing-session',
       requester_agent_id: 'did:fides:requester',
       target_agent_id: 'did:fides:malicious-agent',

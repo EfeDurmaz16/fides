@@ -11,11 +11,11 @@
  * Run: npx tsx examples/requester-agent.ts
  */
 
-import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
+import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken, signAgentCard, signDelegationToken } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { classifyCapabilityRisk } from '@fides/core'
 import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
-import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, buildMerkleRoot } from '@fides/evidence'
+import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, buildMerkleRoot, hashEvidenceValue } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateGuard, createTrustContext } from '@fides/guard'
 import { LocalDiscoveryProvider } from '@fides/discovery'
@@ -32,7 +32,7 @@ async function main() {
 
   const { identity: requesterAgent } = await createAgentIdentity()
   requesterAgent.metadata = { name: 'Task Orchestrator', version: '1.0.0' }
-  const { identity: user } = await createPrincipalIdentity({
+  const { identity: user, privateKey: userPrivateKey } = await createPrincipalIdentity({
     type: 'individual',
     displayName: 'Alice',
   })
@@ -46,7 +46,7 @@ async function main() {
   console.log('─'.repeat(40))
 
   // Calendar service provider
-  const { identity: calendarAgent } = await createAgentIdentity()
+  const { identity: calendarAgent, privateKey: calendarAgentPrivateKey } = await createAgentIdentity()
   calendarAgent.metadata = { name: 'Calendar Service' }
   const calendarCapabilities: CapabilityDescriptor[] = [
     {
@@ -83,7 +83,7 @@ async function main() {
   }
 
   // Payment service provider
-  const { identity: paymentAgent } = await createAgentIdentity()
+  const { identity: paymentAgent, privateKey: paymentAgentPrivateKey } = await createAgentIdentity()
   paymentAgent.metadata = { name: 'Payment Service' }
   const paymentCapabilities: CapabilityDescriptor[] = [
     {
@@ -120,7 +120,7 @@ async function main() {
   }
 
   // Invoice service provider
-  const { identity: invoiceAgent } = await createAgentIdentity()
+  const { identity: invoiceAgent, privateKey: invoiceAgentPrivateKey } = await createAgentIdentity()
   invoiceAgent.metadata = { name: 'Invoice Service' }
   const invoiceCapabilities: CapabilityDescriptor[] = [
     {
@@ -166,9 +166,9 @@ async function main() {
   console.log('─'.repeat(40))
 
   const localDiscovery = new LocalDiscoveryProvider()
-  localDiscovery.registerCard(calendarCard)
-  localDiscovery.registerCard(paymentCard)
-  localDiscovery.registerCard(invoiceCard)
+  await localDiscovery.register(await signAgentCard(calendarCard, calendarAgentPrivateKey, calendarAgent.did))
+  await localDiscovery.register(await signAgentCard(paymentCard, paymentAgentPrivateKey, paymentAgent.did))
+  await localDiscovery.register(await signAgentCard(invoiceCard, invoiceAgentPrivateKey, invoiceAgent.did))
 
   console.log(`  Registered 3 service providers`)
 
@@ -183,14 +183,20 @@ async function main() {
 
   // List all available agents
   const allAgents = localDiscovery.list()
+  const verifiedCalendarCandidates = await localDiscovery.discover({
+    schema_version: 'fides.discovery_query.v1',
+    id: 'requester-calendar-query',
+    capability: 'calendar:create',
+  })
   console.log(`  Total agents in discovery: ${allAgents.length}`)
+  console.log(`  Verified calendar candidates: ${verifiedCalendarCandidates.filter(candidate => candidate.verified).length}`)
   console.log()
 
   // ─── Step 4: User Delegates to Requester ─────────────────────
   console.log('🔑 Step 4: User Delegates to Requester Agent')
   console.log('─'.repeat(40))
 
-  const userDelegation = createDelegationToken({
+  const userDelegation = await signDelegationToken(createDelegationToken({
     delegator: user.did,
     delegatee: requesterAgent.did,
     capabilities: ['calendar:create', 'payment:charge', 'invoice:create'],
@@ -200,8 +206,7 @@ async function main() {
       allowedContexts: ['work'],
     },
     expiresAt: new Date(Date.now() + 86400000).toISOString(),
-  })
-  userDelegation.signature = 'mock-user-sig'
+  }), userPrivateKey)
 
   const delegationValid = validateDelegationToken(userDelegation)
   console.log(`  Token ID: ${userDelegation.id}`)
@@ -300,7 +305,6 @@ async function main() {
 
   if (calendarGuard.decision === 'allow') {
     console.log(`  │ 1d. ✅ Invoked calendar:create successfully`)
-    evidenceChain.events.length // just to reference the chain
 
     // Record evidence
     const calendarEvent = {
@@ -313,12 +317,7 @@ async function main() {
       payload: { title: 'Team Meeting', date: '2026-05-06T10:00:00Z' },
       privacy: { level: 'redacted' as const },
     }
-    evidenceChain.events.push({
-      ...calendarEvent,
-      prevHash: evidenceChain.events.length > 0 ? evidenceChain.events[evidenceChain.events.length - 1].hash : '0',
-      hash: 'mock-hash-001',
-      signature: 'mock-sig',
-    } as any)
+    appendIntoEvidenceChain(evidenceChain, calendarEvent)
   } else {
     console.log(`  │ 1d. ❌ Invocation blocked: ${calendarGuard.explanation}`)
   }
@@ -365,12 +364,7 @@ async function main() {
       payload: { amount: 150, currency: 'USD' },
       privacy: { level: 'redacted' as const },
     }
-    evidenceChain.events.push({
-      ...paymentEvent,
-      prevHash: evidenceChain.events.length > 0 ? evidenceChain.events[evidenceChain.events.length - 1].hash : '0',
-      hash: 'mock-hash-002',
-      signature: 'mock-sig',
-    } as any)
+    appendIntoEvidenceChain(evidenceChain, paymentEvent)
   } else {
     console.log(`  │ 2d. ❌ Invocation blocked: ${paymentGuard.explanation}`)
   }
@@ -454,7 +448,7 @@ async function main() {
 
   let fullChain = createEvidenceChain()
   for (const evt of [...evidenceChain.events, ...policyEvents]) {
-    fullChain = appendEvidenceEvent(fullChain, evt, 'mock-signature')
+    fullChain = appendEvidenceEvent(fullChain, evt, localEvidenceSignature(evt))
     console.log(`  Recorded: ${evt.type} — ${evt.action} → ${evt.target}`)
   }
 
@@ -497,6 +491,19 @@ async function main() {
   console.log('    ✅ Evidence chain for multi-agent interaction')
   console.log('    ✅ Capability risk classification across providers')
   console.log()
+}
+
+function appendIntoEvidenceChain(
+  chain: ReturnType<typeof createEvidenceChain>,
+  event: Parameters<typeof appendEvidenceEvent>[1]
+): void {
+  const next = appendEvidenceEvent(chain, event, localEvidenceSignature(event))
+  chain.events = next.events
+  chain.merkleRoot = next.merkleRoot
+}
+
+function localEvidenceSignature(event: unknown): string {
+  return `local-evidence:${hashEvidenceValue(event).slice('sha256:'.length)}`
 }
 
 main().catch(console.error)

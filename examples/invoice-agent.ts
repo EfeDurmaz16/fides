@@ -11,11 +11,11 @@
  * Run: npx tsx examples/invoice-agent.ts
  */
 
-import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
+import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken, signAgentCard, signDelegationToken } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { classifyCapabilityRisk } from '@fides/core'
 import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
-import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, buildMerkleRoot } from '@fides/evidence'
+import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, buildMerkleRoot, hashEvidenceValue } from '@fides/evidence'
 import { MockTEEProvider } from '@fides/runtime'
 import { evaluateGuard, createTrustContext } from '@fides/guard'
 import { LocalDiscoveryProvider } from '@fides/discovery'
@@ -30,13 +30,13 @@ async function main() {
   console.log('📝 Step 1: Creating Identities')
   console.log('─'.repeat(40))
 
-  const { identity: invoiceAgent } = await createAgentIdentity()
+  const { identity: invoiceAgent, privateKey: invoiceAgentPrivateKey } = await createAgentIdentity()
   invoiceAgent.metadata = { name: 'Invoice Processor', version: '1.0.0' }
-  const { identity: financeManager } = await createPrincipalIdentity({
+  const { identity: financeManager, privateKey: financeManagerPrivateKey } = await createPrincipalIdentity({
     type: 'individual',
     displayName: 'Finance Manager',
   })
-  const { identity: cfo } = await createPrincipalIdentity({
+  const { identity: cfo, privateKey: cfoPrivateKey } = await createPrincipalIdentity({
     type: 'individual',
     displayName: 'CFO',
   })
@@ -127,7 +127,7 @@ async function main() {
   console.log('─'.repeat(40))
 
   // CFO delegates invoice processing to the agent with spending limits
-  const cfoDelegation = createDelegationToken({
+  const cfoDelegation = await signDelegationToken(createDelegationToken({
     delegator: cfo.did,
     delegatee: invoiceAgent.did,
     capabilities: ['invoice:create', 'invoice:approve'],
@@ -138,8 +138,7 @@ async function main() {
       forbiddenContexts: ['personal', 'test'],
     },
     expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(), // 7 days
-  })
-  cfoDelegation.signature = 'mock-cfo-sig'
+  }), cfoPrivateKey)
 
   const cfoValid = validateDelegationToken(cfoDelegation)
   console.log(`  Token ID: ${cfoDelegation.id}`)
@@ -152,7 +151,7 @@ async function main() {
   console.log()
 
   // Finance manager also delegates (chain of authority)
-  const mgrDelegation = createDelegationToken({
+  const mgrDelegation = await signDelegationToken(createDelegationToken({
     delegator: financeManager.did,
     delegatee: invoiceAgent.did,
     capabilities: ['invoice:list', 'invoice:create'],
@@ -162,8 +161,7 @@ async function main() {
       allowedContexts: ['business'],
     },
     expiresAt: new Date(Date.now() + 86400000).toISOString(), // 24h
-  })
-  mgrDelegation.signature = 'mock-mgr-sig'
+  }), financeManagerPrivateKey)
 
   console.log(`  Finance Mgr → Agent: ${mgrDelegation.delegator} → ${mgrDelegation.delegatee}`)
   console.log(`  Max spend: $${mgrDelegation.constraints.maxSpend}`)
@@ -174,9 +172,16 @@ async function main() {
   console.log('─'.repeat(40))
 
   const localDiscovery = new LocalDiscoveryProvider()
-  localDiscovery.registerCard(agentCard)
+  const signedCard = await signAgentCard(agentCard, invoiceAgentPrivateKey, invoiceAgent.did)
+  await localDiscovery.register(signedCard)
   const resolved = await localDiscovery.resolve(invoiceAgent.did)
+  const discovered = await localDiscovery.discover({
+    schema_version: 'fides.discovery_query.v1',
+    id: 'invoice-local-query',
+    capability: 'invoice:create',
+  })
   console.log(`  Registered: ${resolved ? 'yes' : 'no'}`)
+  console.log(`  Verified candidate: ${discovered[0]?.verified ? 'yes' : 'no'}`)
   console.log(`  Resolved: ${resolved?.identity.metadata!.name}`)
   console.log()
 
@@ -321,7 +326,7 @@ async function main() {
   ]
 
   for (const evt of auditEvents) {
-    evidenceChain = appendEvidenceEvent(evidenceChain, evt, 'mock-signature')
+    evidenceChain = appendEvidenceEvent(evidenceChain, evt, localEvidenceSignature(evt))
     console.log(`  Recorded: ${evt.type} — ${evt.action} → ${evt.target}`)
   }
 
@@ -397,6 +402,10 @@ async function main() {
   console.log('    ✅ Evidence chain for audit trail')
   console.log('    ✅ Guard decision engine (good + low trust)')
   console.log()
+}
+
+function localEvidenceSignature(event: unknown): string {
+  return `local-evidence:${hashEvidenceValue(event).slice('sha256:'.length)}`
 }
 
 main().catch(console.error)

@@ -10,11 +10,11 @@
  * Run: npx tsx examples/calendar-agent.ts
  */
 
-import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
+import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken, signAgentCard, signDelegationToken } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { classifyCapabilityRisk } from '@fides/core'
 import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
-import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, buildMerkleRoot } from '@fides/evidence'
+import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, buildMerkleRoot, hashEvidenceValue } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateGuard, createTrustContext } from '@fides/guard'
 import { LocalDiscoveryProvider } from '@fides/discovery'
@@ -29,9 +29,9 @@ async function main() {
   console.log('📝 Step 1: Creating Agent Identity')
   console.log('─'.repeat(40))
 
-  const { identity: calendarAgent } = await createAgentIdentity()
+  const { identity: calendarAgent, privateKey: calendarAgentPrivateKey } = await createAgentIdentity()
   calendarAgent.metadata = { name: 'Calendar Assistant', version: '1.0.0' }
-  const { identity: user } = await createPrincipalIdentity({
+  const { identity: user, privateKey: userPrivateKey } = await createPrincipalIdentity({
     type: 'individual',
     displayName: 'Alice',
   })
@@ -120,16 +120,16 @@ async function main() {
   console.log('─'.repeat(40))
 
   const localDiscovery = new LocalDiscoveryProvider()
-  // Simulate a signed card for registration
-  const signedCard = {
-    payload: agentCard,
-    signature: 'mock-signature',
-    algorithm: 'Ed25519' as const,
-    timestamp: new Date().toISOString(),
-  }
-  localDiscovery.registerCard(agentCard)
+  const signedCard = await signAgentCard(agentCard, calendarAgentPrivateKey, calendarAgent.did)
+  await localDiscovery.register(signedCard)
   const resolved = await localDiscovery.resolve(calendarAgent.did)
+  const discovered = await localDiscovery.discover({
+    schema_version: 'fides.discovery_query.v1',
+    id: 'calendar-local-query',
+    capability: 'calendar:create',
+  })
   console.log(`  Registered: ${resolved ? 'yes' : 'no'}`)
+  console.log(`  Verified candidate: ${discovered[0]?.verified ? 'yes' : 'no'}`)
   console.log(`  Resolved name: ${resolved?.identity.metadata!.name}`)
   console.log()
 
@@ -137,7 +137,7 @@ async function main() {
   console.log('🔑 Step 5: User Delegates Calendar Access')
   console.log('─'.repeat(40))
 
-  const delegation = createDelegationToken({
+  const delegation = await signDelegationToken(createDelegationToken({
     delegator: user.did,
     delegatee: calendarAgent.did,
     capabilities: ['calendar:create', 'calendar:list'],
@@ -146,8 +146,7 @@ async function main() {
       allowedContexts: ['work', 'personal'],
     },
     expiresAt: new Date(Date.now() + 86400000).toISOString(), // 24h
-  })
-  delegation.signature = 'mock-delegation-sig'
+  }), userPrivateKey)
 
   const delegationValid = validateDelegationToken(delegation)
   console.log(`  Token ID: ${delegation.id}`)
@@ -245,7 +244,7 @@ async function main() {
   ]
 
   for (const evt of calendarEvents) {
-    evidenceChain = appendEvidenceEvent(evidenceChain, evt, 'mock-signature')
+    evidenceChain = appendEvidenceEvent(evidenceChain, evt, localEvidenceSignature(evt))
     console.log(`  Recorded: ${evt.type} — ${evt.action}`)
   }
 
@@ -326,6 +325,10 @@ async function main() {
   console.log('    ✅ Evidence chain with Merkle root')
   console.log('    ✅ Guard decision engine (good + kill switch)')
   console.log()
+}
+
+function localEvidenceSignature(event: unknown): string {
+  return `local-evidence:${hashEvidenceValue(event).slice('sha256:'.length)}`
 }
 
 main().catch(console.error)

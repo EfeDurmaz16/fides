@@ -11,11 +11,11 @@
  * Run: npx tsx examples/payment-agent.ts
  */
 
-import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
+import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken, signAgentCard, signDelegationToken } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { classifyCapabilityRisk } from '@fides/core'
 import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
-import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, buildMerkleRoot } from '@fides/evidence'
+import { createEvidenceChain, appendEvidenceEvent, verifyEvidenceChain, buildMerkleRoot, hashEvidenceValue } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateGuard, createTrustContext } from '@fides/guard'
 import { LocalDiscoveryProvider } from '@fides/discovery'
@@ -30,9 +30,9 @@ async function main() {
   console.log('📝 Step 1: Creating Identities')
   console.log('─'.repeat(40))
 
-  const { identity: paymentAgent } = await createAgentIdentity()
+  const { identity: paymentAgent, privateKey: paymentAgentPrivateKey } = await createAgentIdentity()
   paymentAgent.metadata = { name: 'Payment Processor', version: '1.0.0' }
-  const { identity: merchant } = await createPrincipalIdentity({
+  const { identity: merchant, privateKey: merchantPrivateKey } = await createPrincipalIdentity({
     type: 'organization',
     displayName: 'ACME Corp',
   })
@@ -126,7 +126,7 @@ async function main() {
   console.log('🔑 Step 4: Merchant Delegates Payment Access')
   console.log('─'.repeat(40))
 
-  const merchantDelegation = createDelegationToken({
+  const merchantDelegation = await signDelegationToken(createDelegationToken({
     delegator: merchant.did,
     delegatee: paymentAgent.did,
     capabilities: ['payment:charge', 'payment:refund'],
@@ -137,8 +137,7 @@ async function main() {
       forbiddenContexts: ['test', 'staging'],
     },
     expiresAt: new Date(Date.now() + 30 * 86400000).toISOString(), // 30 days
-  })
-  merchantDelegation.signature = 'mock-merchant-sig'
+  }), merchantPrivateKey)
 
   const delegationValid = validateDelegationToken(merchantDelegation)
   console.log(`  Token ID: ${merchantDelegation.id}`)
@@ -152,9 +151,16 @@ async function main() {
   console.log('─'.repeat(40))
 
   const localDiscovery = new LocalDiscoveryProvider()
-  localDiscovery.registerCard(agentCard)
+  const signedCard = await signAgentCard(agentCard, paymentAgentPrivateKey, paymentAgent.did)
+  await localDiscovery.register(signedCard)
   const resolved = await localDiscovery.resolve(paymentAgent.did)
+  const discovered = await localDiscovery.discover({
+    schema_version: 'fides.discovery_query.v1',
+    id: 'payment-local-query',
+    capability: 'payment:charge',
+  })
   console.log(`  Registered: ${resolved ? 'yes' : 'no'}`)
+  console.log(`  Verified candidate: ${discovered[0]?.verified ? 'yes' : 'no'}`)
   console.log(`  Resolved: ${resolved?.identity.metadata!.name}`)
   console.log()
 
@@ -310,7 +316,7 @@ async function main() {
   ]
 
   for (const evt of paymentEvents) {
-    evidenceChain = appendEvidenceEvent(evidenceChain, evt, 'mock-signature')
+    evidenceChain = appendEvidenceEvent(evidenceChain, evt, localEvidenceSignature(evt))
     console.log(`  Recorded: ${evt.type} — ${evt.action} → ${evt.target}`)
   }
 
@@ -430,6 +436,10 @@ async function main() {
   console.log('    ✅ Kill switch engagement and recovery')
   console.log('    ✅ Guard decision engine (good / killed / bad trust)')
   console.log()
+}
+
+function localEvidenceSignature(event: unknown): string {
+  return `local-evidence:${hashEvidenceValue(event).slice('sha256:'.length)}`
 }
 
 main().catch(console.error)

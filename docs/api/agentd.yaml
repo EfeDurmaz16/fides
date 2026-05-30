@@ -801,7 +801,11 @@ paths:
         - ApiKeyAuth: []
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local in-memory DHT simulator status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDhtStartResponse"
 
   /dht/publish:
     post:
@@ -814,7 +818,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Local DHT pointer published; pointers are not trust sources
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDhtPublishResponse"
 
   /dht/find:
     get:
@@ -829,7 +837,11 @@ paths:
             type: string
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local DHT pointer lookup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDhtFindResponse"
     post:
       operationId: postFindLocalDhtPointers
       tags: [Discovery]
@@ -838,7 +850,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local DHT pointer lookup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDhtFindResponse"
 
   /registry/start:
     post:
@@ -849,7 +865,11 @@ paths:
         - ApiKeyAuth: []
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local registry simulator status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRegistryStartResponse"
 
   /registry/publish:
     post:
@@ -862,7 +882,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Local registry record published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRegistryPublishResponse"
 
   /registry/search:
     post:
@@ -882,7 +906,11 @@ paths:
       summary: Read the local registry index
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local registry index; registry records are candidates only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRegistryIndexResponse"
 
   /relay/start:
     post:
@@ -893,7 +921,11 @@ paths:
         - ApiKeyAuth: []
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local relay simulator status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRelayStartResponse"
 
   /relay/register:
     post:
@@ -906,7 +938,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Local relay presence registered; relay presence is not authority
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRelayRegisterResponse"
 
   /relay/discover:
     post:
@@ -926,7 +962,11 @@ paths:
       summary: Read the local FIDES well-known document
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local FIDES well-known discovery document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WellKnownFidesResponse"
 
   /.well-known/agents.json:
     get:
@@ -935,7 +975,11 @@ paths:
       summary: Read local well-known agent index
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local well-known agent index
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WellKnownAgentsResponse"
 
   /.well-known/agents/{id}.json:
     get:
@@ -946,7 +990,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local well-known AgentCard document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WellKnownAgentResponse"
 
   /demo/run:
     post:
@@ -1825,6 +1873,179 @@ components:
           type: string
         id:
           type: string
+
+    LocalDiscoveryRecord:
+      type: object
+      additionalProperties: true
+
+    LocalInfrastructureStartResponse:
+      type: object
+      required: [started, mode]
+      properties:
+        started:
+          type: boolean
+        mode:
+          type: string
+        records:
+          type: integer
+        pointers:
+          type: integer
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalDhtStartResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalInfrastructureStartResponse"
+        - type: object
+          properties:
+            mode:
+              type: string
+              enum: [in_memory_simulator]
+
+    LocalDhtPublishResponse:
+      type: object
+      required: [accepted, pointer]
+      properties:
+        accepted:
+          type: boolean
+        pointer:
+          $ref: "#/components/schemas/LocalDiscoveryRecord"
+
+    LocalDhtFindResponse:
+      type: object
+      required: [capability, pointers, rejectedPointers]
+      properties:
+        capability:
+          type: string
+          nullable: true
+        pointers:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalDiscoveryRecord"
+        rejectedPointers:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalDiscoveryRecord"
+
+    LocalRegistryStartResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalInfrastructureStartResponse"
+        - type: object
+          properties:
+            mode:
+              type: string
+              enum: [local_mock_registry]
+
+    LocalRegistryPublishResponse:
+      type: object
+      required: [accepted, record]
+      properties:
+        accepted:
+          type: boolean
+        record:
+          $ref: "#/components/schemas/LocalDiscoveryRecord"
+
+    LocalRegistryIndexResponse:
+      type: object
+      required: [mode, records, rejectedRecords, authorityGranted]
+      properties:
+        mode:
+          type: string
+          enum: [local_mock_registry]
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalDiscoveryRecord"
+        rejectedRecords:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalDiscoveryRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalRelayStartResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalInfrastructureStartResponse"
+        - type: object
+          properties:
+            mode:
+              type: string
+              enum: [local_mock_relay]
+
+    LocalRelayRegisterResponse:
+      type: object
+      required: [accepted, record]
+      properties:
+        accepted:
+          type: boolean
+        record:
+          $ref: "#/components/schemas/LocalDiscoveryRecord"
+
+    WellKnownFidesResponse:
+      type: object
+      required: [schema_version, protocol, supported_versions, endpoints]
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.well_known.v1]
+        protocol:
+          type: string
+          enum: [fides.v2]
+        supported_versions:
+          type: array
+          items:
+            type: string
+        endpoints:
+          type: object
+          additionalProperties:
+            type: string
+
+    WellKnownAgentSummary:
+      type: object
+      required: [agentId, cardId, signed, cardUrl, authorityGranted]
+      properties:
+        agentId:
+          type: string
+        cardId:
+          type: string
+        signed:
+          type: boolean
+        cardUrl:
+          type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    WellKnownAgentsResponse:
+      type: object
+      required: [schema_version, agents]
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.well_known.agents.v1]
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/WellKnownAgentSummary"
+
+    WellKnownAgentResponse:
+      type: object
+      required: [agentId, card, authorityGranted]
+      properties:
+        agentId:
+          type: string
+        card:
+          $ref: "#/components/schemas/AgentCard"
+        signed:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/SignedAgentCard"
+            - type: "null"
+        authorityGranted:
+          type: boolean
+          enum: [false]
 
     IdentityTrustAnchor:
       type: object

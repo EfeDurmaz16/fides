@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { isErrorEnvelope, type ErrorEnvelope } from '@fides/core'
 import * as ed from '@noble/ed25519'
 import { bytesToHex } from '@noble/hashes/utils'
 
@@ -45,6 +46,38 @@ export async function derivePublicKeyHex(privateKeyHex: string): Promise<string>
   return bytesToHex(publicKey)
 }
 
+export class AgentdHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly payload: unknown,
+    readonly error?: ErrorEnvelope
+  ) {
+    super(error ? `[${error.code}] ${error.message}` : `HTTP ${status}: ${JSON.stringify(payload)}`)
+    this.name = 'AgentdHttpError'
+  }
+}
+
+function extractErrorEnvelope(payload: unknown): ErrorEnvelope | undefined {
+  if (isErrorEnvelope(payload)) return payload
+  if (!payload || typeof payload !== 'object') return undefined
+  const error = (payload as { error?: unknown }).error
+  return isErrorEnvelope(error) ? error : undefined
+}
+
+async function parseJsonResponse(response: Response): Promise<unknown> {
+  const text = await response.text()
+  return text ? JSON.parse(text) : {}
+}
+
+async function requestJson(url: string, init: RequestInit): Promise<unknown> {
+  const response = await fetch(url, init)
+  const payload = await parseJsonResponse(response)
+  if (!response.ok) {
+    throw new AgentdHttpError(response.status, payload, extractErrorEnvelope(payload))
+  }
+  return payload
+}
+
 export async function postJson(url: string, body: unknown): Promise<unknown> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const apiKey = process.env.FIDES_API_KEY || process.env.SERVICE_API_KEY
@@ -52,17 +85,11 @@ export async function postJson(url: string, body: unknown): Promise<unknown> {
     headers['X-API-Key'] = apiKey
   }
 
-  const response = await fetch(url, {
+  return requestJson(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
   })
-  const text = await response.text()
-  const payload = text ? JSON.parse(text) : {}
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${JSON.stringify(payload)}`)
-  }
-  return payload
 }
 
 export async function getJson(url: string): Promise<unknown> {
@@ -72,11 +99,15 @@ export async function getJson(url: string): Promise<unknown> {
     headers['X-API-Key'] = apiKey
   }
 
-  const response = await fetch(url, { method: 'GET', headers })
-  const text = await response.text()
-  const payload = text ? JSON.parse(text) : {}
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${JSON.stringify(payload)}`)
+  return requestJson(url, { method: 'GET', headers })
+}
+
+export async function deleteJson(url: string): Promise<unknown> {
+  const headers: Record<string, string> = {}
+  const apiKey = process.env.FIDES_API_KEY || process.env.SERVICE_API_KEY
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey
   }
-  return payload
+
+  return requestJson(url, { method: 'DELETE', headers })
 }

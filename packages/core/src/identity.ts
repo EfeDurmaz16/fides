@@ -9,6 +9,39 @@
  */
 
 import { type SignedObject } from './canonical-signer.js'
+import * as ed from '@noble/ed25519'
+import bs58 from 'bs58'
+
+export type PublisherIdentityType =
+  | 'anonymous'
+  | 'self_signed'
+  | 'verified_individual'
+  | 'platform_hosted'
+  | 'domain_verified'
+  | 'organization_verified'
+
+export type IdentityVerificationMethod =
+  | 'none'
+  | 'self_signed'
+  | 'dns'
+  | 'github'
+  | 'email'
+  | 'manual'
+  | 'platform'
+  | 'organization_invitation'
+
+export type TrustAnchorType =
+  | 'domain'
+  | 'github'
+  | 'email'
+  | 'npm'
+  | 'pypi'
+  | 'wallet'
+  | 'passkey'
+  | 'organization_invitation'
+  | 'runtime_attestation'
+  | 'build_attestation'
+  | 'peer_attestation'
 
 export interface AgentIdentity {
   /** DID in the form did:fides:<base58-public-key> */
@@ -19,6 +52,10 @@ export interface AgentIdentity {
   keyType: 'Ed25519'
   /** ISO 8601 timestamp of identity creation */
   createdAt: string
+  /** Local display/application metadata used by examples and cards. */
+  metadata?: Record<string, unknown>
+  /** Trust anchors claimed or verified for this agent. */
+  trustAnchors?: IdentityTrustAnchor[]
   /** The publisher that created this agent (optional) */
   publisher?: PublisherIdentity
   /** The principal this agent acts for (optional) */
@@ -28,6 +65,8 @@ export interface AgentIdentity {
 export interface PublisherIdentity {
   /** DID of the publisher */
   did: string
+  /** Publisher trust/verification class. */
+  publisherType?: PublisherIdentityType
   /** Human-readable name */
   name: string
   /** Verified domain (optional) */
@@ -35,7 +74,9 @@ export interface PublisherIdentity {
   /** Whether the publisher identity has been verified */
   verified: boolean
   /** Method used to verify the publisher */
-  verificationMethod: 'dns' | 'github' | 'email' | 'manual'
+  verificationMethod: IdentityVerificationMethod
+  /** Trust anchors used to support publisher claims. */
+  trustAnchors?: IdentityTrustAnchor[]
 }
 
 export interface PrincipalIdentity {
@@ -50,7 +91,9 @@ export interface PrincipalIdentity {
   /** Whether the principal identity has been verified */
   verified?: boolean
   /** Method used to verify the principal */
-  verificationMethod?: 'dns' | 'github' | 'email' | 'manual'
+  verificationMethod?: IdentityVerificationMethod
+  /** Trust anchors used to support principal claims. */
+  trustAnchors?: IdentityTrustAnchor[]
 }
 
 export interface TrustAnchor {
@@ -64,6 +107,45 @@ export interface TrustAnchor {
   attestation: SignedObject<unknown>
 }
 
+export interface IdentityTrustAnchor {
+  type: TrustAnchorType
+  value: string
+  verified: boolean
+  verifiedAt?: string
+  evidenceRef?: string
+}
+
+export interface IssuedIdentity<TIdentity extends AgentIdentity | PublisherIdentity | PrincipalIdentity> {
+  identity: TIdentity
+  privateKey: Uint8Array
+  publicKey: Uint8Array
+}
+
+export interface CreateAgentIdentityInput {
+  publisher?: PublisherIdentity
+  principal?: PrincipalIdentity
+  trustAnchors?: IdentityTrustAnchor[]
+  createdAt?: string
+}
+
+export interface CreatePublisherIdentityInput {
+  name: string
+  publisherType?: PublisherIdentityType
+  verificationMethod?: IdentityVerificationMethod
+  verified?: boolean
+  domain?: string
+  trustAnchors?: IdentityTrustAnchor[]
+}
+
+export interface CreatePrincipalIdentityInput {
+  type: PrincipalIdentity['type']
+  displayName: string
+  domain?: string
+  verificationMethod?: IdentityVerificationMethod
+  verified?: boolean
+  trustAnchors?: IdentityTrustAnchor[]
+}
+
 /**
  * Validates that a DID string conforms to the did:fides:<base58> format.
  */
@@ -71,11 +153,108 @@ export function isValidFidesDid(did: string): boolean {
   return did.startsWith('did:fides:') && did.length > 'did:fides:'.length
 }
 
+export function didFromPublicKey(publicKey: Uint8Array): string {
+  if (publicKey.length !== 32) {
+    throw new Error('FIDES DID public key must be 32 bytes')
+  }
+  return `did:fides:${bs58.encode(publicKey)}`
+}
+
+export function publicKeyFromDid(did: string): Uint8Array {
+  if (!isValidFidesDid(did)) {
+    throw new Error('Invalid FIDES DID')
+  }
+  const encoded = did.slice('did:fides:'.length)
+  let publicKey: Uint8Array
+  try {
+    publicKey = bs58.decode(encoded)
+  } catch {
+    throw new Error('Invalid FIDES DID public key encoding')
+  }
+  if (publicKey.length !== 32) {
+    throw new Error('FIDES DID public key must decode to 32 bytes')
+  }
+  return publicKey
+}
+
+export async function createIdentityKeyPair(): Promise<{ privateKey: Uint8Array; publicKey: Uint8Array; did: string }> {
+  const privateKey = ed.utils.randomPrivateKey()
+  const publicKey = await ed.getPublicKeyAsync(privateKey)
+  return {
+    privateKey,
+    publicKey,
+    did: didFromPublicKey(publicKey),
+  }
+}
+
+export async function createAgentIdentity(input: CreateAgentIdentityInput = {}): Promise<IssuedIdentity<AgentIdentity>> {
+  const issued = await createIdentityKeyPair()
+  return {
+    ...issued,
+    identity: {
+      did: issued.did,
+      publicKey: issued.publicKey,
+      keyType: 'Ed25519',
+      createdAt: input.createdAt ?? new Date().toISOString(),
+      ...(input.trustAnchors !== undefined && { trustAnchors: input.trustAnchors }),
+      ...(input.publisher !== undefined && { publisher: input.publisher }),
+      ...(input.principal !== undefined && { principal: input.principal }),
+    },
+  }
+}
+
+export async function createPublisherIdentity(input: CreatePublisherIdentityInput): Promise<IssuedIdentity<PublisherIdentity>> {
+  const issued = await createIdentityKeyPair()
+  const verificationMethod = input.verificationMethod ?? 'self_signed'
+  return {
+    ...issued,
+    identity: {
+      did: issued.did,
+      name: input.name,
+      publisherType: input.publisherType ?? 'self_signed',
+      verified: input.verified ?? verificationMethod !== 'none',
+      verificationMethod,
+      ...(input.domain !== undefined && { domain: input.domain }),
+      ...(input.trustAnchors !== undefined && { trustAnchors: input.trustAnchors }),
+    },
+  }
+}
+
+export async function createPrincipalIdentity(input: CreatePrincipalIdentityInput): Promise<IssuedIdentity<PrincipalIdentity>> {
+  const issued = await createIdentityKeyPair()
+  return {
+    ...issued,
+    identity: {
+      did: issued.did,
+      type: input.type,
+      displayName: input.displayName,
+      ...(input.domain !== undefined && { domain: input.domain }),
+      ...(input.verified !== undefined && { verified: input.verified }),
+      ...(input.verificationMethod !== undefined && { verificationMethod: input.verificationMethod }),
+      ...(input.trustAnchors !== undefined && { trustAnchors: input.trustAnchors }),
+    },
+  }
+}
+
+export function validateIdentityKeyBinding(identity: Pick<AgentIdentity, 'did' | 'publicKey'>): boolean {
+  try {
+    return bs58.encode(identity.publicKey) === identity.did.slice('did:fides:'.length)
+  } catch {
+    return false
+  }
+}
+
 /**
- * Creates an AgentIdentity with a random Ed25519 key pair.
+ * Creates an AgentIdentity from an existing did:fides identifier.
+ *
+ * Deprecated: new code should use createAgentIdentity/createPublisherIdentity/
+ * createPrincipalIdentity so the private key material is returned with the
+ * identity. This compatibility helper is intentionally fail-closed: a FIDES
+ * identity must not invent a public key that is not bound to its DID.
  */
 export function createIdentity(did: string, type: 'agent' | 'publisher' | 'principal' | 'trust-anchor', metadata: Record<string, unknown> = {}): AgentIdentity & { metadata: Record<string, unknown> } {
-  const publicKey = crypto.getRandomValues(new Uint8Array(32))
+  const publicKey = publicKeyFromDid(did)
+
   return {
     did,
     publicKey,

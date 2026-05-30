@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { evaluatePolicy, runPreExecutionPipeline } from '../src/index.js'
+import { evaluatePolicy, normalizePolicyResult, runPreExecutionPipeline } from '../src/index.js'
 import type { PolicyBundle, PolicyContext } from '../src/index.js'
 
 describe('Policy Engine', () => {
@@ -41,6 +41,24 @@ describe('Policy Engine', () => {
     const result = evaluatePolicy(bundle, ctx)
     expect(result.decision).toBe('approve-required')
     expect(result.matchedRules).toContain('high-risk-approval')
+  })
+
+  it('normalizes legacy policy decisions to the FIDES v2 vocabulary', () => {
+    expect(normalizePolicyResult(evaluatePolicy(bundle, { risk: 'high' }))).toMatchObject({
+      decision: 'require_approval',
+      legacyDecision: 'approve-required',
+    })
+
+    const dryRunBundle: PolicyBundle = {
+      id: 'dry-run',
+      version: '1',
+      defaultAction: 'allow',
+      rules: [{ id: 'r1', condition: { operator: 'eq', field: 'known', value: false }, action: 'dry-run', explanation: '' }],
+    }
+    expect(normalizePolicyResult(evaluatePolicy(dryRunBundle, { known: false }))).toMatchObject({
+      decision: 'dry_run_only',
+      legacyDecision: 'dry-run',
+    })
   })
 
   it('should deny guest', () => {

@@ -22,6 +22,9 @@
  */
 
 import type { TrustAttestation, TrustScore } from '@fides/shared'
+import { canonicalJson, hashProtocolPayload } from '@fides/core'
+import { sha256 } from '@noble/hashes/sha256'
+import { bytesToHex } from '@noble/hashes/utils'
 import { generateKeyPair, sign, verify } from '../identity/keypair.js'
 import { generateDID, parseDID, isValidDID } from '../identity/did.js'
 import type { KeyStore } from '../identity/keystore.js'
@@ -49,6 +52,127 @@ export interface TrustGateResult {
   trustLevel: number
   requiredLevel: number
   reason?: string
+}
+
+export interface AgitEvidenceHashChainInput {
+  previousEventHash?: string
+  eventPayload: Record<string, unknown>
+}
+
+export interface AgitEvidenceHashChainResult {
+  eventHash: string
+  previousEventHash?: string
+}
+
+export interface AgitMerkleProofInput {
+  leaves: string[]
+  leaf: string
+}
+
+export interface AgitMerkleProofResult {
+  root: string
+  leaf: string
+  proof: string[]
+}
+
+export interface AgitRustPrimitiveAdapter {
+  canonicalizeJson?(value: unknown): Promise<string> | string
+  hashBytes?(bytes: Uint8Array, algorithm?: 'sha256'): Promise<string> | string
+  appendEvidenceHash?(input: AgitEvidenceHashChainInput): Promise<AgitEvidenceHashChainResult> | AgitEvidenceHashChainResult
+  createMerkleProof?(input: AgitMerkleProofInput): Promise<AgitMerkleProofResult> | AgitMerkleProofResult
+}
+
+export interface AgitPrimitiveBridgeOptions {
+  rustAdapter?: AgitRustPrimitiveAdapter
+}
+
+/**
+ * AgitPrimitiveBridge provides the adapter-ready boundary between FIDES and
+ * future AGIT/Rust primitives. Rust is optional: when no adapter is supplied,
+ * the SDK uses the same TypeScript canonical JSON and hashing model as FIDES.
+ */
+export class AgitPrimitiveBridge {
+  constructor(private readonly options: AgitPrimitiveBridgeOptions = {}) {}
+
+  get rustAdapter(): AgitRustPrimitiveAdapter | undefined {
+    return this.options.rustAdapter
+  }
+
+  async canonicalizeJson(value: unknown): Promise<string> {
+    return this.options.rustAdapter?.canonicalizeJson
+      ? this.options.rustAdapter.canonicalizeJson(value)
+      : canonicalJson(value)
+  }
+
+  async hashBytes(bytes: Uint8Array): Promise<string> {
+    return this.options.rustAdapter?.hashBytes
+      ? this.options.rustAdapter.hashBytes(bytes, 'sha256')
+      : `sha256:${bytesToHex(sha256(bytes))}`
+  }
+
+  async hashObject(value: unknown): Promise<string> {
+    const canonical = await this.canonicalizeJson(value)
+    return this.hashBytes(new TextEncoder().encode(canonical))
+  }
+
+  async appendEvidenceHash(input: AgitEvidenceHashChainInput): Promise<AgitEvidenceHashChainResult> {
+    if (this.options.rustAdapter?.appendEvidenceHash) {
+      return this.options.rustAdapter.appendEvidenceHash(input)
+    }
+
+    return {
+      previousEventHash: input.previousEventHash,
+      eventHash: hashProtocolPayload({
+        prev_event_hash: input.previousEventHash ?? '0',
+        event_payload: input.eventPayload,
+      }),
+    }
+  }
+
+  async createMerkleProof(input: AgitMerkleProofInput): Promise<AgitMerkleProofResult> {
+    if (this.options.rustAdapter?.createMerkleProof) {
+      return this.options.rustAdapter.createMerkleProof(input)
+    }
+    return createLocalMerkleProof(input)
+  }
+}
+
+function createLocalMerkleProof(input: AgitMerkleProofInput): AgitMerkleProofResult {
+  const leafIndex = input.leaves.indexOf(input.leaf)
+  if (leafIndex === -1) {
+    throw new Error('Merkle proof leaf is not present in leaves')
+  }
+
+  let index = leafIndex
+  let level = input.leaves
+  const proof: string[] = []
+
+  while (level.length > 1) {
+    const siblingIndex = index % 2 === 0 ? index + 1 : index - 1
+    proof.push(level[siblingIndex] ?? level[index])
+    index = Math.floor(index / 2)
+    level = nextMerkleLevel(level)
+  }
+
+  return {
+    root: level[0] ?? input.leaf,
+    leaf: input.leaf,
+    proof,
+  }
+}
+
+function nextMerkleLevel(level: string[]): string[] {
+  const next: string[] = []
+  for (let i = 0; i < level.length; i += 2) {
+    const left = level[i]
+    const right = level[i + 1] ?? left
+    next.push(hashPair(left, right))
+  }
+  return next
+}
+
+function hashPair(left: string, right: string): string {
+  return `sha256:${bytesToHex(sha256(new TextEncoder().encode(`${left}:${right}`)))}`
 }
 
 /**

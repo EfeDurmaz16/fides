@@ -6,6 +6,7 @@ import { WellKnownDiscoveryProvider } from '@fides/discovery'
 import { readFileSync } from 'node:fs'
 import { loadConfig } from '../utils/config.js'
 import { error, formatTable, info, success } from '../utils/output.js'
+import { getJson, postJson, printResult } from './authority-utils.js'
 
 export function createCardCommand(): Command {
   const cmd = new Command('card')
@@ -16,13 +17,22 @@ export function createCardCommand(): Command {
     .requiredOption('--did <did>', 'Agent DID')
     .option('--name <name>', 'Agent name')
     .option('--capabilities <json>', 'Capabilities JSON array')
-    .action((options) => {
-      const identity = createIdentity(options.did, 'agent', { name: options.name || 'Unknown' })
+    .option('--agentd-url <url>', 'Create the AgentCard through local agentd')
+    .option('--json', 'Print JSON only')
+    .action(async (options) => {
+      const capabilities = parseCapabilities(options.capabilities)
 
-      let capabilities: CapabilityDescriptor[] = []
-      if (options.capabilities) {
-        capabilities = JSON.parse(options.capabilities)
+      if (options.agentdUrl) {
+        const result = await postJson(`${baseUrl(options.agentdUrl)}/agent-cards`, {
+          agentId: options.did,
+          ...(options.name && { name: options.name }),
+          capabilities,
+        })
+        printResult('AgentCard created:', result, options)
+        return
       }
+
+      const identity = createIdentity(options.did, 'agent', { name: options.name || 'Unknown' })
 
       const card: AgentCard = {
         id: options.did,
@@ -48,6 +58,26 @@ export function createCardCommand(): Command {
         console.error('Validation failed:', result.errors)
         process.exit(1)
       }
+    })
+
+  cmd.command('sign')
+    .description('Sign a local agentd AgentCard')
+    .argument('<agent-card-id>', 'AgentCard ID')
+    .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
+    .option('--json', 'Print JSON only')
+    .action(async (agentCardId, options) => {
+      const result = await postJson(`${baseUrl(options.agentdUrl)}/agent-cards/${encodeURIComponent(agentCardId)}/sign`, {})
+      printResult('AgentCard signed:', result, options)
+    })
+
+  cmd.command('inspect')
+    .description('Inspect a local agentd AgentCard')
+    .argument('<agent-card-id>', 'AgentCard ID')
+    .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
+    .option('--json', 'Print JSON only')
+    .action(async (agentCardId, options) => {
+      const result = await getJson(`${baseUrl(options.agentdUrl)}/agent-cards/${encodeURIComponent(agentCardId)}`)
+      printResult('AgentCard:', result, options)
     })
 
   cmd.command('publish')
@@ -188,8 +218,16 @@ export function createCardCommand(): Command {
     .description('Verify an AgentCard')
     .argument('<source>', 'AgentCard JSON file path or DID to lookup')
     .option('--discovery-url <url>', 'Discovery service URL')
+    .option('--agentd-url <url>', 'Verify a local agentd AgentCard by ID')
+    .option('--json', 'Print JSON only')
     .action(async (source, options) => {
       try {
+        if (options.agentdUrl) {
+          const result = await postJson(`${baseUrl(options.agentdUrl)}/agent-cards/${encodeURIComponent(source)}/verify`, {})
+          printResult('AgentCard verification:', result, options)
+          return
+        }
+
         let card: AgentCard
 
         if (source.endsWith('.json')) {
@@ -230,6 +268,14 @@ export function createCardCommand(): Command {
     })
 
   return cmd
+}
+
+function parseCapabilities(value?: string): CapabilityDescriptor[] {
+  return value ? JSON.parse(value) : []
+}
+
+function baseUrl(url: string): string {
+  return url.replace(/\/+$/, '')
 }
 
 function createRegistryClient(options: { registryUrl?: string; apiKey?: string }): RegistryClient {

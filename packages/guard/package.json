@@ -1,13 +1,26 @@
 {
   "name": "@fides/guard",
   "version": "0.1.0",
-  "private": true,
+  "description": "FIDES v2 pre-execution guard decision engine",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EfeDurmaz16/fides",
+    "directory": "packages/guard"
+  },
+  "homepage": "https://github.com/EfeDurmaz16/fides#readme",
   "engines": {
     "node": ">=22.0.0"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

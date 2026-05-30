@@ -1,0 +1,18 @@
+export {
+  createRegistryIndexRecord,
+  createRegistryPeerRecord,
+  isRegistryIndexRecordExpired,
+  isRegistryPeerRecordExpired,
+  signRegistryIndexRecord,
+  signRegistryPeerRecord,
+  verifySignedRegistryIndexRecord,
+  verifySignedRegistryIndexRecordIssuer,
+  verifySignedRegistryPeerRecord,
+  verifySignedRegistryPeerRecordIssuer,
+  type RegistryIndexRecord,
+  type RegistryMode,
+  type RegistryPeerRecord,
+  type RegistryPeeringMode,
+  type SignedRegistryIndexRecord,
+  type SignedRegistryPeerRecord,
+} from '@fides/core'

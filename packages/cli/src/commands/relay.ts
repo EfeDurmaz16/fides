@@ -1,9 +1,63 @@
 import { Command } from 'commander'
-import { getJson, postJson, printResult } from './authority-utils.js'
+import { getJson, parseList as parseCommaList, postJson, printResult } from './authority-utils.js'
 
 export function createRelayCommand(): Command {
   const cmd = new Command('relay')
     .description('Send, poll, and inspect relay messages')
+
+  cmd.command('start')
+    .description('Start the local mock relay through agentd')
+    .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
+    .option('--json', 'Print JSON only')
+    .action(async (options) => {
+      try {
+        const result = await postJson(`${baseUrl(options.agentdUrl)}/relay/start`, {})
+        printResult('Relay started:', result, options)
+      } catch (error) {
+        console.error('Error:', error instanceof Error ? error.message : String(error))
+        process.exitCode = 1
+      }
+    })
+
+  cmd.command('register')
+    .description('Register local agent presence with the local mock relay')
+    .argument('<agent-id>', 'Registered local agent DID')
+    .option('--endpoint-hints <values>', 'Comma-separated endpoint hints')
+    .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
+    .option('--json', 'Print JSON only')
+    .action(async (agentId, options) => {
+      try {
+        const result = await postJson(`${baseUrl(options.agentdUrl)}/relay/register`, {
+          agentId,
+          endpointHints: parseList(options.endpointHints),
+        })
+        printResult('Relay presence registered:', result, options)
+      } catch (error) {
+        console.error('Error:', error instanceof Error ? error.message : String(error))
+        process.exitCode = 1
+      }
+    })
+
+  cmd.command('discover')
+    .description('Discover local mock relay presence by capability')
+    .requiredOption('--capability <capability>', 'Capability ID')
+    .option('--supported-versions <versions>', 'Comma-separated FIDES protocol versions supported by the requester')
+    .option('--required-versions <versions>', 'Comma-separated FIDES protocol versions required by the requester')
+    .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
+    .option('--json', 'Print JSON only')
+    .action(async (options) => {
+      try {
+        const result = await postJson(`${baseUrl(options.agentdUrl)}/relay/discover`, {
+          capability: options.capability,
+          ...(options.supportedVersions ? { supported_versions: parseCommaList(options.supportedVersions) } : {}),
+          ...(options.requiredVersions ? { required_versions: parseCommaList(options.requiredVersions) } : {}),
+        })
+        printResult('Relay discovery records:', result, options)
+      } catch (error) {
+        console.error('Error:', error instanceof Error ? error.message : String(error))
+        process.exitCode = 1
+      }
+    })
 
   cmd.command('send')
     .description('Send a message through the relay service')
@@ -98,6 +152,11 @@ function parsePayload(options: { payloadJson?: string; message?: string }): unkn
   if (options.payloadJson) return JSON.parse(options.payloadJson)
   if (options.message) return { message: options.message }
   throw new Error('Either --payload-json or --message is required')
+}
+
+function parseList(value?: string): string[] {
+  if (!value) return []
+  return value.split(',').map(item => item.trim()).filter(Boolean)
 }
 
 async function deleteJson(url: string): Promise<unknown> {

@@ -26,17 +26,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check package hygiene
-        run: pnpm package:hygiene
-
-      - name: Build
-        run: pnpm build
-
-      - name: Check public package packs
-        run: pnpm package:packcheck
-
-      - name: Test
-        run: pnpm test
+      - name: Verify
+        run: pnpm verify
 
       - name: Publish public packages
         run: |

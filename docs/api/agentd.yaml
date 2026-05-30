@@ -21,6 +21,7 @@ tags:
   - name: Health
   - name: Identity
   - name: Card
+  - name: Discovery
   - name: Trust
   - name: Policy
   - name: Evidence
@@ -48,6 +49,989 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
+
+  /identities:
+    post:
+      operationId: createLocalIdentity
+      tags: [Identity]
+      summary: Create a local FIDES identity
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Created local identity without private key material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIdentityResponse"
+    get:
+      operationId: listLocalIdentities
+      tags: [Identity]
+      summary: List local FIDES identities
+      responses:
+        "200":
+          description: Local identity summaries without private key material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIdentityListResponse"
+
+  /identities/{id}:
+    get:
+      operationId: getLocalIdentity
+      tags: [Identity]
+      summary: Read a local FIDES identity
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local identity without private key material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIdentityResponse"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /attestations:
+    post:
+      operationId: createLocalAttestation
+      tags: [Attestation]
+      summary: Issue a local identity, generic, or runtime attestation
+      description: |
+        Bodies with `identity` add local mock identity trust anchors for
+        GitHub, email, domain, package registry, or wallet claims. Bodies with
+        `issuer`, `subject`, `subjectType`, and `provider` create a generic
+        `fides.attestation.v1` record. Bodies with
+        `agentId`, `codeHash`, `runtimeHash`, and `policyHash` issue a local
+        MockTEE runtime attestation. Attestation issuance records evidence and
+        does not grant authority by itself.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Local identity trust-anchor, generic, or runtime attestation issued
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LocalIdentityAttestationResponse"
+                  - $ref: "#/components/schemas/LocalGenericAttestationResponse"
+                  - $ref: "#/components/schemas/LocalRuntimeAttestationResponse"
+
+  /attestations/{id}:
+    get:
+      operationId: getLocalAttestation
+      tags: [Attestation]
+      summary: Read a local generic or runtime attestation
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local generic or runtime attestation
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LocalGenericAttestationResponse"
+                  - $ref: "#/components/schemas/LocalRuntimeAttestationResponse"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /attestations/{id}/verify:
+    post:
+      operationId: verifyLocalAttestation
+      tags: [Attestation]
+      summary: Verify a local generic or runtime attestation
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local generic or runtime attestation verification result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LocalGenericAttestationVerificationResponse"
+                  - $ref: "#/components/schemas/LocalRuntimeAttestationVerificationResponse"
+
+  /agent-cards:
+    post:
+      operationId: createLocalAgentCard
+      tags: [Card]
+      summary: Create a local AgentCard
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Local AgentCard created and validated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentCardCreateResponse"
+
+  /agent-cards/{id}:
+    get:
+      operationId: getLocalAgentCard
+      tags: [Card]
+      summary: Read a local AgentCard
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local AgentCard and optional signed canonical object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentCardResponse"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /agent-cards/{id}/sign:
+    post:
+      operationId: signLocalAgentCard
+      tags: [Card]
+      summary: Sign a local AgentCard
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          description: Identity-bound signed AgentCard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentCardSignResponse"
+
+  /agent-cards/{id}/verify:
+    post:
+      operationId: verifyLocalAgentCard
+      tags: [Card]
+      summary: Verify a local signed AgentCard
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local AgentCard verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentCardVerifyResponse"
+
+  /agents/register:
+    post:
+      operationId: registerLocalAgent
+      tags: [Discovery]
+      summary: Register a local AgentCard for discovery
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Local agent registered as a discovery candidate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentRegistration"
+
+  /agents:
+    get:
+      operationId: listLocalAgents
+      tags: [Discovery]
+      summary: List locally registered agents
+      responses:
+        "200":
+          description: Locally registered discovery candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentListResponse"
+
+  /agents/{id}:
+    get:
+      operationId: getLocalAgent
+      tags: [Discovery]
+      summary: Inspect a locally registered agent
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local registration detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentDetailResponse"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /discover:
+    post:
+      operationId: discoverAgents
+      tags: [Discovery]
+      summary: Discover agent candidates across enabled providers
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /discover/local:
+    post:
+      operationId: discoverLocalAgents
+      tags: [Discovery]
+      summary: Discover local agent candidates
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /discover/well-known:
+    post:
+      operationId: discoverWellKnownAgents
+      tags: [Discovery]
+      summary: Discover well-known agent candidates
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /discover/registry:
+    post:
+      operationId: discoverRegistryAgents
+      tags: [Discovery]
+      summary: Discover registry agent candidates
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /discover/relay:
+    post:
+      operationId: discoverRelayAgents
+      tags: [Discovery]
+      summary: Discover relay agent candidates
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /discover/dht:
+    post:
+      operationId: discoverDhtAgents
+      tags: [Discovery]
+      summary: Discover DHT pointer candidates
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /trust/evaluate:
+    post:
+      operationId: evaluateLocalTrust
+      tags: [Trust]
+      summary: Evaluate capability-scoped local trust
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          description: Capability-scoped trust signal; never grants invocation authority
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalTrustEvaluationResponse"
+
+  /trust/{id}:
+    get:
+      operationId: getLocalTrust
+      tags: [Trust]
+      summary: Read local trust results for an agent
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local trust results for an agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalTrustListResponse"
+
+  /reputation/update:
+    post:
+      operationId: updateLocalReputation
+      tags: [Trust]
+      summary: Update capability-specific local reputation
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          description: Capability-specific reputation signal; never grants invocation authority
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalReputationUpdateResponse"
+
+  /reputation/{id}:
+    get:
+      operationId: getLocalReputation
+      tags: [Trust]
+      summary: Read local reputation for an agent
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local capability-specific reputation records for an agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalReputationListResponse"
+
+  /policy/evaluate:
+    post:
+      operationId: evaluateLocalPolicy
+      tags: [Policy]
+      summary: Evaluate policy before execution
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          description: FIDES v2 policy decision. This never grants invocation authority by itself.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalPolicyEvaluationResponse"
+
+  /approvals:
+    post:
+      operationId: createLocalApprovalRequest
+      tags: [Policy]
+      summary: Create an approval request
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Created approval request; no invocation authority is granted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalApprovalRequestResponse"
+    get:
+      operationId: listLocalApprovals
+      tags: [Policy]
+      summary: List local approval requests
+      responses:
+        "200":
+          description: Local approval requests and decisions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalApprovalListResponse"
+
+  /approvals/{id}/approve:
+    post:
+      operationId: approveLocalApprovalRequest
+      tags: [Policy]
+      summary: Approve a pending approval request
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          description: Approval decision recorded; no invocation authority is granted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalApprovalDecisionResponse"
+
+  /approvals/{id}/deny:
+    post:
+      operationId: denyLocalApprovalRequest
+      tags: [Policy]
+      summary: Deny a pending approval request
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          description: Approval decision recorded; no invocation authority is granted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalApprovalDecisionResponse"
+
+  /delegations:
+    post:
+      operationId: createLocalDelegation
+      tags: [Authority]
+      summary: Create a local DelegationToken
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: DelegationToken created; still requires policy-checked SessionGrant before invocation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDelegationResponse"
+
+  /sessions:
+    post:
+      operationId: createLocalSession
+      tags: [Authority]
+      summary: Create a scoped SessionGrant
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Policy-checked local SessionGrant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalSessionResponse"
+
+  /sessions/{id}:
+    get:
+      operationId: getLocalSession
+      tags: [Authority]
+      summary: Read a local SessionGrant
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Stored local SessionGrant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalSessionResponse"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /sessions/{id}/verify:
+    post:
+      operationId: verifyLocalSession
+      tags: [Authority]
+      summary: Verify a local SessionGrant
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /invoke:
+    post:
+      operationId: invokeLocalCapability
+      tags: [Authority]
+      summary: Invoke a capability through a verified SessionGrant
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /evidence:
+    post:
+      operationId: appendLocalEvidence
+      tags: [Evidence]
+      summary: Append a local evidence event
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Evidence event appended to the local hash chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalEvidenceAppendResponse"
+    get:
+      operationId: listLocalEvidence
+      tags: [Evidence]
+      summary: List local evidence events
+      responses:
+        "200":
+          description: Local evidence ledger state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalEvidenceListResponse"
+
+  /evidence/{id}:
+    get:
+      operationId: getLocalEvidenceEvent
+      tags: [Evidence]
+      summary: Inspect a local evidence event
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local evidence event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalEvidenceEventResponse"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /evidence/verify:
+    post:
+      operationId: verifyLocalEvidence
+      tags: [Evidence]
+      summary: Verify the local evidence hash chain
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Local evidence hash-chain verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalEvidenceVerificationResponse"
+
+  /evidence/export:
+    post:
+      operationId: exportLocalEvidence
+      tags: [Evidence]
+      summary: Export privacy-aware local evidence
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          description: Privacy-aware local evidence export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalEvidenceExportResponse"
+
+  /revocations:
+    post:
+      operationId: recordLocalRevocation
+      tags: [Authority]
+      summary: Record a local revocation
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Revocation recorded; active records override matching trust and policy evaluation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRevocationRecordResponse"
+    get:
+      operationId: listLocalRevocations
+      tags: [Authority]
+      summary: List local revocations
+      responses:
+        "200":
+          description: Local revocation records and active subset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRevocationListResponse"
+
+  /revocations/{id}:
+    get:
+      operationId: getLocalRevocation
+      tags: [Authority]
+      summary: Inspect a local revocation
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local revocation status and record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRevocationStatusResponse"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /incidents:
+    post:
+      operationId: recordLocalIncident
+      tags: [Authority]
+      summary: Record a local incident
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Incident recorded; open incidents require policy review for matching target agents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIncidentRecordResponse"
+    get:
+      operationId: listLocalIncidents
+      tags: [Authority]
+      summary: List local incidents
+      responses:
+        "200":
+          description: Local incident records and open subset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIncidentListResponse"
+
+  /incidents/{id}:
+    get:
+      operationId: getLocalIncident
+      tags: [Authority]
+      summary: Inspect a local incident
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local incident record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIncidentRecordResponse"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /incidents/{id}/resolve:
+    post:
+      operationId: resolveLocalIncident
+      tags: [Authority]
+      summary: Resolve a local incident
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          description: Resolved local incident record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIncidentRecordResponse"
+
+  /killswitch:
+    post:
+      operationId: createLocalKillSwitchRule
+      tags: [Kill Switch]
+      summary: Enable a local kill switch rule
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Kill switch rule created; active rules override policy while enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalKillSwitchRuleResponse"
+    get:
+      operationId: listLocalKillSwitchRules
+      tags: [Kill Switch]
+      summary: List local kill switch rules
+      responses:
+        "200":
+          description: Local kill switch rules and active subset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalKillSwitchListResponse"
+
+  /killswitch/{id}:
+    delete:
+      operationId: disableLocalKillSwitchRule
+      tags: [Kill Switch]
+      summary: Disable a local kill switch rule
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Disabled kill switch rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalKillSwitchRuleResponse"
+
+  /dht/start:
+    post:
+      operationId: startLocalDht
+      tags: [Discovery]
+      summary: Start the local DHT simulator
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Local in-memory DHT simulator status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDhtStartResponse"
+
+  /dht/publish:
+    post:
+      operationId: publishLocalDhtPointer
+      tags: [Discovery]
+      summary: Publish a signed local DHT capability pointer
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Local DHT pointer published; pointers are not trust sources
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDhtPublishResponse"
+
+  /dht/find:
+    get:
+      operationId: findLocalDhtPointers
+      tags: [Discovery]
+      summary: Find local DHT pointers by capability
+      parameters:
+        - name: capability
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Local DHT pointer lookup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDhtFindResponse"
+    post:
+      operationId: postFindLocalDhtPointers
+      tags: [Discovery]
+      summary: Find local DHT pointers by request body
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          description: Local DHT pointer lookup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDhtFindResponse"
+
+  /registry/start:
+    post:
+      operationId: startLocalRegistry
+      tags: [Discovery]
+      summary: Start the local registry mode
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Local registry simulator status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRegistryStartResponse"
+
+  /registry/publish:
+    post:
+      operationId: publishLocalRegistryRecord
+      tags: [Discovery]
+      summary: Publish a local registry record
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Local registry record published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRegistryPublishResponse"
+
+  /registry/search:
+    post:
+      operationId: searchLocalRegistry
+      tags: [Discovery]
+      summary: Search local registry records
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /registry/index:
+    get:
+      operationId: getLocalRegistryIndex
+      tags: [Discovery]
+      summary: Read the local registry index
+      responses:
+        "200":
+          description: Local registry index; registry records are candidates only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRegistryIndexResponse"
+
+  /relay/start:
+    post:
+      operationId: startLocalRelay
+      tags: [Discovery]
+      summary: Start the local relay simulator
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Local relay simulator status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRelayStartResponse"
+
+  /relay/register:
+    post:
+      operationId: registerLocalRelayPresence
+      tags: [Discovery]
+      summary: Register local relay presence
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          description: Local relay presence registered; relay presence is not authority
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRelayRegisterResponse"
+
+  /relay/discover:
+    post:
+      operationId: discoverLocalRelayPresence
+      tags: [Discovery]
+      summary: Discover local relay presence
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /.well-known/fides.json:
+    get:
+      operationId: getWellKnownFides
+      tags: [Discovery]
+      summary: Read the local FIDES well-known document
+      responses:
+        "200":
+          description: Local FIDES well-known discovery document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WellKnownFidesResponse"
+
+  /.well-known/agents.json:
+    get:
+      operationId: getWellKnownAgents
+      tags: [Discovery]
+      summary: Read local well-known agent index
+      responses:
+        "200":
+          description: Local well-known agent index
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WellKnownAgentsResponse"
+
+  /.well-known/agents/{id}.json:
+    get:
+      operationId: getWellKnownAgent
+      tags: [Discovery]
+      summary: Read a local well-known AgentCard document
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Local well-known AgentCard document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WellKnownAgentResponse"
+
+  /demo/run:
+    post:
+      operationId: runLocalDemo
+      tags: [Authority]
+      summary: Run the full local Agent Trust Fabric demo
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Full local demo result with trust, policy, invocation, and evidence summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDemoRunResponse"
+
+  /simulate/adversarial:
+    post:
+      operationId: runAdversarialSimulation
+      tags: [Authority]
+      summary: Run local adversarial simulation scenarios
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Local adversarial simulation detection result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAdversarialSimulationResponse"
 
   /v1/identities/{did}:
     get:
@@ -193,10 +1177,12 @@ paths:
       security:
         - ApiKeyAuth: []
       description: |
-        Creates a local SessionGrant from a DelegationToken. In production,
-        or whenever `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`,
-        the request must include `delegatorPublicKey` so agentd can verify
-        the DelegationToken before storing the session.
+        Creates a local SessionGrant from either a legacy DelegationToken or a
+        canonical SignedDelegationTokenV2. New callers should send
+        `signedToken`; agentd verifies its issuer-bound canonical proof without
+        a separate `delegatorPublicKey`. Legacy `token` requests still require
+        `delegatorPublicKey` in production or whenever
+        `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`.
       requestBody:
         required: true
         content:
@@ -580,6 +1566,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/KillSwitchResponse"
 
+  /discover/federation:
+    post:
+      operationId: discoverFederation
+      tags: [Discovery]
+      summary: Discover candidates through federated registry peers
+      description: |
+        Queries local mock federation peers for capability candidates.
+        Federation expands discovery only; returned candidates are marked
+        `authority: candidate_only` and never grant invocation authority.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiscoveryQuery"
+      responses:
+        "200":
+          description: Federation candidates and rejected candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryResponse"
+
   /metrics:
     get:
       operationId: getMetrics
@@ -609,6 +1618,13 @@ components:
         `agentd:killswitch:write`, or `*`.
 
   parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
     DidParam:
       name: did
       in: path
@@ -617,13 +1633,132 @@ components:
         type: string
       example: "did:fides:agentd-test-01"
 
+  requestBodies:
+    JsonObject:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/JsonObject"
+
+    DiscoveryQuery:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DiscoveryQuery"
+
+  responses:
+    JsonObject:
+      description: JSON response body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/JsonObject"
+
+    Discovery:
+      description: Candidate-only discovery response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DiscoveryResponse"
+
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
   schemas:
+    JsonObject:
+      type: object
+      additionalProperties: true
+
     ErrorResponse:
       type: object
       required: [error]
       properties:
         error:
+          oneOf:
+            - type: string
+              description: Legacy string error message.
+            - $ref: "#/components/schemas/ErrorEnvelope"
+        authorityGranted:
+          type: boolean
+          description: Present on root v2 authority-sensitive failures.
+
+    ErrorEnvelope:
+      type: object
+      required: [code, category, severity, retryable, message]
+      properties:
+        code:
           type: string
+          enum:
+            - IDENTITY_INVALID_SIGNATURE
+            - IDENTITY_KEY_UNBOUND
+            - IDENTITY_NOT_FOUND
+            - AGENT_CARD_INVALID_SIGNATURE
+            - AGENT_CARD_EXPIRED
+            - AGENT_CARD_REVOKED
+            - AGENT_CARD_NOT_FOUND
+            - AGENT_NOT_REGISTERED
+            - CAPABILITY_NOT_FOUND
+            - CAPABILITY_SCHEMA_INVALID
+            - TRUST_BELOW_THRESHOLD
+            - POLICY_DENIED
+            - APPROVAL_REQUIRED
+            - APPROVAL_NOT_FOUND
+            - SESSION_EXPIRED
+            - SESSION_NOT_FOUND
+            - SESSION_SCOPE_INVALID
+            - ATTESTATION_INVALID
+            - ATTESTATION_EXPIRED
+            - ATTESTATION_NOT_FOUND
+            - DHT_POINTER_TAMPERED
+            - DHT_POINTER_EXPIRED
+            - EVIDENCE_CHAIN_BROKEN
+            - EVIDENCE_EVENT_NOT_FOUND
+            - EVIDENCE_PRIVACY_MODE_INVALID
+            - REVOCATION_ACTIVE
+            - REVOCATION_NOT_FOUND
+            - INCIDENT_ACTIVE
+            - INCIDENT_INVALID
+            - INCIDENT_NOT_FOUND
+            - KILL_SWITCH_ACTIVE
+            - KILL_SWITCH_RULE_NOT_FOUND
+            - VERSION_INCOMPATIBLE
+            - REQUEST_INVALID
+        category:
+          type: string
+          enum:
+            - identity
+            - agent_card
+            - capability
+            - trust
+            - policy
+            - approval
+            - session
+            - attestation
+            - discovery
+            - dht
+            - evidence
+            - revocation
+            - incident
+            - kill_switch
+            - version
+            - request
+            - internal
+        severity:
+          type: string
+          enum: [info, warning, error, critical]
+        retryable:
+          type: boolean
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
 
     HealthResponse:
       type: object
@@ -663,6 +1798,576 @@ components:
             detail:
               type: string
 
+    LocalIdentitySummary:
+      type: object
+      required: [type, did, publicKeyHex, createdAt]
+      properties:
+        type:
+          type: string
+          enum: [agent, publisher, principal]
+        did:
+          type: string
+        publicKeyHex:
+          type: string
+          description: Public Ed25519 key hex. Private keys are never returned by this API.
+        createdAt:
+          type: string
+          format: date-time
+
+    LocalIdentityResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalIdentitySummary"
+        - type: object
+          required: [identity]
+          properties:
+            identity:
+              type: object
+              description: FIDES AgentIdentity, PublisherIdentity, or PrincipalIdentity object.
+
+    LocalIdentityListResponse:
+      type: object
+      required: [identities]
+      properties:
+        identities:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalIdentitySummary"
+
+    AgentCardValidation:
+      type: object
+      required: [valid, errors]
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+
+    AgentCard:
+      type: object
+      required: [id, identity, capabilities, endpoints, policies, createdAt, updatedAt]
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.agent_card.v1]
+        id:
+          type: string
+        agent_id:
+          type: string
+        identity:
+          type: object
+          additionalProperties: true
+        publisher:
+          type: object
+          additionalProperties: true
+        capabilities:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        endpoints:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        transports:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        policies:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        publicKeys:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        trustAnchors:
+          type: array
+          items:
+            $ref: "#/components/schemas/IdentityTrustAnchor"
+        runtimeAttestations:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuntimeAttestationV2"
+        protocolVersions:
+          type: array
+          items:
+            type: string
+        revocationUrl:
+          type: string
+        revocationRef:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SignedAgentCard:
+      type: object
+      required: [payload, proof]
+      properties:
+        payload:
+          $ref: "#/components/schemas/AgentCard"
+        proof:
+          type: object
+          additionalProperties: true
+
+    LocalAgentCardCreateResponse:
+      type: object
+      required: [card, validation]
+      properties:
+        card:
+          $ref: "#/components/schemas/AgentCard"
+        validation:
+          $ref: "#/components/schemas/AgentCardValidation"
+
+    LocalAgentCardResponse:
+      type: object
+      required: [card, signed]
+      properties:
+        card:
+          $ref: "#/components/schemas/AgentCard"
+        signed:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/SignedAgentCard"
+            - type: "null"
+
+    LocalAgentCardSignResponse:
+      type: object
+      required: [signed]
+      properties:
+        signed:
+          $ref: "#/components/schemas/SignedAgentCard"
+
+    LocalAgentCardVerifyResponse:
+      type: object
+      required: [valid, signed]
+      properties:
+        valid:
+          type: boolean
+        signed:
+          type: boolean
+        canonicalValid:
+          type: boolean
+        identityBound:
+          type: boolean
+        validation:
+          $ref: "#/components/schemas/AgentCardValidation"
+        error:
+          type: string
+        id:
+          type: string
+
+    LocalDiscoveryRecord:
+      type: object
+      additionalProperties: true
+
+    LocalInfrastructureStartResponse:
+      type: object
+      required: [started, mode]
+      properties:
+        started:
+          type: boolean
+        mode:
+          type: string
+        records:
+          type: integer
+        pointers:
+          type: integer
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalDhtStartResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalInfrastructureStartResponse"
+        - type: object
+          properties:
+            mode:
+              type: string
+              enum: [in_memory_simulator]
+
+    LocalDhtPublishResponse:
+      type: object
+      required: [accepted, pointer, authorityGranted]
+      properties:
+        accepted:
+          type: boolean
+        pointer:
+          $ref: "#/components/schemas/LocalDiscoveryRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalDhtFindResponse:
+      type: object
+      required: [capability, pointers, rejectedPointers]
+      properties:
+        capability:
+          type: string
+          nullable: true
+        pointers:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalDiscoveryRecord"
+        rejectedPointers:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalDiscoveryRecord"
+
+    LocalRegistryStartResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalInfrastructureStartResponse"
+        - type: object
+          properties:
+            mode:
+              type: string
+              enum: [local_mock_registry]
+
+    LocalRegistryPublishResponse:
+      type: object
+      required: [accepted, record, authorityGranted]
+      properties:
+        accepted:
+          type: boolean
+        record:
+          $ref: "#/components/schemas/LocalDiscoveryRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalRegistryIndexResponse:
+      type: object
+      required: [mode, records, rejectedRecords, authorityGranted]
+      properties:
+        mode:
+          type: string
+          enum: [local_mock_registry]
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalDiscoveryRecord"
+        rejectedRecords:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalDiscoveryRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalRelayStartResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalInfrastructureStartResponse"
+        - type: object
+          properties:
+            mode:
+              type: string
+              enum: [local_mock_relay]
+
+    LocalRelayRegisterResponse:
+      type: object
+      required: [accepted, record, authorityGranted]
+      properties:
+        accepted:
+          type: boolean
+        record:
+          $ref: "#/components/schemas/LocalDiscoveryRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    WellKnownFidesResponse:
+      type: object
+      required: [schema_version, protocol, supported_versions, endpoints]
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.well_known.v1]
+        protocol:
+          type: string
+          enum: [fides.v2]
+        supported_versions:
+          type: array
+          items:
+            type: string
+        endpoints:
+          type: object
+          additionalProperties:
+            type: string
+
+    WellKnownAgentSummary:
+      type: object
+      required: [agentId, cardId, signed, cardUrl, authorityGranted]
+      properties:
+        agentId:
+          type: string
+        cardId:
+          type: string
+        signed:
+          type: boolean
+        cardUrl:
+          type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    WellKnownAgentsResponse:
+      type: object
+      required: [schema_version, agents]
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.well_known.agents.v1]
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/WellKnownAgentSummary"
+
+    WellKnownAgentResponse:
+      type: object
+      required: [agentId, card, authorityGranted]
+      properties:
+        agentId:
+          type: string
+        card:
+          $ref: "#/components/schemas/AgentCard"
+        signed:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/SignedAgentCard"
+            - type: "null"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    IdentityTrustAnchor:
+      type: object
+      required: [type, value, verified]
+      properties:
+        type:
+          type: string
+          enum:
+            - domain
+            - github
+            - email
+            - npm
+            - pypi
+            - wallet
+            - passkey
+            - organization_invitation
+            - runtime_attestation
+            - build_attestation
+            - peer_attestation
+        value:
+          type: string
+        verified:
+          type: boolean
+        verifiedAt:
+          type: string
+          format: date-time
+        evidenceRef:
+          type: string
+
+    LocalIdentityAttestation:
+      type: object
+      required: [id, schema_version, identity, trust_anchor, issued_at, mode]
+      properties:
+        id:
+          type: string
+        schema_version:
+          type: string
+          enum: [fides.identity_attestation.v1]
+        identity:
+          type: string
+        trust_anchor:
+          $ref: "#/components/schemas/IdentityTrustAnchor"
+        issued_at:
+          type: string
+          format: date-time
+        mode:
+          type: string
+          enum: [local_mock]
+
+    LocalIdentityAttestationResponse:
+      type: object
+      required: [attestation, identity, authorityGranted]
+      properties:
+        attestation:
+          $ref: "#/components/schemas/LocalIdentityAttestation"
+        identity:
+          $ref: "#/components/schemas/LocalIdentityResponse"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    GenericAttestationV1:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - subject_type
+        - provider
+        - claims
+        - evidence_refs
+        - issued_at
+        - payload_hash
+        - signature
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.attestation.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        subject_type:
+          type: string
+          enum: [agent, publisher, principal, domain, package, wallet, passkey, runtime, build, peer]
+        provider:
+          type: string
+        claims:
+          type: object
+          additionalProperties: true
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+        signature:
+          type: string
+
+    LocalGenericAttestationResponse:
+      type: object
+      required: [attestation, authorityGranted]
+      properties:
+        attestation:
+          $ref: "#/components/schemas/GenericAttestationV1"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    RuntimeAttestationV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - attestation_id
+        - agent_id
+        - provider
+        - code_hash
+        - runtime_hash
+        - policy_hash
+        - issued_at
+        - expires_at
+        - payload_hash
+        - signature
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.runtime_attestation.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        attestation_id:
+          type: string
+        agent_id:
+          type: string
+        provider:
+          type: string
+        code_hash:
+          type: string
+        runtime_hash:
+          type: string
+        policy_hash:
+          type: string
+        enclave_measurement:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+        signature:
+          type: string
+
+    LocalRuntimeAttestationResponse:
+      type: object
+      required: [attestation]
+      properties:
+        attestation:
+          $ref: "#/components/schemas/RuntimeAttestationV2"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalRuntimeAttestationVerificationResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalRuntimeAttestationResponse"
+        - type: object
+          required: [id, valid, authorityGranted]
+          properties:
+            id:
+              type: string
+            valid:
+              type: boolean
+            error:
+              type: string
+
+    LocalGenericAttestationVerificationResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalGenericAttestationResponse"
+        - type: object
+          required: [id, valid, authorityGranted]
+          properties:
+            id:
+              type: string
+            valid:
+              type: boolean
+            error:
+              type: string
+
     IdentityResolutionResponse:
       type: object
       properties:
@@ -696,6 +2401,523 @@ components:
         reason:
           type: string
           enum: [invalid-domain, invalid-did, record-not-found, resolver-error]
+
+    DiscoveryQuery:
+      type: object
+      properties:
+        capability:
+          type: string
+          example: invoice.reconcile
+        constraints:
+          type: object
+        supported_versions:
+          type: array
+          items:
+            type: string
+          example: ["fides.v2.0"]
+        required_versions:
+          type: array
+          items:
+            type: string
+          example: ["fides.v2.0"]
+        limit:
+          type: integer
+          minimum: 1
+
+    DiscoveryCandidate:
+      type: object
+      properties:
+        provider:
+          type: string
+        agentId:
+          type: string
+        capability:
+          type: string
+        authority:
+          type: string
+          enum: [candidate_only]
+        verified:
+          type: boolean
+        rank:
+          type: number
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        explanations:
+          type: array
+          items:
+            type: string
+
+    LocalAgentRegistration:
+      type: object
+      required: [agentId, cardId, registeredAt, signed, verified, authority, authorityGranted, reasons]
+      properties:
+        registered:
+          type: boolean
+          enum: [true]
+          description: Present on POST /agents/register responses.
+        agentId:
+          type: string
+        cardId:
+          type: string
+        registeredAt:
+          type: string
+          format: date-time
+        signed:
+          type: boolean
+          description: Whether the local AgentCard has an identity-bound canonical signature.
+        verified:
+          type: boolean
+          description: True only when the local registration is backed by an identity-bound signed AgentCard.
+        authority:
+          type: string
+          enum: [candidate_only]
+        capabilities:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        reasons:
+          type: array
+          items:
+            type: string
+          example:
+            - identity_bound_signed_agent_card_verified
+            - local_registration_candidate_only
+            - discovery_does_not_grant_authority
+        reason:
+          type: string
+          description: Human-readable registration note returned by POST /agents/register.
+
+    LocalAgentListResponse:
+      type: object
+      required: [agents, authorityGranted]
+      properties:
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalAgentRegistration"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalAgentDetailResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalAgentRegistration"
+        - type: object
+          properties:
+            card:
+              type: object
+              nullable: true
+            signedCard:
+              type: object
+              nullable: true
+
+    TrustReason:
+      type: object
+      required: [component, value, weight, description]
+      properties:
+        component:
+          type: string
+          enum:
+            - IdentityScore
+            - PublisherScore
+            - TrustAnchorScore
+            - CapabilityFitScore
+            - EvidenceScore
+            - PolicyComplianceScore
+            - RuntimeSafetyScore
+            - PeerAttestationScore
+            - IncidentPenalty
+            - NoveltyPenalty
+            - ContextBoundaryPenalty
+        value:
+          type: number
+        weight:
+          type: number
+        description:
+          type: string
+
+    TrustResult:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - agent_id
+        - capability
+        - score
+        - band
+        - reasons
+        - risk_flags
+        - evidence_refs
+        - required_controls
+        - computed_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.trust.result.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        agent_id:
+          type: string
+        capability:
+          type: string
+        score:
+          type: number
+        band:
+          type: string
+          enum: [unknown, low, medium, high, verified]
+        reasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustReason"
+        risk_flags:
+          type: array
+          items:
+            type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        required_controls:
+          type: array
+          items:
+            type: string
+            enum: [dry_run, human_approval, policy_proof, runtime_attestation, scope_limit, rate_limit]
+        computed_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalTrustEvaluationResponse:
+      type: object
+      required: [trust, authorityGranted, explanation]
+      properties:
+        trust:
+          $ref: "#/components/schemas/TrustResult"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        explanation:
+          type: string
+
+    LocalTrustListResponse:
+      type: object
+      required: [agentId, trust, authorityGranted]
+      properties:
+        agentId:
+          type: string
+        trust:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustResult"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    ReputationReason:
+      type: object
+      required: [factor, value, description]
+      properties:
+        factor:
+          type: string
+          enum: [success_rate, volume_confidence, publisher_weight, incident_penalty, context_boundary_penalty]
+        value:
+          type: number
+        description:
+          type: string
+
+    ReputationRecord:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - agent_id
+        - capability
+        - score
+        - successful_invocations
+        - failed_invocations
+        - incident_count
+        - publisher_weight
+        - context_boundary_penalty
+        - reasons
+        - computed_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.reputation.record.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        agent_id:
+          type: string
+        publisher_id:
+          type: string
+        principal_id:
+          type: string
+        capability:
+          type: string
+        score:
+          type: number
+        successful_invocations:
+          type: integer
+        failed_invocations:
+          type: integer
+        incident_count:
+          type: integer
+        publisher_weight:
+          type: number
+        context_boundary_penalty:
+          type: number
+        reasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReputationReason"
+        computed_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalReputationUpdateResponse:
+      type: object
+      required: [reputation, authorityGranted]
+      properties:
+        reputation:
+          $ref: "#/components/schemas/ReputationRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalReputationListResponse:
+      type: object
+      required: [agentId, reputations, authorityGranted]
+      properties:
+        agentId:
+          type: string
+        reputations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReputationRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalDelegationResponse:
+      type: object
+      required: [token, signed, authorityGranted, explanation]
+      properties:
+        token:
+          $ref: "#/components/schemas/DelegationToken"
+        signed:
+          type: boolean
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        explanation:
+          type: string
+
+    LocalSessionResponse:
+      type: object
+      required: [session, authorityGranted]
+      properties:
+        authorized:
+          type: boolean
+          description: Present on POST /sessions responses.
+        authorityGranted:
+          type: boolean
+          description: True only when the session permits execution, false for dry-run-only sessions.
+        authorityMode:
+          type: string
+          enum: [full, dry_run_only]
+        allowedActions:
+          type: array
+          items:
+            type: string
+            enum: [execute, dry_run]
+        session:
+          $ref: "#/components/schemas/SessionGrantV2"
+        signedSession:
+          type: object
+          description: Canonically signed SessionGrant.
+        signedSessionVerified:
+          type: boolean
+        versionNegotiation:
+          $ref: "#/components/schemas/VersionNegotiationRecord"
+        policy:
+          type: object
+        trust:
+          type: object
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+
+    SessionGrantV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - session_id
+        - subject
+        - requester_agent_id
+        - target_agent_id
+        - principal_id
+        - capability
+        - scopes
+        - constraints
+        - policy_hash
+        - trust_result_hash
+        - issued_at
+        - expires_at
+        - nonce
+        - audience
+        - supported_versions
+        - negotiated_version
+        - issuer
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.session_grant.v1]
+        id:
+          type: string
+        session_id:
+          type: string
+        subject:
+          type: string
+          description: Target agent id bound through the shared signed-object envelope.
+        requester_agent_id:
+          type: string
+        target_agent_id:
+          type: string
+        principal_id:
+          type: string
+        capability:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        constraints:
+          type: object
+        policy_hash:
+          type: string
+        trust_result_hash:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        nonce:
+          type: string
+        audience:
+          type: array
+          items:
+            type: string
+        supported_versions:
+          type: array
+          items:
+            type: string
+        required_versions:
+          type: array
+          items:
+            type: string
+        negotiated_version:
+          type: string
+        issuer:
+          type: string
+        payload_hash:
+          type: string
+
+    VersionNegotiationRecord:
+      type: object
+      required:
+        - schema_version
+        - supported_versions
+        - peer_supported_versions
+        - compatible
+        - errors
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.version_negotiation.v1]
+        supported_versions:
+          type: array
+          items:
+            type: string
+        required_versions:
+          type: array
+          items:
+            type: string
+        peer_supported_versions:
+          type: array
+          items:
+            type: string
+        peer_required_versions:
+          type: array
+          items:
+            type: string
+        negotiated_version:
+          type: string
+        compatible:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: object
+
+    DiscoveryResponse:
+      type: object
+      required: [authorityGranted]
+      properties:
+        provider:
+          type: string
+          example: federation
+        capability:
+          type: string
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscoveryCandidate"
+        rejectedCandidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscoveryCandidate"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        explanation:
+          type: string
+        evidenceRefs:
+          type: array
+          description: Evidence event references produced by root discovery endpoints.
+          items:
+            type: string
+        evidence_refs:
+          type: array
+          description: Snake-case evidence event references for protocol object compatibility.
+          items:
+            type: string
 
     CardResponse:
       type: object
@@ -774,6 +2996,806 @@ components:
         explanation:
           type: object
 
+    FidesPolicyDecision:
+      type: object
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.policy.decision.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        decision:
+          type: string
+          enum: [allow, deny, require_approval, dry_run_only, scope_limit, risk_limit]
+        principal_id:
+          type: string
+        requester_agent_id:
+          type: string
+        target_agent_id:
+          type: string
+        capability:
+          type: string
+        reason_codes:
+          type: array
+          items:
+            type: string
+        machine_reasons:
+          type: array
+          items:
+            type: object
+        human_reasons:
+          type: array
+          items:
+            type: string
+        required_controls:
+          type: array
+          items:
+            type: string
+            enum: [dry_run, human_approval, policy_proof, runtime_attestation, scope_limit, rate_limit]
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        issued_at:
+          type: string
+          format: date-time
+        evaluated_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalPolicyEvaluationResponse:
+      type: object
+      properties:
+        policy:
+          $ref: "#/components/schemas/FidesPolicyDecision"
+        trust:
+          type: object
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        requiresSessionGrant:
+          type: boolean
+        explanation:
+          type: string
+
+    ApprovalRequest:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - requester_agent_id
+        - target_agent_id
+        - principal_id
+        - capability
+        - requested_scopes
+        - risk_level
+        - evidence_refs
+        - status
+        - created_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.approval.request.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        requester_agent_id:
+          type: string
+        target_agent_id:
+          type: string
+        principal_id:
+          type: string
+        capability:
+          type: string
+        requested_scopes:
+          type: array
+          items:
+            type: string
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        policy_decision_hash:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [pending, approved, denied, expired]
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    ApprovalDecision:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - approval_request_id
+        - approver_id
+        - decision
+        - reason
+        - constraints
+        - evidence_refs
+        - decided_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.approval.decision.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        approval_request_id:
+          type: string
+        approver_id:
+          type: string
+        decision:
+          type: string
+          enum: [approved, denied]
+        reason:
+          type: string
+        constraints:
+          type: object
+          additionalProperties: true
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        decided_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalApprovalRequestResponse:
+      type: object
+      required: [approval, evidenceRefs, authorityGranted]
+      properties:
+        approval:
+          $ref: "#/components/schemas/ApprovalRequest"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        explanation:
+          type: string
+
+    LocalApprovalDecisionResponse:
+      type: object
+      required: [approval, decision, evidenceRefs, authorityGranted]
+      properties:
+        approval:
+          $ref: "#/components/schemas/ApprovalRequest"
+        decision:
+          $ref: "#/components/schemas/ApprovalDecision"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        explanation:
+          type: string
+
+    LocalApprovalListResponse:
+      type: object
+      required: [approvals, decisions, authorityGranted]
+      properties:
+        approvals:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalRequest"
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalDecision"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    KillSwitchRule:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - target_type
+        - target
+        - reason
+        - enabled
+        - created_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.kill_switch.rule.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        target_type:
+          type: string
+          enum: [agent, publisher, capability, session, principal, risk_class]
+        target:
+          type: string
+        reason:
+          type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalKillSwitchRuleResponse:
+      type: object
+      required: [rule]
+      properties:
+        rule:
+          $ref: "#/components/schemas/KillSwitchRule"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityOverride:
+          type: boolean
+          description: True when the rule is enabled and can override normal policy evaluation.
+        explanation:
+          type: string
+
+    LocalKillSwitchListResponse:
+      type: object
+      required: [rules, active]
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/KillSwitchRule"
+        active:
+          type: array
+          items:
+            $ref: "#/components/schemas/KillSwitchRule"
+
+    RevocationRecordV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - target_type
+        - target_id
+        - reason
+        - status
+        - evidence_refs
+        - created_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.revocation.record.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        target_type:
+          type: string
+          enum: [key, identity, agent, agent_card, capability, session, attestation, publisher]
+        target_id:
+          type: string
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [active, superseded, expired]
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalRevocationRecordResponse:
+      type: object
+      required: [record, authorityOverride]
+      properties:
+        record:
+          $ref: "#/components/schemas/RevocationRecordV2"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityOverride:
+          type: boolean
+          description: True when the revocation can override normal trust and policy evaluation.
+        explanation:
+          type: string
+
+    LocalRevocationListResponse:
+      type: object
+      required: [records, active]
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/RevocationRecordV2"
+        active:
+          type: array
+          items:
+            $ref: "#/components/schemas/RevocationRecordV2"
+
+    LocalRevocationStatusResponse:
+      type: object
+      required: [id, revoked]
+      properties:
+        id:
+          type: string
+        revoked:
+          type: boolean
+        record:
+          $ref: "#/components/schemas/RevocationRecordV2"
+
+    IncidentRecordV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - reporter
+        - target_agent_id
+        - severity
+        - category
+        - description
+        - evidence_refs
+        - resolution_status
+        - trust_penalty
+        - reputation_penalty
+        - created_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.incident.record.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        reporter:
+          type: string
+        target_agent_id:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        category:
+          type: string
+          enum:
+            - policy_violation
+            - data_exfiltration
+            - malicious_output
+            - sandbox_escape
+            - unauthorized_action
+            - prompt_injection_failure
+            - payment_error
+            - suspicious_behavior
+        description:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        resolution_status:
+          type: string
+          enum: [open, resolved, dismissed, false_positive]
+        trust_penalty:
+          type: number
+        reputation_penalty:
+          type: number
+        created_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalIncidentRecordResponse:
+      type: object
+      required: [record]
+      properties:
+        record:
+          $ref: "#/components/schemas/IncidentRecordV2"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: string
+
+    LocalIncidentListResponse:
+      type: object
+      required: [records, open]
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentRecordV2"
+        open:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentRecordV2"
+
+    EvidenceEventV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - event_id
+        - issuer
+        - type
+        - actor
+        - privacy_mode
+        - issued_at
+        - timestamp
+        - prev_event_hash
+        - payload_hash
+        - event_hash
+        - signature
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.evidence_event.v1]
+        id:
+          type: string
+        event_id:
+          type: string
+        issuer:
+          type: string
+        type:
+          type: string
+          enum:
+            - agent.registered
+            - agent.updated
+            - agent.revoked
+            - discovery.performed
+            - trust.computed
+            - policy.evaluated
+            - approval.requested
+            - approval.granted
+            - approval.denied
+            - session.requested
+            - session.granted
+            - session.denied
+            - capability.invoked
+            - capability.completed
+            - capability.failed
+            - attestation.issued
+            - attestation.verified
+            - attestation.failed
+            - revocation.recorded
+            - incident.reported
+            - kill_switch.triggered
+        actor:
+          type: string
+        subject:
+          type: string
+        principal:
+          type: string
+        capability:
+          type: string
+        input_hash:
+          type: string
+        output_hash:
+          type: string
+        policy_hash:
+          type: string
+        decision:
+          type: string
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        privacy_mode:
+          type: string
+          enum: [public, private, redacted, hash_only]
+        issued_at:
+          type: string
+          format: date-time
+        timestamp:
+          type: string
+          format: date-time
+        prev_event_hash:
+          type: string
+        payload_hash:
+          type: string
+        event_hash:
+          type: string
+        signature:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    LocalEvidenceAppendResponse:
+      type: object
+      required: [accepted, event, authorityGranted]
+      properties:
+        accepted:
+          type: boolean
+        event:
+          $ref: "#/components/schemas/EvidenceEventV2"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalEvidenceEventResponse:
+      type: object
+      required: [event, authorityGranted]
+      properties:
+        event:
+          $ref: "#/components/schemas/EvidenceEventV2"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalEvidenceListResponse:
+      type: object
+      required: [events, count, valid, lastHash, authorityGranted]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceEventV2"
+        count:
+          type: integer
+        valid:
+          type: boolean
+        lastHash:
+          type: string
+          nullable: true
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalEvidenceVerificationResponse:
+      type: object
+      required: [valid, count, lastHash, scope, checkedAt]
+      properties:
+        valid:
+          type: boolean
+        count:
+          type: integer
+        lastHash:
+          type: string
+          nullable: true
+        scope:
+          type: string
+          enum: [root-local-evidence-ledger]
+        checkedAt:
+          type: string
+          format: date-time
+
+    LocalEvidenceExportResponse:
+      type: object
+      required: [format, exportedAt, valid, count, privacyMode, includeMetadata, events]
+      properties:
+        format:
+          type: string
+          enum: [json]
+        exportedAt:
+          type: string
+          format: date-time
+        valid:
+          type: boolean
+        count:
+          type: integer
+        privacyMode:
+          type: string
+        includeMetadata:
+          type: boolean
+          nullable: true
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceEventV2"
+
+    LocalDemoAuthoritySummary:
+      type: object
+      required: [discoveryGrantsAuthority, policyBeforeExecution, evidenceProduced]
+      properties:
+        discoveryGrantsAuthority:
+          type: boolean
+          enum: [false]
+        identityEqualsTrust:
+          type: boolean
+          enum: [false]
+        trustScoreEqualsPermission:
+          type: boolean
+          enum: [false]
+        policyBeforeExecution:
+          type: boolean
+        evidenceProduced:
+          type: boolean
+
+    LocalDemoRunResponse:
+      type: object
+      required: [status, mode, steps, identities, discovery, verification, authority, surfaces, limitations]
+      properties:
+        status:
+          type: string
+          enum: [executed]
+        mode:
+          type: string
+          enum: [local-first]
+        steps:
+          type: array
+          items:
+            type: string
+        identities:
+          type: object
+          additionalProperties:
+            type: string
+        discovery:
+          type: object
+          additionalProperties: true
+        verification:
+          type: object
+          required: [agentCardsVerified, evidenceHashChainValid, evidenceEventCount, evidenceExport]
+          properties:
+            agentCardsVerified:
+              type: boolean
+            evidenceHashChainValid:
+              type: boolean
+            evidenceEventCount:
+              type: integer
+            evidenceExport:
+              type: object
+              additionalProperties: true
+        trust:
+          type: object
+          additionalProperties: true
+        reputation:
+          type: object
+          additionalProperties: true
+        policy:
+          type: object
+          additionalProperties: true
+        sessions:
+          type: object
+          additionalProperties: true
+        invocation:
+          type: object
+          additionalProperties: true
+        governance:
+          type: object
+          additionalProperties: true
+        authority:
+          $ref: "#/components/schemas/LocalDemoAuthoritySummary"
+        surfaces:
+          type: object
+          additionalProperties: true
+        limitations:
+          type: array
+          items:
+            type: string
+
+    LocalAdversarialScenario:
+      type: object
+      required: [name, detected, outcome, evidenceRef]
+      properties:
+        name:
+          type: string
+        detected:
+          type: boolean
+        outcome:
+          type: string
+        evidenceRef:
+          type: string
+        policy:
+          type: object
+          additionalProperties: true
+        trust:
+          type: object
+          additionalProperties: true
+        reputation:
+          type: object
+          additionalProperties: true
+        errors:
+          type: array
+          items:
+            type: string
+
+    LocalAdversarialSimulationResponse:
+      type: object
+      required: [status, mode, detections, scenarios, evidence, authority, limitations]
+      properties:
+        status:
+          type: string
+          enum: [detected, partial]
+        mode:
+          type: string
+          enum: [local-first]
+        detections:
+          type: array
+          items:
+            type: string
+        scenarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalAdversarialScenario"
+        incident:
+          $ref: "#/components/schemas/IncidentRecordV2"
+        revocation:
+          $ref: "#/components/schemas/RevocationRecordV2"
+        preflight:
+          type: object
+          additionalProperties: true
+        evidence:
+          type: object
+          required: [scenarioEvents, incidentEvidenceRef, rootChainValid, rootEventCount, brokenEvidenceChainValid]
+          properties:
+            scenarioEvents:
+              type: object
+              additionalProperties:
+                type: string
+            incidentEvidenceRef:
+              type: string
+            rootChainValid:
+              type: boolean
+            rootEventCount:
+              type: integer
+            brokenEvidenceChainValid:
+              type: boolean
+        authority:
+          $ref: "#/components/schemas/LocalDemoAuthoritySummary"
+        limitations:
+          type: array
+          items:
+            type: string
+
     EvidenceSubmitRequest:
       type: object
       required: [actor, action]
@@ -803,7 +3825,7 @@ components:
       properties:
         level:
           type: string
-          enum: [public, private, redacted, hash-only]
+          enum: [public, private, redacted, hash_only]
         redactionKey:
           type: string
 
@@ -924,6 +3946,87 @@ components:
           type: string
           description: Hex-encoded Ed25519 signature over the canonical token body
 
+    DelegationTokenV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - delegator
+        - delegatee
+        - capabilities
+        - constraints
+        - issued_at
+        - expires_at
+        - nonce
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          example: fides.delegation_token.v1
+        id:
+          type: string
+        issuer:
+          type: string
+          description: Issuer DID. Must match the proof verification method.
+        subject:
+          type: string
+        delegator:
+          type: string
+        delegatee:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        constraints:
+          type: object
+          additionalProperties: true
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        nonce:
+          type: string
+        audience:
+          type: array
+          items:
+            type: string
+        payload_hash:
+          type: string
+          example: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+    SignedDelegationTokenV2:
+      type: object
+      required: [payload, proof]
+      properties:
+        payload:
+          $ref: "#/components/schemas/DelegationTokenV2"
+        proof:
+          type: object
+          required: [type, created, verificationMethod, proofPurpose, payloadHash, proofValue]
+          properties:
+            type:
+              type: string
+              example: Ed25519Signature2020
+            created:
+              type: string
+              format: date-time
+            verificationMethod:
+              type: string
+              description: did:fides DID containing the signing Ed25519 public key.
+            proofPurpose:
+              type: string
+              example: delegation
+            payloadHash:
+              type: string
+            proofValue:
+              type: string
+              description: Base58 Ed25519 canonical object signature
+
     SessionGrant:
       type: object
       properties:
@@ -952,10 +4055,12 @@ components:
 
     SessionCreateRequest:
       type: object
-      required: [token, capabilityId]
+      required: [capabilityId]
       properties:
         token:
           $ref: "#/components/schemas/DelegationToken"
+        signedToken:
+          $ref: "#/components/schemas/SignedDelegationTokenV2"
         capabilityId:
           type: string
         audience:
@@ -968,7 +4073,10 @@ components:
         delegatorPublicKey:
           type: string
           pattern: "^[a-fA-F0-9]{64}$"
-          description: Delegator Ed25519 public key. Required when `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`.
+          description: Delegator Ed25519 public key for legacy `token` requests. Not required for canonical `signedToken` requests.
+      oneOf:
+        - required: [token]
+        - required: [signedToken]
 
     SessionCreateResponse:
       type: object
@@ -977,6 +4085,9 @@ components:
           type: boolean
         session:
           $ref: "#/components/schemas/SessionGrant"
+        signedDelegationVerified:
+          type: boolean
+          description: True when the session was created from a canonical SignedDelegationTokenV2.
 
     SessionLookupResponse:
       type: object
@@ -1186,7 +4297,7 @@ components:
       properties:
         decision:
           type: string
-          enum: [allow, deny, approve-required]
+          enum: [allow, deny, approve-required, dry-run]
         explanation:
           type: string
         factors:

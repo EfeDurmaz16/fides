@@ -1,46 +1,284 @@
 # @fides/sdk
 
-Decentralized trust and authentication protocol for autonomous AI agents.
+Promise-based TypeScript SDK for the FIDES v2 Agent Trust Fabric.
+
+FIDES v2 resolves capabilities to verified agent candidates, then runs trust,
+policy, delegation, session, invocation, and evidence workflows through the
+local `agentd` authority path. Discovery is candidate discovery only; it never
+grants invocation authority by itself.
 
 ## Installation
 
 ```bash
 npm install @fides/sdk
+# or
+pnpm add @fides/sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { Fides, TrustLevel } from '@fides/sdk'
+import { FidesClient } from '@fides/sdk'
 
-const fides = new Fides({
-  discoveryUrl: 'http://localhost:3100',
-  trustUrl: 'http://localhost:3200',
-  apiKey: process.env.FIDES_API_KEY,
+const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+const health = await client.health()
+if (health.status !== 'healthy') {
+  console.warn('agentd is reachable but degraded', health.checks)
+}
+
+const principal = await client.identity.createPrincipal({ name: 'Demo Principal' })
+const requester = await client.identity.createAgent({ name: 'Requester Agent' })
+const target = await client.identity.createAgent({ name: 'Invoice Agent' })
+
+const card = await client.cards.create({
+  agentId: target.did,
+  name: 'Invoice Agent',
+  capabilities: [
+    {
+      id: 'invoice.reconcile',
+      riskLevel: 'medium',
+      requiredScopes: ['invoice:read'],
+      supportedControls: ['dry_run', 'policy_proof'],
+      supportsDryRun: true,
+      supportsPolicyProof: true,
+    },
+  ],
 })
 
-// Create identity
-const { did } = await fides.createIdentity({ name: 'My Agent' })
+await client.cards.sign({ id: card.card.id })
+await client.agents.register({ agentCardId: card.card.id })
 
-// Sign HTTP requests (with automatic Content-Digest for body integrity)
-const signed = await fides.signRequest({
-  method: 'POST',
-  url: 'https://example.com/api',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ data: 'hello' }),
+const discovery = await client.discovery.local({ capability: 'invoice.reconcile' })
+console.log(discovery.authorityGranted) // false
+
+const trust = await client.trust.evaluate({
+  agentId: target.did,
+  capability: 'invoice.reconcile',
+})
+const graph = await client.graph.inspect(target.did)
+console.log(graph.authorityGranted) // false
+
+const policy = await client.policy.evaluate({
+  principalId: principal.did,
+  requesterAgentId: requester.did,
+  agentId: target.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
 })
 
-// Verify requests
-const result = await fides.verifyRequest(incomingRequest)
+const session = await client.sessions.request({
+  principalId: principal.did,
+  requesterAgentId: requester.did,
+  agentId: target.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
+})
 
-// Trust attestations
-await fides.trust('did:fides:...', TrustLevel.HIGH)
+const result = await client.invoke({
+  sessionId: session.session.session_id,
+  input: { invoiceId: 'inv_123' },
+})
 
-// Reputation scores
-const score = await fides.getReputation('did:fides:...')
+await client.evidence.verify()
+
+console.log({ trust: trust.trust.band, policy: policy.policy.decision, result })
 ```
 
 ## agentd Client
+
+High-level local daemon facade:
+
+```typescript
+import { FidesClient } from '@fides/sdk'
+
+const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+
+const identity = await client.identity.createAgent({ name: 'Invoice Agent' })
+const identities = await client.identity.list()
+const sameIdentity = await client.identity.show(identity.identity.did)
+
+const card = await client.cards.create({
+  identity: identity.identity,
+  name: 'Invoice Agent',
+  capabilities: [{ id: 'invoice.reconcile', requiredScopes: ['invoice:read'] }],
+})
+const signed = await client.cards.sign({ id: identity.identity.did })
+const verified = await client.cards.verify(identity.identity.did)
+
+const registration = await client.agents.register({ agentCardId: identity.identity.did })
+if (registration.authority !== 'candidate_only' || registration.authorityGranted !== false) {
+  throw new Error('Registration must remain candidate-only')
+}
+const agents = await client.agents.list()
+const candidateAgent = await client.agents.inspect(identity.identity.did)
+const candidates = await client.discovery.find({ capability: 'invoice.reconcile' })
+await client.discovery.local({ capability: 'invoice.reconcile' })
+await client.discovery.registry({ capability: 'invoice.reconcile' })
+await client.discovery.relay({ capability: 'invoice.reconcile' })
+await client.discovery.dht({ capability: 'invoice.reconcile' })
+const providerResults = await client.discovery.allProviders({ capability: 'invoice.reconcile' })
+const trust = await client.trust.evaluate({
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+})
+const graph = await client.graph.inspect(identity.identity.did)
+const reputation = await client.reputation.update({
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+  successfulInvocations: 3,
+})
+const reputationSignal = await client.reputation.inspect(identity.identity.did, 'invoice.reconcile')
+const policy = await client.policy.evaluate({
+  principalId: 'did:fides:principal',
+  requesterAgentId: 'did:fides:requester',
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
+})
+// policy.policy.decision is one of:
+// allow, deny, require_approval, dry_run_only, scope_limit, risk_limit.
+// A policy response never grants invocation authority by itself.
+const approval = await client.approvals.create({
+  principalId: 'did:fides:principal',
+  requesterAgentId: 'did:fides:requester',
+  agentId: identity.identity.did,
+  capability: 'payments.prepare',
+  requestedScopes: ['payments:prepare'],
+  riskLevel: 'high',
+})
+await client.approvals.approve(approval.approval.id, {
+  approverId: 'did:fides:approver',
+})
+const killSwitch = await client.killSwitch.enable({
+  issuer: 'did:fides:operator',
+  targetType: 'capability',
+  target: 'deploy.preview',
+  reason: 'Pause preview deploys during incident response.',
+})
+await client.killSwitch.disable(killSwitch.rule.id)
+const revocation = await client.revocations.create({
+  issuer: 'did:fides:operator',
+  targetType: 'agent',
+  targetId: identity.identity.did,
+  reason: 'Compromised deployment key.',
+})
+await client.revocations.get(revocation.record.id)
+const incident = await client.incidents.report({
+  reporter: 'did:fides:principal',
+  targetAgentId: identity.identity.did,
+  severity: 'high',
+  category: 'unauthorized_action',
+  description: 'Attempted invocation outside delegated authority.',
+})
+await client.incidents.resolve(incident.record.id, { status: 'resolved' })
+const attestation = await client.attestations.runtime({
+  agentId: identity.identity.did,
+  codeHash: `sha256:${'a'.repeat(64)}`,
+  runtimeHash: `sha256:${'b'.repeat(64)}`,
+  policyHash: `sha256:${'c'.repeat(64)}`,
+})
+await client.attestations.verify(attestation.attestation.attestation_id)
+const githubAttestation = await client.attestations.generic({
+  issuer: 'did:fides:publisher',
+  subject: identity.identity.did,
+  subjectType: 'agent',
+  provider: 'github',
+  claims: { handle: 'fides-dev' },
+})
+await client.attestations.verify(githubAttestation.attestation.id)
+const session = await client.sessions.request({
+  principalId: 'did:fides:principal',
+  requesterAgentId: 'did:fides:requester',
+  agentId: identity.identity.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
+  audience: [identity.identity.did],
+})
+if (session.authorityMode === 'dry_run_only' && session.allowedActions?.includes('dry_run')) {
+  // Dry-run-only sessions are simulation authority, not execution authority.
+}
+const invocation = await client.invoke({
+  sessionId: session.session.session_id,
+  input: { invoiceId: 'inv_123' },
+})
+const evidence = await client.evidence.append({
+  type: 'capability.invoked',
+  actor: 'did:fides:requester',
+  subject: identity.identity.did,
+  capability: 'invoice.reconcile',
+  input: { invoiceId: 'inv_123' },
+})
+await client.evidence.inspect(evidence.event.event_id)
+await client.evidence.verify()
+await client.evidence.export({ privacy_mode: 'hash_only', include_metadata: false })
+```
+
+The local identity API returns public identity data only; it does not return
+private keys. SDK identity response types model only public records (`did`,
+`type`, `publicKeyHex`, `createdAt`, and the public `identity` object).
+AgentCard signing uses the daemon-held local identity key.
+Registration and discovery produce candidate records only; discovery does not
+grant authority to invoke the agent. Root agent registration/list/detail
+responses preserve `authority: "candidate_only"`, `authorityGranted: false`,
+`verified`, and machine-readable `reasons`. Standalone discovery responses
+preserve `verified: false`, `authorityGranted: false`, and machine-readable
+`reasons` so SDK callers do not accidentally treat metadata discovery as trust
+or permission. `client.discovery.allProviders()` queries local, well-known,
+registry, relay, DHT, and federation surfaces and preserves partial provider
+failures as `ok: false` results instead of granting authority or dropping
+successful candidates. Trust and reputation are capability-scoped signals; policy
+decisions still require scoped session grants before invocation. The public
+facade exposes named TypeScript request interfaces for policy evaluation,
+delegation, approvals, kill switch rules, revocations, incidents, sessions, and
+evidence append inputs instead of opaque object bags.
+Root session and invocation helpers use the local daemon preflight path and are
+currently in-memory. Session responses preserve `authorityMode` and
+`allowedActions`; full sessions return `authorityGranted: true`, while
+dry-run-only sessions return `authorityGranted: false`, include
+`allowedActions: ["dry_run"]`, and carry
+`session.constraints.dryRunOnly: true`. Approval and kill switch helpers expose
+local authority controls, with active kill switch rules overriding normal
+policy. Kill switch helpers return typed `KillSwitchRule` responses; an enabled
+rule is an authority override that denies or limits policy, not a session grant.
+Approval helpers return typed `ApprovalRequest` / `ApprovalDecision` responses
+and keep `authorityGranted: false`; approval records inform policy but do not
+grant invocation authority by themselves. Revocation and incident helpers expose
+local governance records that feed root session policy decisions. Revocation
+helpers return typed `RevocationRecordV2` responses, and active revocations are
+authority overrides that deny matching trust and policy paths rather than grant
+new authority. Incident helpers return typed `IncidentRecordV2` responses; open
+incidents are policy-review inputs that affect trust and session policy until
+resolved. Attestation helpers return typed local identity trust-anchor responses,
+generic `Attestation` responses, or `RuntimeAttestation` responses. Generic
+attestations record signed local claims without granting authority. Runtime
+attestation helpers issue and verify local MockTEE attestations that can satisfy
+high-risk session policy when passed as an `attestationId`. Evidence helpers append hash-only events by default, inspect
+individual events, verify the root hash chain, and export the current local
+ledger.
+
+## AGIT / Rust Primitive Bridge
+
+```typescript
+import { AgitPrimitiveBridge } from '@fides/sdk'
+
+const bridge = new AgitPrimitiveBridge()
+
+const canonical = await bridge.canonicalizeJson({ b: 2, a: 1 })
+const objectHash = await bridge.hashObject({ event_id: 'evt_1' })
+const chained = await bridge.appendEvidenceHash({
+  previousEventHash: '0',
+  eventPayload: { event_id: 'evt_1', type: 'policy.evaluated' },
+})
+const proof = await bridge.createMerkleProof({
+  leaves: [objectHash, chained.eventHash],
+  leaf: chained.eventHash,
+})
+```
+
+`AgitPrimitiveBridge` is TS-first and works without Rust. A future AGIT/Rust
+adapter can be supplied for canonical JSON, hashing, evidence hash-chain,
+Merkle, and DAG primitives while preserving FIDES protocol objects and the
+Promise-based SDK surface.
 
 ```typescript
 import { AgentdClient } from '@fides/sdk'
@@ -61,7 +299,7 @@ const card = await agentd.getCard('did:fides:agent')
 const domain = await agentd.verifyDomain('example.com', 'did:fides:agent')
 
 const session = await agentd.createSignedSession({
-  delegator: 'did:fides:principal',
+  delegator: 'did:fides:<base58-public-key>',
   delegatee: 'did:fides:agent',
   capabilities: ['payments.execute'],
   capabilityId: 'payments.execute',
@@ -88,40 +326,13 @@ const pending = await agentd.listPendingPropagations(25)
 const retry = await agentd.retryPropagations(25)
 ```
 
-## Discovery Clients
+## Legacy Discovery Clients
 
-```typescript
-import { AgentDiscoveryClient, DiscoveryClient } from '@fides/sdk'
-
-const identities = new DiscoveryClient({
-  baseUrl: 'http://localhost:3100',
-  apiKey: process.env.FIDES_API_KEY,
-})
-
-await identities.register({
-  did: 'did:fides:agent',
-  name: 'Payment Agent',
-  publicKey: '00'.repeat(32),
-})
-
-await identities.verifyDomain('did:fides:agent', 'agent.example.com')
-
-const agents = new AgentDiscoveryClient({
-  baseUrl: 'http://localhost:3100',
-  apiKey: process.env.FIDES_API_KEY,
-})
-
-await agents.registerAgent({
-  did: 'did:fides:agent',
-  name: 'Payment Agent',
-  description: 'Executes approved payment workflows',
-  capabilities: ['payments.execute'],
-  endpoints: [{ type: 'mcp', url: 'https://agent.example.com/mcp' }],
-  trustLevel: 'high',
-})
-
-await agents.heartbeat('did:fides:agent')
-```
+`DiscoveryClient` and `AgentDiscoveryClient` remain exported for compatibility
+with the older standalone discovery service. New FIDES v2 code should prefer
+`FidesClient.discovery.*` through local `agentd`, because that path preserves
+AgentCard verification, protocol negotiation, trust/policy explainability,
+candidate-only discovery, and evidence recording.
 
 ## Registry Client
 
@@ -257,7 +468,7 @@ const distribution = await platform.trustAnchorDistribution({
 | `DiscoveryClient.verifyDomain(did, domain?)` | Verify and persist a registered identity domain in discovery |
 | `DiscoveryClient.verifyOrganizationDomain(did, domain?)` | Verify and persist a registered organization domain in discovery |
 | `AgentdClient.createSession(request)` | Create delegated agentd sessions |
-| `AgentdClient.createSignedSession(options)` | Create and sign a delegation token before opening a session |
+| `AgentdClient.createSignedSession(options)` | Create a canonical `SignedDelegationTokenV2` and open a session without an external public-key field |
 | `AgentdClient.recordRevocation(request)` | Submit signed authority revocations |
 | `AgentdClient.recordSignedRevocation(options)` | Create and sign an authority revocation before submission |
 | `AgentdClient.recordIncident(request)` | Submit signed authority incidents |

@@ -9,16 +9,18 @@
  */
 
 import {
-  createIdentity,
+  createAgentIdentity,
+  createPrincipalIdentity,
   classifyCapabilityRisk,
   validateAgentCard,
   createDelegationToken,
   validateDelegationToken,
+  signDelegationToken,
   type AgentCard,
   type CapabilityDescriptor,
 } from '@fides/core'
-import { evaluatePolicy } from '@fides/policy'
-import { createEvidenceChain, appendEvidenceEvent, buildMerkleRoot, verifyEvidenceChain } from '@fides/evidence'
+import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
+import { createEvidenceChain, appendEvidenceEvent, buildMerkleRoot, verifyEvidenceChain, hashEvidenceValue } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateGuard, createTrustContext } from '@fides/guard'
 
@@ -28,9 +30,12 @@ async function demo() {
   console.log('='.repeat(60))
 
   console.log('\nStep 1: Creating identities')
-  const alice = createIdentity('did:fides:alice', 'agent', { name: 'Alice Assistant' })
-  const bob = createIdentity('did:fides:bob', 'agent', { name: 'Bob Scheduler' })
-  const charlie = createIdentity('did:fides:charlie', 'principal', { name: 'Charlie User' })
+  const { identity: alice } = await createAgentIdentity()
+  const { identity: bob } = await createAgentIdentity()
+  const { identity: charlie, privateKey: charliePrivateKey } = await createPrincipalIdentity({
+    type: 'individual',
+    displayName: 'Charlie User',
+  })
   console.log(`  Alice: ${alice.did}`)
   console.log(`  Bob: ${bob.did}`)
   console.log(`  Charlie: ${charlie.did}`)
@@ -38,7 +43,7 @@ async function demo() {
   console.log('\nStep 2: Creating an AgentCard')
   const capabilities: CapabilityDescriptor[] = [
     {
-      id: 'email:send',
+      id: 'email.send',
       name: 'Send Email',
       description: 'Send emails on behalf of a principal',
       inputSchema: { type: 'object', required: ['to', 'subject'] },
@@ -48,7 +53,7 @@ async function demo() {
       requiresRuntimeAttestation: true,
     },
     {
-      id: 'calendar:create',
+      id: 'calendar.schedule',
       name: 'Create Calendar Event',
       description: 'Create calendar events on behalf of a principal',
       inputSchema: { type: 'object', required: ['title', 'start'] },
@@ -67,7 +72,7 @@ async function demo() {
       {
         url: 'https://alice.example.com/fides',
         protocol: 'https',
-        capabilities: ['email:send', 'calendar:create'],
+        capabilities: ['email.send', 'calendar.schedule'],
         auth: 'signature',
       },
     ],
@@ -85,17 +90,17 @@ async function demo() {
   }
 
   console.log('\nStep 4: Creating a delegation token')
-  const delegation = createDelegationToken({
+  const delegation = await signDelegationToken(createDelegationToken({
     delegator: charlie.did,
     delegatee: alice.did,
-    capabilities: ['email:send', 'calendar:create'],
+    capabilities: ['email.send', 'calendar.schedule'],
     constraints: { maxActions: 10, maxSpend: '10.00', allowedContexts: ['work'] },
     expiresAt: new Date(Date.now() + 3600_000).toISOString(),
-  })
-  const delegationValidation = validateDelegationToken({ ...delegation, signature: 'demo-signature' })
+  }), charliePrivateKey)
+  const delegationValidation = validateDelegationToken(delegation)
   console.log(`  Token: ${delegation.id}`)
   console.log(`  Delegator -> delegatee: ${delegation.delegator} -> ${delegation.delegatee}`)
-  console.log(`  Structure valid with demo signature: ${delegationValidation.valid}`)
+  console.log(`  Structure valid with local signature: ${delegationValidation.valid}`)
 
   console.log('\nStep 5: Evaluating policy')
   const policy = {
@@ -116,18 +121,18 @@ async function demo() {
       },
     ],
     defaultAction: 'deny' as const,
-  }
+  } satisfies PolicyBundle
   console.log(`  High trust: ${evaluatePolicy(policy, { requestCount: 10, reputationScore: 0.9 }).decision}`)
   console.log(`  Rate limited: ${evaluatePolicy(policy, { requestCount: 200, reputationScore: 0.9 }).decision}`)
 
   console.log('\nStep 6: Appending evidence events')
   let chain = createEvidenceChain()
   for (const event of [
-    { id: 'e1', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'email:send', payload: {}, privacy: { level: 'redacted' as const } },
-    { id: 'e2', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'calendar:create', payload: {}, privacy: { level: 'hash-only' as const } },
+    { id: 'e1', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'email.send', payload: {}, privacy: { level: 'redacted' as const } },
+    { id: 'e2', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'calendar.schedule', payload: {}, privacy: { level: 'hash_only' as const } },
     { id: 'e3', type: 'policy', timestamp: new Date().toISOString(), actor: alice.did, action: 'evaluate', payload: {}, privacy: { level: 'public' as const } },
   ]) {
-    chain = appendEvidenceEvent(chain, event, 'demo-signature')
+    chain = appendEvidenceEvent(chain, event, localEvidenceSignature(event))
   }
   console.log(`  Events: ${chain.events.length}`)
   console.log(`  Chain valid: ${verifyEvidenceChain(chain)}`)
@@ -157,7 +162,7 @@ async function demo() {
   })
   const goodDecision = await evaluateGuard({
     agentDid: alice.did,
-    capabilityId: 'email:send',
+    capabilityId: 'email.send',
     policy,
     context: { requestCount: 10 },
     trust: goodTrust,
@@ -167,7 +172,7 @@ async function demo() {
   const badTrust = createTrustContext({ reputationScore: 0.05, killSwitchEngaged: false, recentIncidents: 10 })
   const badDecision = await evaluateGuard({
     agentDid: bob.did,
-    capabilityId: 'calendar:create',
+    capabilityId: 'calendar.schedule',
     policy,
     context: { requestCount: 10 },
     trust: badTrust,
@@ -177,7 +182,7 @@ async function demo() {
   const killSwitchTrust = createTrustContext({ reputationScore: 0.9, killSwitchEngaged: true, recentIncidents: 0 })
   const killSwitchDecision = await evaluateGuard({
     agentDid: alice.did,
-    capabilityId: 'email:send',
+    capabilityId: 'email.send',
     policy,
     context: { requestCount: 10 },
     trust: killSwitchTrust,
@@ -187,6 +192,10 @@ async function demo() {
   console.log('\n' + '='.repeat(60))
   console.log('  Demo complete - all 9 subsystems exercised')
   console.log('='.repeat(60))
+}
+
+function localEvidenceSignature(event: unknown): string {
+  return `local-evidence:${hashEvidenceValue(event).slice('sha256:'.length)}`
 }
 
 demo().catch((error) => {

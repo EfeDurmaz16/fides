@@ -1,12 +1,28 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { publicPackageJsonPaths } from './public-packages.mjs'
+import { publicPackageDirs, publicPackageJsonPaths } from './public-packages.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 
 const requiredFileEntries = new Set(['README.md', 'LICENSE'])
+const minimumReadmeBytes = 500
 const errors = []
+const configuredPublicPackageDirs = new Set(publicPackageDirs)
+const discoveredPublicPackageDirs = readdirSync(join(root, 'packages'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => `packages/${entry.name}`)
+  .filter((packageDir) => existsSync(join(root, packageDir, 'package.json')))
+  .filter((packageDir) => {
+    const pkg = JSON.parse(readFileSync(join(root, packageDir, 'package.json'), 'utf8'))
+    return pkg.private !== true
+  })
+
+for (const packageDir of discoveredPublicPackageDirs) {
+  if (!configuredPublicPackageDirs.has(packageDir)) {
+    errors.push(`${packageDir}/package.json is publishable but missing from scripts/public-packages.mjs`)
+  }
+}
 
 for (const packagePath of publicPackageJsonPaths) {
   const absolutePath = join(root, packagePath)
@@ -15,6 +31,7 @@ for (const packagePath of publicPackageJsonPaths) {
   const label = `${pkg.name} (${packagePath})`
 
   if (pkg.private) {
+    errors.push(`${label} is listed as publishable but marked private`)
     continue
   }
 
@@ -42,6 +59,14 @@ for (const packagePath of publicPackageJsonPaths) {
 
     if (!existsSync(join(packageDir, entry))) {
       errors.push(`${label} references missing ${relative(root, join(packageDir, entry))}`)
+    }
+  }
+
+  const readmePath = join(packageDir, 'README.md')
+  if (existsSync(readmePath)) {
+    const readme = readFileSync(readmePath, 'utf8')
+    if (Buffer.byteLength(readme, 'utf8') < minimumReadmeBytes) {
+      errors.push(`${label} README.md must be at least ${minimumReadmeBytes} bytes`)
     }
   }
 }

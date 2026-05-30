@@ -10,7 +10,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "lint": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
     "@fides/core": "workspace:*",

@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { createRequire } from 'node:module'
 import postgres from 'postgres'
 import { afterEach, describe, expect, it } from 'vitest'
 import { appendEvidenceEvent, createEvidenceChain } from '@fides/evidence'
@@ -11,12 +12,15 @@ import {
   InMemoryAuthorityStore,
   PostgresAuthorityStore,
   createAuthorityClient,
+  emptyLocalDaemonStateSnapshot,
+  SqliteLocalDaemonStateStore,
   runAuthorityMigrations,
 } from '../src/storage.js'
 
 const tempDirs: string[] = []
 const postgresUrl = process.env.AGENTD_DATABASE_URL || process.env.DATABASE_URL
 const postgresTestRequired = process.env.AGENTD_POSTGRES_TEST_REQUIRED === 'true'
+const require = createRequire(import.meta.url)
 
 afterEach(async () => {
   await Promise.all(tempDirs.map(dir => rm(dir, { recursive: true, force: true })))
@@ -137,6 +141,100 @@ describe('agentd authority stores', () => {
 
     expect(revoked?.revoked).toBe(true)
     expect((await store.getSession(grant.id))?.revocationReason).toBe('manual')
+  })
+
+  it('persists root local daemon state to sqlite', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fides-agentd-sqlite-'))
+    tempDirs.push(dir)
+    const path = join(dir, 'fides.sqlite')
+    const store = new SqliteLocalDaemonStateStore(path)
+    const snapshot = {
+      ...emptyLocalDaemonStateSnapshot('2026-01-01T00:00:00.000Z'),
+      identities: [{ did: 'did:fides:agent' }],
+      agentCards: [{
+        id: 'card-1',
+        trustAnchors: [{ id: 'anchor-1', type: 'github' }],
+        capabilities: [{ id: 'invoice.reconcile' }],
+      }],
+      agents: [{ agentId: 'did:fides:agent', cardId: 'card-1' }],
+      dhtPointers: [{ agent_id: 'did:fides:agent', capability: 'invoice.reconcile' }],
+      registryRecords: [{ id: 'registry-record-1', agentId: 'did:fides:agent' }],
+      relayRecords: [{ id: 'relay-record-1', agentId: 'did:fides:agent' }],
+      trustResults: [{ agentId: 'did:fides:agent', capability: 'invoice.reconcile', score: 0.82 }],
+      reputationRecords: [{ agentId: 'did:fides:agent', capability: 'invoice.reconcile', score: 0.76 }],
+      delegationTokens: [{ id: 'delegation-1', delegatee: 'did:fides:agent' }],
+      approvals: [{ id: 'approval-1', capability: 'payments.prepare' }],
+      approvalDecisions: [{ id: 'approval-decision-1', approvalId: 'approval-1', decision: 'approved' }],
+      evidenceEvents: [{ event_id: 'evt-1' }],
+      runtimeAttestations: [{ attestation_id: 'att-1' }],
+      sessionGrants: [{ session: { session_id: 'sess-1' }, policy: { id: 'policy-decision-1', decision: 'allow' } }],
+      revocationRecords: [{ id: 'rev-1' }],
+      incidentRecords: [{ id: 'inc-1' }],
+      killSwitchRules: [{ id: 'kill-1' }],
+    }
+
+    await store.save(snapshot)
+    await store.close?.()
+
+    const reopened = new SqliteLocalDaemonStateStore(path)
+    const loaded = await reopened.load()
+    await reopened.close?.()
+
+    expect(loaded).toMatchObject({
+      schemaVersion: 'fides.agentd.local_state.v1',
+      identities: [{ did: 'did:fides:agent' }],
+      agentCards: [expect.objectContaining({ id: 'card-1' })],
+      agents: [{ agentId: 'did:fides:agent', cardId: 'card-1' }],
+      evidenceEvents: [{ event_id: 'evt-1' }],
+    })
+
+    const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite')
+    const db = new DatabaseSync(path, { readOnly: true })
+    try {
+      const tables = db.prepare(`
+        SELECT name FROM sqlite_master
+        WHERE type = 'table'
+        ORDER BY name
+      `).all() as Array<{ name: string }>
+      expect(tables.map(table => table.name)).toEqual(expect.arrayContaining([
+        'identities',
+        'trust_anchors',
+        'attestations',
+        'agent_cards',
+        'agents',
+        'capabilities',
+        'discovery_records',
+        'dht_records',
+        'registry_records',
+        'relay_records',
+        'trust_results',
+        'reputation_records',
+        'policy_decisions',
+        'approvals',
+        'delegations',
+        'sessions',
+        'evidence_events',
+        'revocations',
+        'incidents',
+        'kill_switch_rules',
+      ]))
+      expect((db.prepare('SELECT COUNT(*) AS count FROM identities').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM capabilities').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM discovery_records').get() as { count: number }).count).toBe(3)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM trust_results').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM reputation_records').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM policy_decisions').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM approvals').get() as { count: number }).count).toBe(2)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM delegations').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM attestations').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM sessions').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM evidence_events').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM revocations').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM incidents').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM kill_switch_rules').get() as { count: number }).count).toBe(1)
+    } finally {
+      db.close()
+    }
   })
 
   it('rejects unsafe configured authority schema names', () => {

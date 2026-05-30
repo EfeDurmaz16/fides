@@ -26,16 +26,42 @@ pnpm demo
 npx tsx examples/demo.ts
 ```
 
+Type-check every example agent and demo contract:
+
+```bash
+pnpm examples:typecheck
+```
+
+Verify that the canonical v2 example catalog includes the requested agent
+roles, capabilities, risk classes, and authority notes:
+
+```bash
+pnpm examples:audit
+```
+
+The canonical catalog lives in `examples/agent-catalog.ts` and uses the v2
+capability names:
+
+- `calendar.schedule`
+- `invoice.reconcile`
+- `payments.prepare`
+- `payments.execute`
+
+Standalone example scripts also use dot-separated v2 capability IDs. The
+`examples:audit` gate rejects legacy `namespace:action` IDs for the canonical
+calendar, invoice, payment, and email examples.
+
 ## Example Agents
 
-Each example is a self-contained script that demonstrates specific FIDES concepts.
+Each example is a self-contained directory with a runnable `index.ts` entrypoint.
+The top-level `examples/<name>.ts` files remain as compatibility wrappers.
 Run any example with:
 
 ```bash
-npx tsx examples/<name>.ts
+pnpm exec tsx examples/<name>/index.ts
 ```
 
-### calendar-agent.ts
+### calendar-agent
 
 Calendar management agent demonstrating identity creation, policy evaluation, and evidence recording.
 
@@ -49,10 +75,10 @@ Calendar management agent demonstrating identity creation, policy evaluation, an
 - Guard decision engine (good agent + kill switch scenarios)
 
 ```bash
-npx tsx examples/calendar-agent.ts
+pnpm exec tsx examples/calendar-agent/index.ts
 ```
 
-### invoice-agent.ts
+### invoice-agent
 
 Invoice processing agent demonstrating financial risk classification and delegation chains.
 
@@ -66,10 +92,10 @@ Invoice processing agent demonstrating financial risk classification and delegat
 - Guard decision engine (good trust + low trust scenarios)
 
 ```bash
-npx tsx examples/invoice-agent.ts
+pnpm exec tsx examples/invoice-agent/index.ts
 ```
 
-### payment-agent.ts
+### payment-agent
 
 Payment processing agent demonstrating critical risk capabilities and kill switch operations.
 
@@ -84,10 +110,10 @@ Payment processing agent demonstrating critical risk capabilities and kill switc
 - Guard decision engine (good / killed / bad trust scenarios)
 
 ```bash
-npx tsx examples/payment-agent.ts
+pnpm exec tsx examples/payment-agent/index.ts
 ```
 
-### requester-agent.ts
+### requester-agent
 
 Agent that discovers and invokes other agents, demonstrating the full trust fabric flow.
 
@@ -102,7 +128,21 @@ Agent that discovers and invokes other agents, demonstrating the full trust fabr
 - Capability risk classification across all providers
 
 ```bash
-npx tsx examples/requester-agent.ts
+pnpm exec tsx examples/requester-agent/index.ts
+```
+
+### malicious-agent
+
+Adversarial agent fixture used to exercise policy denial, trust penalties,
+revocation, and evidence-backed detection.
+
+**Demonstrates:**
+- Critical-risk malicious capability metadata
+- Incident and revocation inputs for trust/policy paths
+- Expected denial and detection behavior for adversarial simulation
+
+```bash
+pnpm exec tsx examples/malicious-agent/index.ts
 ```
 
 ## End-to-End Flow

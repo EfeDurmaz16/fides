@@ -5,6 +5,8 @@ import { AgentdClient } from '@fides/sdk'
 
 const openApiPath = resolve(process.cwd(), '../../docs/api/agentd.yaml')
 const openApi = readFileSync(openApiPath, 'utf8')
+const agentdSourcePath = resolve(process.cwd(), '../../services/agentd/src/index.ts')
+const agentdSource = readFileSync(agentdSourcePath, 'utf8')
 const agentdPaths = extractOpenApiPaths(openApi)
 const securedOperations = extractApiKeySecuredOperations(openApi)
 
@@ -111,6 +113,192 @@ describe('Agentd OpenAPI contract', () => {
     expect(openApi).toContain('ApiKeyAuth:')
   })
 
+  it('documents runtime evidence privacy modes', () => {
+    expect(openApi).toContain('enum: [public, private, redacted, hash_only]')
+    expect(openApi).not.toContain('enum: [public, private, redacted, hash-only]')
+  })
+
+  it('documents root v2 local Agent Trust Fabric endpoints', () => {
+    const expectedOperations = [
+      'post /identities',
+      'get /identities',
+      'get /identities/{id}',
+      'post /attestations',
+      'get /attestations/{id}',
+      'post /attestations/{id}/verify',
+      'post /agent-cards',
+      'get /agent-cards/{id}',
+      'post /agent-cards/{id}/sign',
+      'post /agent-cards/{id}/verify',
+      'post /agents/register',
+      'get /agents',
+      'get /agents/{id}',
+      'post /discover',
+      'post /discover/local',
+      'post /discover/well-known',
+      'post /discover/registry',
+      'post /discover/relay',
+      'post /discover/dht',
+      'post /discover/federation',
+      'post /trust/evaluate',
+      'get /trust/{id}',
+      'post /reputation/update',
+      'get /reputation/{id}',
+      'post /policy/evaluate',
+      'post /approvals',
+      'get /approvals',
+      'post /approvals/{id}/approve',
+      'post /approvals/{id}/deny',
+      'post /delegations',
+      'post /sessions',
+      'get /sessions/{id}',
+      'post /sessions/{id}/verify',
+      'post /invoke',
+      'post /evidence',
+      'get /evidence',
+      'get /evidence/{id}',
+      'post /evidence/verify',
+      'post /evidence/export',
+      'post /revocations',
+      'get /revocations',
+      'get /revocations/{id}',
+      'post /incidents',
+      'get /incidents',
+      'get /incidents/{id}',
+      'post /incidents/{id}/resolve',
+      'post /killswitch',
+      'get /killswitch',
+      'delete /killswitch/{id}',
+      'post /dht/start',
+      'post /dht/publish',
+      'get /dht/find',
+      'post /dht/find',
+      'post /registry/start',
+      'post /registry/publish',
+      'post /registry/search',
+      'get /registry/index',
+      'post /relay/start',
+      'post /relay/register',
+      'post /relay/discover',
+      'get /.well-known/fides.json',
+      'get /.well-known/agents.json',
+      'get /.well-known/agents/{id}.json',
+      'post /demo/run',
+      'post /simulate/adversarial',
+    ]
+
+    for (const operation of expectedOperations) {
+      const [method, path] = operation.split(' ')
+      expect(agentdPaths.get(path), operation).toContain(method)
+    }
+  })
+
+  it('documents demo and adversarial simulation response invariants', () => {
+    expect(extractSchemaRequired(openApi, 'LocalDemoRunResponse')).toEqual([
+      'status',
+      'mode',
+      'steps',
+      'identities',
+      'discovery',
+      'verification',
+      'authority',
+      'surfaces',
+      'limitations',
+    ])
+    expect(extractSchemaRequired(openApi, 'LocalDemoAuthoritySummary')).toEqual([
+      'discoveryGrantsAuthority',
+      'policyBeforeExecution',
+      'evidenceProduced',
+    ])
+    expect(extractNestedRequired(openApi, 'LocalDemoRunResponse', 'verification')).toEqual([
+      'agentCardsVerified',
+      'evidenceHashChainValid',
+      'evidenceEventCount',
+      'evidenceExport',
+    ])
+    expect(extractSchemaRequired(openApi, 'LocalAdversarialScenario')).toEqual([
+      'name',
+      'detected',
+      'outcome',
+      'evidenceRef',
+    ])
+    expect(extractSchemaRequired(openApi, 'LocalAdversarialSimulationResponse')).toEqual([
+      'status',
+      'mode',
+      'detections',
+      'scenarios',
+      'evidence',
+      'authority',
+      'limitations',
+    ])
+    expect(extractNestedRequired(openApi, 'LocalAdversarialSimulationResponse', 'evidence')).toEqual([
+      'scenarioEvents',
+      'incidentEvidenceRef',
+      'rootChainValid',
+      'rootEventCount',
+      'brokenEvidenceChainValid',
+    ])
+  })
+
+  it('documents discovery publish and presence writes as non-authority responses', () => {
+    for (const schemaName of ['LocalDhtPublishResponse', 'LocalRegistryPublishResponse', 'LocalRelayRegisterResponse']) {
+      expect(extractSchemaRequired(openApi, schemaName), schemaName).toContain('authorityGranted')
+      expect(extractSchemaPropertyBlock(openApi, schemaName, 'authorityGranted'), schemaName).toContain('enum: [false]')
+    }
+  })
+
+  it('documents discovery responses as evidence-producing candidate results', () => {
+    const schema = extractSchemaBlock(openApi, 'DiscoveryResponse')
+    expect(schema).toContain('authorityGranted:')
+    expect(schema).toContain('enum: [false]')
+    expect(schema).toContain('evidenceRefs:')
+    expect(schema).toContain('evidence_refs:')
+  })
+
+  it('documents v2 SessionGrants as protocol-version-bound authority records', () => {
+    const schema = extractSchemaBlock(openApi, 'SessionGrantV2')
+    expect(schema).toContain('schema_version:')
+    expect(schema).toContain('supported_versions:')
+    expect(schema).toContain('required_versions:')
+    expect(schema).toContain('negotiated_version:')
+    expect(extractSchemaPropertyBlock(openApi, 'LocalSessionResponse', 'versionNegotiation')).toContain('VersionNegotiationRecord')
+  })
+
+  it('documents typed ErrorEnvelope responses for root v2 failures', () => {
+    expect(extractSchemaRequired(openApi, 'ErrorEnvelope')).toEqual([
+      'code',
+      'category',
+      'severity',
+      'retryable',
+      'message',
+    ])
+    const errorResponse = extractSchemaPropertyBlock(openApi, 'ErrorResponse', 'error')
+    expect(errorResponse).toContain('ErrorEnvelope')
+    const envelope = extractSchemaBlock(openApi, 'ErrorEnvelope')
+    expect(envelope).toContain('REQUEST_INVALID')
+    expect(envelope).toContain('IDENTITY_NOT_FOUND')
+    expect(envelope).toContain('AGENT_CARD_NOT_FOUND')
+    expect(envelope).toContain('AGENT_NOT_REGISTERED')
+    expect(envelope).toContain('ATTESTATION_NOT_FOUND')
+    expect(envelope).toContain('APPROVAL_NOT_FOUND')
+    expect(envelope).toContain('KILL_SWITCH_RULE_NOT_FOUND')
+    expect(envelope).toContain('REVOCATION_NOT_FOUND')
+    expect(envelope).toContain('INCIDENT_NOT_FOUND')
+    expect(envelope).toContain('EVIDENCE_EVENT_NOT_FOUND')
+    expect(envelope).toContain('EVIDENCE_PRIVACY_MODE_INVALID')
+  })
+
+  it('keeps root v2 runtime routes documented in OpenAPI', () => {
+    const runtimeOperations = extractAgentdRuntimeRoutes(agentdSource)
+      .filter(operation => operation.path.startsWith('/'))
+      .filter(operation => !operation.path.startsWith('/v1/'))
+      .filter(operation => operation.path !== '/metrics')
+
+    for (const operation of runtimeOperations) {
+      expect(agentdPaths.get(operation.path), `${operation.method} ${operation.path}`).toContain(operation.method)
+    }
+  })
+
   it('documents API key auth on mutating v1 operations', () => {
     const mutatingV1Operations = [
       'post /v1/policy/evaluate',
@@ -141,6 +329,24 @@ function normalizeAgentdPath(url: string): string {
   if (decoded.startsWith('/v1/revocations/did:')) return '/v1/revocations/{did}'
   if (decoded.startsWith('/v1/incidents/did:')) return '/v1/incidents/{did}'
   return decoded
+}
+
+function extractAgentdRuntimeRoutes(source: string): Array<{ method: string; path: string }> {
+  const routes: Array<{ method: string; path: string }> = []
+  const routeRegex = /app\.(get|post|delete)\('([^']+)'/g
+  let match: RegExpExecArray | null
+  while ((match = routeRegex.exec(source))) {
+    routes.push({
+      method: match[1],
+      path: normalizeAgentdRuntimePath(match[2]),
+    })
+  }
+  return routes
+}
+
+function normalizeAgentdRuntimePath(path: string): string {
+  if (path === '/.well-known/agents/*') return '/.well-known/agents/{id}.json'
+  return path.replace(/\/:[^/]+/g, '/{id}')
 }
 
 function extractOpenApiPaths(source: string): Map<string, string[]> {
@@ -212,4 +418,49 @@ function extractApiKeySecuredOperations(source: string): string[] {
   }
 
   return Array.from(secured)
+}
+
+function extractSchemaRequired(source: string, schemaName: string): string[] {
+  const schema = extractSchemaBlock(source, schemaName)
+  for (const line of schema.split('\n')) {
+    const match = line.match(/^ {6}required: \[(.*)\]$/)
+    if (match) return match[1].split(',').map(item => item.trim()).filter(Boolean)
+  }
+  throw new Error(`OpenAPI schema ${schemaName} does not define a top-level required array`)
+}
+
+function extractNestedRequired(source: string, schemaName: string, propertyName: string): string[] {
+  const property = extractSchemaPropertyBlock(source, schemaName, propertyName)
+  for (const line of property.split('\n')) {
+    const match = line.match(/^ {10}required: \[(.*)\]$/)
+    if (match) return match[1].split(',').map(item => item.trim()).filter(Boolean)
+  }
+  throw new Error(`OpenAPI schema ${schemaName}.${propertyName} does not define a required array`)
+}
+
+function extractSchemaPropertyBlock(source: string, schemaName: string, propertyName: string): string {
+  const schema = extractSchemaBlock(source, schemaName)
+  const lines = schema.split('\n')
+  const propertyStart = lines.findIndex(line => line === `        ${propertyName}:`)
+  if (propertyStart === -1) throw new Error(`OpenAPI schema ${schemaName} does not define ${propertyName}`)
+
+  const propertyLines = []
+  for (const line of lines.slice(propertyStart + 1)) {
+    if (line.match(/^        [A-Za-z0-9_]+:$/)) break
+    propertyLines.push(line)
+  }
+  return propertyLines.join('\n')
+}
+
+function extractSchemaBlock(source: string, schemaName: string): string {
+  const lines = source.split('\n')
+  const schemaStart = lines.findIndex(line => line === `    ${schemaName}:`)
+  if (schemaStart === -1) throw new Error(`OpenAPI schema ${schemaName} was not found`)
+
+  const schemaLines = []
+  for (const line of lines.slice(schemaStart + 1)) {
+    if (line.match(/^    [A-Za-z0-9_]+:$/)) break
+    schemaLines.push(line)
+  }
+  return schemaLines.join('\n')
 }

@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import {
+  createAgentIdentity,
+  createCapabilityDescriptor,
+  signAgentCard,
+  type AgentCard,
+} from '@fides/core'
 
 const ORIGINAL_SERVICE_API_KEY = process.env.SERVICE_API_KEY
 const ORIGINAL_REGISTRY_API_KEYS = process.env.REGISTRY_API_KEYS
@@ -72,6 +78,29 @@ describe('Registry Service Routes', () => {
     metadata: {},
   }
 
+  async function signedTestCard(overrides: Partial<AgentCard> = {}) {
+    const issued = await createAgentIdentity()
+    const now = new Date().toISOString()
+    return signAgentCard({
+      id: issued.identity.did,
+      identity: issued.identity,
+      name: 'Signed Registry Agent',
+      capabilities: [createCapabilityDescriptor({
+        id: 'web.search',
+        namespace: 'web',
+        action: 'search',
+        resource: 'web',
+        riskLevel: 'low',
+      })],
+      endpoints: [],
+      policies: [],
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: '2999-01-01T00:00:00.000Z',
+      ...overrides,
+    } as AgentCard & { name: string }, issued.privateKey, issued.identity.did)
+  }
+
   describe('GET /health', () => {
     it('returns 200 with health status', async () => {
       const res = await app.request('/health')
@@ -107,6 +136,46 @@ describe('Registry Service Routes', () => {
       expect(res.status).toBe(400)
       const data = await res.json()
       expect(data.error).toContain('id is required')
+    })
+
+    it('rejects tampered signed AgentCards', async () => {
+      const signed = await signedTestCard()
+
+      const res = await app.request('/v1/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...signed,
+          payload: {
+            ...signed.payload,
+            capabilities: [
+              {
+                ...signed.payload.capabilities[0],
+                name: 'Tampered capability',
+              },
+            ],
+          },
+        }),
+      })
+
+      expect(res.status).toBe(422)
+      expect((await res.json()).error).toContain('signed AgentCard proof')
+    })
+
+    it('accepts identity-bound signed AgentCards', async () => {
+      const signed = await signedTestCard()
+
+      const res = await app.request('/v1/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signed),
+      })
+
+      expect(res.status).toBe(201)
+      expect(await res.json()).toMatchObject({
+        success: true,
+        did: signed.payload.id,
+      })
     })
 
     it('allows a DNS-verified publisher claim when discovery state matches', async () => {

@@ -6,6 +6,12 @@ info:
     Identity registration, resolution, and agent discovery for the FIDES v2
     trust fabric. Supports DID-based identity persistence, agent capability
     registry, and well-known discovery endpoints.
+
+    This OpenAPI document describes the standalone discovery service. The
+    primary local FIDES v2 developer surface is agentd on
+    http://localhost:7345. Discovery records are candidates only and do not
+    grant invocation authority. Authority requires policy evaluation and a
+    scoped SessionGrant through agentd.
   contact:
     name: FIDES Protocol
     url: https://github.com/EfeDurmaz16/fides
@@ -384,6 +390,10 @@ paths:
                   heartbeatAt:
                     type: string
                     format: date-time
+                  authorityGranted:
+                    type: boolean
+                    enum: [false]
+                    description: Heartbeat updates presence only and do not grant invocation authority.
 
   /.well-known/fides.json:
     get:
@@ -610,7 +620,7 @@ components:
 
     RegisterAgentRequest:
       type: object
-      required: [did, name, url]
+      required: [did, name]
       properties:
         did:
           type: string
@@ -620,11 +630,11 @@ components:
           type: string
         url:
           type: string
-          format: uri
+          description: Optional transport URL. When omitted, the service stores a local://agents/<did> hint.
         version:
           type: string
         provider:
-          type: string
+          $ref: "#/components/schemas/AgentProvider"
         capabilities:
           type: object
         skills:
@@ -660,7 +670,8 @@ components:
           type: string
           example: ed25519
         provider:
-          type: string
+          allOf:
+            - $ref: "#/components/schemas/AgentProvider"
           nullable: true
         capabilities:
           type: object
@@ -686,6 +697,23 @@ components:
         updatedAt:
           type: string
           format: date-time
+        verified:
+          type: boolean
+          enum: [false]
+          description: Standalone discovery service records are candidate metadata and do not verify signed AgentCards.
+        urlRequired:
+          type: boolean
+          enum: [false]
+          description: Agent registration and discovery do not require an HTTP URL.
+        authorityGranted:
+          type: boolean
+          enum: [false]
+          description: Discovery records are candidates only and never grant invocation authority.
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Machine-readable explanation codes for candidate-only discovery semantics.
 
     DiscoveryDocument:
       type: object
@@ -725,7 +753,7 @@ components:
         version:
           type: string
         provider:
-          type: string
+          $ref: "#/components/schemas/AgentProvider"
         capabilities:
           type: object
         skills:
@@ -753,10 +781,24 @@ components:
 
     MessageResponse:
       type: object
+      required: [message, authorityGranted]
       properties:
         message:
           type: string
           example: "Agent deregistered"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    AgentProvider:
+      type: object
+      required: [organization]
+      properties:
+        organization:
+          type: string
+        url:
+          type: string
+          format: uri
 
   responses:
     BadRequest:

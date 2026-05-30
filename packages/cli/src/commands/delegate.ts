@@ -1,6 +1,6 @@
 import { Command } from 'commander'
 import { createDelegationToken } from '@fides/core'
-import { parseJsonObject, parseList, printResult } from './authority-utils.js'
+import { parseJsonObject, parseList, postJson, printResult } from './authority-utils.js'
 
 export function createDelegateCommand(): Command {
   const cmd = new Command('delegate')
@@ -20,6 +20,7 @@ export function createDelegateCommand(): Command {
     .option('--forbidden-contexts <values>', 'Comma-separated forbidden contexts')
     .option('--constraints-json <json>', 'Additional delegation constraints as JSON object')
     .option('--signature <hex>', 'Externally produced signature for the token')
+    .option('--agentd-url <url>', 'Create the delegation through local agentd')
     .option('--json', 'Print JSON only')
     .action(async (options) => {
       try {
@@ -30,6 +31,19 @@ export function createDelegateCommand(): Command {
           ...(options.maxSpend && { maxSpend: options.maxSpend }),
           ...(options.allowedContexts && { allowedContexts: parseList(options.allowedContexts) }),
           ...(options.forbiddenContexts && { forbiddenContexts: parseList(options.forbiddenContexts) }),
+        }
+
+        if (options.agentdUrl) {
+          const result = await postJson(`${baseUrl(options.agentdUrl)}/delegations`, {
+            delegator: options.delegator,
+            delegatee: options.delegatee,
+            capabilities: parseList(options.capabilities),
+            constraints,
+            expiresAt,
+            audience: parseList(options.audience),
+          })
+          printResult('Delegation recorded:', result, options)
+          return
         }
 
         const token = createDelegationToken({
@@ -54,3 +68,6 @@ export function createDelegateCommand(): Command {
   return cmd
 }
 
+function baseUrl(url: string): string {
+  return url.replace(/\/+$/, '')
+}

@@ -1,5 +1,17 @@
 # FIDES Protocol Specification
 
+> **Legacy v1 draft.** This document is retained for historical context only.
+> FIDES v2 is the active protocol direction. Use
+> [docs/protocol/fides-v2-spec.md](protocol/fides-v2-spec.md),
+> [docs/protocol/canonical-object-signing.md](protocol/canonical-object-signing.md),
+> [docs/protocol/discovery.md](protocol/discovery.md),
+> [docs/protocol/policy-engine.md](protocol/policy-engine.md),
+> [docs/protocol/evidence-ledger.md](protocol/evidence-ledger.md), and
+> [docs/protocol/revocation.md](protocol/revocation.md) for current behavior.
+> In v2, discovery never grants authority, signed AgentCards are required for
+> trusted local discovery paths, revocation exists, and scoped SessionGrants are
+> required before invocation.
+
 ## Overview
 
 FIDES (Federated Identity and Decentralized Endorsement System) is a protocol enabling autonomous AI agents to establish cryptographic identities, authenticate requests, and build trust relationships.
@@ -598,7 +610,7 @@ Response: 200 OK
 - Private key theft from compromised systems
 - Social engineering attacks
 
-### Known Limitations
+### Legacy v1 Known Limitations
 
 1. **No Nonce Tracking:** Replay attacks possible within 300-second window
 2. **No Clock Drift Tolerance:** Strict timestamp checking requires synchronized clocks
@@ -607,6 +619,11 @@ Response: 200 OK
 5. **No Rate Limiting:** Trust attestation spam not prevented
 6. **Centralized Discovery:** Single point of failure (mitigated by .well-known)
 7. **Simple Trust Decay:** Vulnerable to Sybil attacks
+
+These are not accepted FIDES v2 limitations. The v2 architecture adds
+revocation records, session nonces, signed AgentCards, multi-provider discovery,
+policy-before-execution, runtime attestation, kill switches, incident records,
+and tamper-evident evidence events.
 
 ### Recommended Practices
 

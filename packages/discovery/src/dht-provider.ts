@@ -1,4 +1,15 @@
-import type { AgentCard, SignedAgentCard } from '@fides/core'
+import {
+  cardSupportsCapability,
+  createDiscoveryCandidate,
+  hashCapability,
+  verifySignedAgentCardIdentity,
+  verifyDHTPointerRecord,
+  type AgentCard,
+  type DHTPointerRecord,
+  type DiscoveryCandidate,
+  type DiscoveryQuery,
+  type SignedAgentCard,
+} from '@fides/core'
 import { DiscoveryProvider } from './provider.js'
 
 /**
@@ -18,11 +29,19 @@ export class DHTDiscoveryProvider implements DiscoveryProvider {
   private localStore = new Map<string, AgentCard>()
   // Simulated peer nodes (each has its own store)
   private peers: DHTDiscoveryProvider[] = []
+  private pointerStore = new Map<string, DHTPointerRecord[]>()
   // Replication factor
   private replicationFactor: number
+  private isRevoked: (agentId: string) => boolean | Promise<boolean>
 
-  constructor(options?: { replicationFactor?: number }) {
+  constructor(options?: {
+    replicationFactor?: number
+    revokedAgentIds?: Iterable<string>
+    isRevoked?: (agentId: string) => boolean | Promise<boolean>
+  }) {
     this.replicationFactor = options?.replicationFactor ?? 3
+    const revokedAgentIds = new Set(options?.revokedAgentIds ?? [])
+    this.isRevoked = options?.isRevoked ?? ((agentId: string) => revokedAgentIds.has(agentId))
   }
 
   async resolve(did: string): Promise<AgentCard | null> {
@@ -44,7 +63,38 @@ export class DHTDiscoveryProvider implements DiscoveryProvider {
     return null
   }
 
+  async discover(query: DiscoveryQuery): Promise<DiscoveryCandidate[]> {
+    if (!query.capability) return []
+
+    const pointers = await this.findPointers(query.capability)
+    const candidates: DiscoveryCandidate[] = []
+    for (const pointer of pointers) {
+      const pointerVerification = await verifyDHTPointerRecord(pointer)
+      if (!pointerVerification.valid) continue
+      if (await this.isRevoked(pointer.agent_id)) continue
+
+      const card = await this.resolve(pointer.agent_id)
+      if (!card || !cardSupportsCapability(card, query.capability)) continue
+      const verification = await verifyDHTPointerRecord(pointer, { card })
+      if (!verification.valid) continue
+
+      candidates.push(createDiscoveryCandidate({
+        provider: this.name,
+        card,
+        capability: query.capability,
+        verified: true,
+        rank: 50,
+        explanations: ['DHT returned a signed capability pointer; DHT is not an authority source'],
+        errors: [],
+      }))
+    }
+    return candidates.slice(0, query.limit ?? candidates.length)
+  }
+
   async register(card: SignedAgentCard): Promise<void> {
+    if (!await verifySignedAgentCardIdentity(card)) {
+      throw new Error('DHT registration requires an identity-bound signed AgentCard')
+    }
     const did = card.payload.id
     const agentCard = card.payload as AgentCard
 
@@ -58,10 +108,49 @@ export class DHTDiscoveryProvider implements DiscoveryProvider {
     }
   }
 
+  async publishPointer(record: DHTPointerRecord): Promise<void> {
+    const key = record.capability_hash
+    const records = this.pointerStore.get(key) ?? []
+    this.pointerStore.set(key, [...records.filter(existing => existing.agent_id !== record.agent_id), record])
+    for (const peer of this.peers.slice(0, this.replicationFactor - 1)) {
+      const peerRecords = peer.pointerStore.get(key) ?? []
+      peer.pointerStore.set(key, [...peerRecords.filter(existing => existing.agent_id !== record.agent_id), record])
+    }
+  }
+
+  async findPointers(capability: string): Promise<DHTPointerRecord[]> {
+    const key = hashCapability(capability)
+    const seen = new Set<string>()
+    const records: DHTPointerRecord[] = []
+    for (const record of this.pointerStore.get(key) ?? []) {
+      const recordKey = `${record.agent_id}:${record.sequence}`
+      if (!seen.has(recordKey)) {
+        seen.add(recordKey)
+        records.push(record)
+      }
+    }
+    for (const peer of this.peers) {
+      for (const record of peer.pointerStore.get(key) ?? []) {
+        const recordKey = `${record.agent_id}:${record.sequence}`
+        if (!seen.has(recordKey)) {
+          seen.add(recordKey)
+          records.push(record)
+        }
+      }
+    }
+    return records
+  }
+
   async deregister(did: string): Promise<void> {
     this.localStore.delete(did)
+    for (const [key, records] of this.pointerStore) {
+      this.pointerStore.set(key, records.filter(record => record.agent_id !== did))
+    }
     for (const peer of this.peers) {
       peer.localStore.delete(did)
+      for (const [key, records] of peer.pointerStore) {
+        peer.pointerStore.set(key, records.filter(record => record.agent_id !== did))
+      }
     }
   }
 

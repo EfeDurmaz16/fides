@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { createAttestation, TrustClient, FileKeyStore, TrustLevel } from '@fides/sdk';
 import { loadConfig } from '../utils/config.js';
 import { success, error, info } from '../utils/output.js';
+import { getJson, postJson, printResult } from './authority-utils.js';
 
 export function createTrustCommand(): Command {
   const cmd = new Command('trust');
@@ -10,8 +11,25 @@ export function createTrustCommand(): Command {
     .description('Create a trust attestation for another agent')
     .argument('<agent-did>', 'DID of the agent to trust')
     .option('--level <level>', 'Trust level: none, low, medium, high, absolute, or 0-100', 'medium')
+    .option('--capability <capability>', 'Evaluate root v2 trust for a capability')
+    .option('--agentd-url <url>', 'Evaluate trust through local agentd')
+    .option('--json', 'Print JSON only')
     .action(async (agentDid, options) => {
       try {
+        if (options.capability) {
+          const agentdUrl = options.agentdUrl ?? process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345'
+          const result = await postJson(`${baseUrl(agentdUrl)}/trust/evaluate`, {
+            agentId: agentDid,
+            capability: options.capability,
+          })
+          printResult('Trust result:', result, options)
+          return
+        }
+        if (options.agentdUrl) {
+          const result = await getJson(`${baseUrl(options.agentdUrl)}/trust/${encodeURIComponent(agentDid)}`)
+          printResult('Trust results:', result, options)
+          return
+        }
         await createTrust(agentDid, options);
       } catch (err) {
         error(`Failed to create trust attestation: ${err instanceof Error ? err.message : String(err)}`);
@@ -92,4 +110,8 @@ async function createTrust(agentDid: string, options: { level: string }): Promis
   info(`Trust Level: ${trustLevel}`);
   info(`Signature: ${attestation.signature.substring(0, 32)}...`);
   console.log('');
+}
+
+function baseUrl(url: string): string {
+  return url.replace(/\/+$/, '')
 }

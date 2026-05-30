@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RelayDiscoveryProvider } from '../src/relay-provider.js'
-import type { AgentCard, SignedAgentCard } from '@fides/core'
+import { createAgentIdentity, signAgentCard, type AgentCard } from '@fides/core'
 
 describe('RelayDiscoveryProvider', () => {
   const fetchMock = vi.fn()
@@ -18,18 +18,6 @@ describe('RelayDiscoveryProvider', () => {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
-  const signedCard: SignedAgentCard = {
-    payload: card,
-    proof: {
-      type: 'Ed25519Signature2024',
-      created: '2026-01-01T00:00:00.000Z',
-      verificationMethod: 'did:fides:relay-agent#key-1',
-      proofPurpose: 'assertionMethod',
-      canonicalizationAlgorithm: 'https://fides.dev/canonical-json/v1',
-      proofValue: 'aa',
-    },
-  }
-
   beforeEach(() => {
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockReset()
@@ -79,6 +67,13 @@ describe('RelayDiscoveryProvider', () => {
   })
 
   it('registers signed agent cards through the relay service', async () => {
+    const agent = await createAgentIdentity()
+    const agentCard = {
+      ...card,
+      id: agent.identity.did,
+      identity: agent.identity,
+    }
+    const signedCard = await signAgentCard(agentCard, agent.privateKey, agent.identity.did)
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ accepted: true, relayId: 'relay-1' }),
@@ -97,11 +92,11 @@ describe('RelayDiscoveryProvider', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
-          to: card.id,
+          to: agent.identity.did,
           from: 'did:fides:publisher',
           payload: {
             type: 'fides.agent_card',
-            card,
+            card: signedCard.payload,
           },
         }),
       })
@@ -109,5 +104,22 @@ describe('RelayDiscoveryProvider', () => {
     const [, init] = fetchMock.mock.calls[0]
     expect((init.headers as Headers).get('Content-Type')).toBe('application/json')
     expect((init.headers as Headers).get('X-API-Key')).toBe('relay-key')
+  })
+
+  it('rejects AgentCards not signed by the advertised agent identity', async () => {
+    const agent = await createAgentIdentity()
+    const attacker = await createAgentIdentity()
+    const agentCard = {
+      ...card,
+      id: agent.identity.did,
+      identity: agent.identity,
+    }
+    const signedCard = await signAgentCard(agentCard, attacker.privateKey, attacker.identity.did)
+    const provider = new RelayDiscoveryProvider({ relayUrl: 'http://relay.test' })
+
+    await expect(provider.register(signedCard)).rejects.toThrow(
+      'Relay registration requires an identity-bound signed AgentCard',
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

@@ -25,7 +25,19 @@ function toAgentResponse(agent: typeof agents.$inferSelect, identity: typeof ide
     heartbeatAt: agent.heartbeatAt.toISOString(),
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt.toISOString(),
+    verified: false,
+    urlRequired: false,
+    authorityGranted: false,
+    reasons: [
+      'standalone_discovery_candidate',
+      'signed_agent_card_not_verified_by_discovery_service',
+      'discovery_does_not_grant_authority',
+    ],
   }
+}
+
+function localAgentUrl(did: string): string {
+  return `local://agents/${encodeURIComponent(did)}`
 }
 
 // GET /agents - Search agents by capability, status, tag, provider
@@ -90,8 +102,8 @@ agentsRouter.post('/', async (c) => {
   try {
     const body = await c.req.json<RegisterAgentRequest>()
 
-    if (!body.did || !body.name || !body.url) {
-      return c.json({ error: 'Missing required fields: did, name, url' }, 400)
+    if (!body.did || !body.name) {
+      return c.json({ error: 'Missing required fields: did, name' }, 400)
     }
 
     if (!body.did.startsWith(DID_PREFIX)) {
@@ -109,7 +121,7 @@ agentsRouter.post('/', async (c) => {
       did: body.did,
       name: body.name,
       description: body.description || null,
-      url: body.url,
+      url: body.url || localAgentUrl(body.did),
       version: body.version || '1.0.0',
       provider: body.provider || null,
       capabilities: body.capabilities || {},
@@ -206,7 +218,7 @@ agentsRouter.put('/:did/heartbeat', async (c) => {
       return c.json({ error: 'Agent not found' }, 404)
     }
 
-    return c.json({ status: 'online', heartbeatAt: now.toISOString() })
+    return c.json({ status: 'online', heartbeatAt: now.toISOString(), authorityGranted: false })
   } catch (error) {
     return c.json({ error: 'Internal server error' }, 500)
   }
@@ -226,7 +238,7 @@ agentsRouter.delete('/:did', async (c) => {
       return c.json({ error: 'Agent not found' }, 404)
     }
 
-    return c.json({ message: 'Agent deregistered' })
+    return c.json({ message: 'Agent deregistered', authorityGranted: false })
   } catch (error) {
     return c.json({ error: 'Internal server error' }, 500)
   }

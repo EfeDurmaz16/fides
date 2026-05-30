@@ -1,23 +1,59 @@
-# FIDES Rust SDK
+# FIDES Rust Adapter Contract
 
-Rust implementation of the FIDES trust protocol client.
+FIDES v2 is TS-first. Rust is adapter-ready, not required for the first working
+version.
 
-## Status
+This directory documents the future Rust boundary for performance-critical or
+audit-critical primitives. The active TypeScript contract lives in
+`@fides/adapters` as `RustPrimitiveAdapter`.
 
-Not yet implemented — placeholder for future development.
+## Intended Sources
 
-## Planned Tech Stack
+- AGIT Rust core concepts for hash chains, lineage, DAG primitives, Merkle
+  proofs, canonicalization, and high-performance hashing.
+- FIDES TypeScript protocol objects for the canonical wire model.
 
-- Rust 1.75+
-- ed25519-dalek (cryptography)
-- reqwest (HTTP client)
-- serde (serialization)
-- tokio (async runtime)
+## Adapter Surfaces
 
-## Planned Features
+Future Rust adapters may implement:
 
-- Ed25519 keypair generation and management
-- RFC 9421 HTTP Message Signatures
-- Discovery service client
-- Trust graph API client
-- High-performance signature verification
+- canonical JSON serialization
+- hashing
+- canonical object signing
+- canonical object signature verification
+- evidence hash-chain append and verification helpers
+- Merkle proof creation and verification
+- DAG primitives for evidence lineage
+
+## Hard Constraints
+
+- Rust must not become a runtime dependency for the TypeScript SDK, CLI, daemon,
+  or public protocol objects.
+- Rust adapters must preserve the FIDES canonical object signing model.
+- Rust adapters must not introduce a separate wire format.
+- Public SDK APIs remain Promise-based TypeScript APIs.
+- Effect, if used internally, must not leak into Rust adapter protocol objects.
+- No Rust crate is required or published yet.
+
+## Current Status
+
+Adapter-ready contract only. No Rust crate is required or published yet.
+
+Use `@fides/adapters` for the current manifest and coverage helpers:
+
+```ts
+import {
+  createRustPrimitiveAdapterManifest,
+  validateRustPrimitiveAdapterCoverage,
+} from '@fides/adapters'
+
+const manifest = createRustPrimitiveAdapterManifest({
+  name: 'AGIT Rust primitive adapter',
+  surfaces: ['canonical_json', 'hashing', 'evidence_hash_chain'],
+})
+
+validateRustPrimitiveAdapterCoverage(manifest, [
+  'canonical_json',
+  'hashing',
+])
+```

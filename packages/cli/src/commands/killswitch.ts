@@ -2,6 +2,7 @@ import { Command } from 'commander'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { deleteJson, getJson, postJson, printResult } from './authority-utils.js'
 
 const KILLSTATE_PATH = join(homedir(), '.fides', 'killswitch.json')
 
@@ -29,6 +30,63 @@ function saveKillState(state: KillState): void {
 export function createKillswitchCommand(): Command {
   const cmd = new Command('killswitch')
     .description('Kill switch control')
+
+  cmd.command('enable')
+    .description('Enable a root v2 kill switch rule through agentd')
+    .option('--agent <did>', 'Kill an agent')
+    .option('--publisher <did>', 'Kill a publisher')
+    .option('--capability <id>', 'Kill a capability')
+    .option('--session <id>', 'Kill a session')
+    .option('--principal <did>', 'Kill a principal')
+    .option('--risk-class <level>', 'Kill a risk class')
+    .option('--reason <text>', 'Kill switch reason', 'Enabled by CLI')
+    .option('--issuer <did>', 'Issuer DID')
+    .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
+    .option('--json', 'Print JSON only')
+    .action(async (options) => {
+      try {
+        const target = killSwitchTarget(options)
+        const result = await postJson(`${baseUrl(options.agentdUrl)}/killswitch`, {
+          targetType: target.targetType,
+          target: target.target,
+          reason: options.reason,
+          ...(options.issuer && { issuer: options.issuer }),
+        })
+        printResult('Kill switch enabled:', result, options)
+      } catch (error) {
+        console.error('Error:', error instanceof Error ? error.message : String(error))
+        process.exitCode = 1
+      }
+    })
+
+  cmd.command('disable')
+    .description('Disable a root v2 kill switch rule through agentd')
+    .argument('<rule-id>', 'Kill switch rule ID')
+    .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
+    .option('--json', 'Print JSON only')
+    .action(async (ruleId, options) => {
+      try {
+        const result = await deleteJson(`${baseUrl(options.agentdUrl)}/killswitch/${encodeURIComponent(ruleId)}`)
+        printResult('Kill switch disabled:', result, options)
+      } catch (error) {
+        console.error('Error:', error instanceof Error ? error.message : String(error))
+        process.exitCode = 1
+      }
+    })
+
+  cmd.command('list')
+    .description('List root v2 kill switch rules through agentd')
+    .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
+    .option('--json', 'Print JSON only')
+    .action(async (options) => {
+      try {
+        const result = await getJson(`${baseUrl(options.agentdUrl)}/killswitch`)
+        printResult('Kill switch rules:', result, options)
+      } catch (error) {
+        console.error('Error:', error instanceof Error ? error.message : String(error))
+        process.exitCode = 1
+      }
+    })
 
   cmd.command('engage')
     .description('Engage kill switch')
@@ -104,4 +162,31 @@ export function createKillswitchCommand(): Command {
     })
 
   return cmd
+}
+
+function killSwitchTarget(options: {
+  agent?: string
+  publisher?: string
+  capability?: string
+  session?: string
+  principal?: string
+  riskClass?: string
+}): { targetType: string; target: string } {
+  const targets = [
+    ['agent', options.agent],
+    ['publisher', options.publisher],
+    ['capability', options.capability],
+    ['session', options.session],
+    ['principal', options.principal],
+    ['risk_class', options.riskClass],
+  ].filter(([, value]) => typeof value === 'string') as Array<[string, string]>
+  if (targets.length !== 1) {
+    throw new Error('provide exactly one of --agent, --publisher, --capability, --session, --principal, or --risk-class')
+  }
+  const [targetType, target] = targets[0]
+  return { targetType, target }
+}
+
+function baseUrl(url: string): string {
+  return url.replace(/\/+$/, '')
 }

@@ -56,6 +56,7 @@ vi.mock('node:dns/promises', () => ({
 }));
 
 vi.mock('node:os', () => ({
+  homedir: vi.fn(() => '/tmp/test-home'),
   default: {
     homedir: vi.fn(() => '/tmp/test-home'),
   },
@@ -107,6 +108,22 @@ describe('CLI Commands', () => {
     vi.unstubAllGlobals();
   });
 
+  describe('binary name inference', () => {
+    it('uses agentd when invoked through the agentd workspace script or binary', async () => {
+      const { inferCliName } = await import('../src/cli-name.js');
+
+      expect(inferCliName(['/usr/local/bin/node', '/repo/packages/cli/dist/index.js'], 'agentd')).toBe('agentd');
+      expect(inferCliName(['/usr/local/bin/node', '/usr/local/bin/agentd'])).toBe('agentd');
+    });
+
+    it('defaults to fides for the fides binary and direct node execution', async () => {
+      const { inferCliName } = await import('../src/cli-name.js');
+
+      expect(inferCliName(['/usr/local/bin/node', '/usr/local/bin/fides'])).toBe('fides');
+      expect(inferCliName(['/usr/local/bin/node', '/repo/packages/cli/dist/index.js'])).toBe('fides');
+    });
+  });
+
   describe('init command', () => {
     it('should create identity and save config', async () => {
       const mockKeyPair = {
@@ -142,6 +159,225 @@ describe('CLI Commands', () => {
         apiKey: 'cli-discovery-key',
       }));
       expect(mockKeyStore.save).toHaveBeenCalledWith(mockDid, mockKeyPair);
+    });
+  });
+
+  describe('v2 command surface', () => {
+    it('exposes registry, agents, approval, reputation, dht, evidence, attest, demo, simulate, and invoke commands', async () => {
+      const { createRegistryCommand } = await import('../src/commands/registry.js');
+      const { createAgentsCommand, createRegisterCommand } = await import('../src/commands/agents.js');
+      const { createApprovalCommand } = await import('../src/commands/approval.js');
+      const { createReputationCommand } = await import('../src/commands/reputation.js');
+      const { createGraphCommand } = await import('../src/commands/graph.js');
+      const { createDhtCommand } = await import('../src/commands/dht.js');
+      const { createEvidenceCommand } = await import('../src/commands/evidence.js');
+      const { createAttestCommand } = await import('../src/commands/attest.js');
+      const { createDemoCommand } = await import('../src/commands/demo.js');
+      const { createSimulateCommand } = await import('../src/commands/simulate.js');
+      const { createInvokeCommand } = await import('../src/commands/invoke.js');
+
+      expect(createRegistryCommand().name()).toBe('registry');
+      expect(createRegisterCommand().name()).toBe('register');
+      expect(createAgentsCommand().name()).toBe('agents');
+      expect(createApprovalCommand().name()).toBe('approval');
+      expect(createReputationCommand().name()).toBe('reputation');
+      expect(createGraphCommand().name()).toBe('graph');
+      expect(createDhtCommand().name()).toBe('dht');
+      expect(createEvidenceCommand().name()).toBe('evidence');
+      expect(createAttestCommand().name()).toBe('attest');
+      expect(createDemoCommand().name()).toBe('demo');
+      expect(createSimulateCommand().name()).toBe('simulate');
+      expect(createInvokeCommand().name()).toBe('invoke');
+    });
+
+    it('graph inspect reads the local trust graph view without granting authority', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        agentId: 'did:fides:agent',
+        trust: [{ capability: 'invoice.reconcile', score: 0.73, band: 'medium' }],
+        authorityGranted: false,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createGraphCommand } = await import('../src/commands/graph.js');
+      const cmd = createGraphCommand();
+
+      await cmd.parseAsync([
+        'inspect',
+        'did:fides:agent',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/trust/did%3Afides%3Aagent',
+        expect.objectContaining({ method: 'GET' })
+      );
+      const output = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0] as string);
+      expect(output.agentId).toBe('did:fides:agent');
+      expect(output.authorityGranted).toBe(false);
+      expect(output.graphView.trust[0].capability).toBe('invoice.reconcile');
+    });
+  });
+
+  describe('invoke command', () => {
+    it('creates a session from agent and capability before invoking', async () => {
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(url), init });
+        if (String(url).endsWith('/sessions')) {
+          return new Response(JSON.stringify({
+            authorityGranted: true,
+            session: {
+              session_id: 'sess_cli',
+              requester_agent_id: 'did:fides:requester',
+              target_agent_id: 'did:fides:agent',
+              principal_id: 'did:fides:principal',
+              capability: 'invoice.reconcile',
+              scopes: ['read:invoices', 'write:evidence'],
+            },
+          }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(JSON.stringify({
+          authorityGranted: true,
+          result: { status: 'completed' },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }));
+
+      const { createInvokeCommand } = await import('../src/commands/invoke.js');
+      const cmd = createInvokeCommand();
+
+      await cmd.parseAsync([
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--input-json',
+        '{"invoiceId":"inv_123"}',
+        '--requested-scopes',
+        'read:invoices,write:evidence',
+        '--principal-id',
+        'did:fides:principal',
+        '--requester-agent-id',
+        'did:fides:requester',
+        '--json',
+      ], { from: 'user' });
+
+      expect(calls.map(call => call.url)).toEqual([
+        'http://localhost:7345/sessions',
+        'http://localhost:7345/invoke',
+      ]);
+      expect(JSON.parse(calls[0].init?.body as string)).toEqual({
+        agentId: 'did:fides:agent',
+        capability: 'invoice.reconcile',
+        requestedScopes: ['read:invoices', 'write:evidence'],
+        principalId: 'did:fides:principal',
+        requesterAgentId: 'did:fides:requester',
+      });
+      expect(JSON.parse(calls[1].init?.body as string)).toEqual({
+        sessionId: 'sess_cli',
+        input: { invoiceId: 'inv_123' },
+      });
+    });
+
+    it('invokes an existing session directly when signing is not requested', async () => {
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(url), init });
+        return new Response(JSON.stringify({
+          authorityGranted: true,
+          result: { status: 'completed' },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }));
+
+      const { createInvokeCommand } = await import('../src/commands/invoke.js');
+      const cmd = createInvokeCommand();
+
+      await cmd.parseAsync([
+        '--session-id',
+        'sess_direct',
+        '--input-json',
+        '{"invoiceId":"inv_123"}',
+        '--json',
+      ], { from: 'user' });
+
+      expect(calls.map(call => call.url)).toEqual([
+        'http://localhost:7345/invoke',
+      ]);
+      expect(JSON.parse(calls[0].init?.body as string)).toEqual({
+        sessionId: 'sess_direct',
+        input: { invoiceId: 'inv_123' },
+      });
+    });
+
+    it('signs invocation requests with the requester key', async () => {
+      const {
+        deriveEd25519PublicKeyHex,
+        didFromPublicKey,
+        verifySignedInvocationRequestIssuer,
+      } = await import('@fides/core');
+      const privateKeyHex = '1'.repeat(64);
+      const publicKeyHex = await deriveEd25519PublicKeyHex(privateKeyHex);
+      const requesterDid = didFromPublicKey(Uint8Array.from(Buffer.from(publicKeyHex, 'hex')));
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+      vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(url), init });
+        if (String(url).endsWith('/sessions/sess_signed')) {
+          return new Response(JSON.stringify({
+            session: {
+              schema_version: 'fides.session_grant.v2',
+              session_id: 'sess_signed',
+              requester_agent_id: requesterDid,
+              target_agent_id: 'did:fides:target',
+              principal_id: 'did:fides:principal',
+              capability: 'invoice.reconcile',
+              scopes: ['read:invoices'],
+              constraints: {},
+              audience: ['did:fides:target'],
+              policy_hash: 'sha256:policy',
+              trust_result_hash: 'sha256:trust',
+              issued_at: '2026-05-30T00:00:00.000Z',
+              expires_at: '2026-05-30T01:00:00.000Z',
+              nonce: 'nonce_cli',
+              payload_hash: 'sha256:session',
+            },
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(JSON.stringify({
+          authorityGranted: true,
+          signedRequestVerified: true,
+          result: { status: 'completed' },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }));
+
+      const { createInvokeCommand } = await import('../src/commands/invoke.js');
+      const cmd = createInvokeCommand();
+
+      await cmd.parseAsync([
+        '--session-id',
+        'sess_signed',
+        '--input-json',
+        '{"invoiceId":"inv_123"}',
+        '--sign',
+        '--requester-private-key',
+        privateKeyHex,
+        '--json',
+      ], { from: 'user' });
+
+      expect(calls.map(call => call.url)).toEqual([
+        'http://localhost:7345/sessions/sess_signed',
+        'http://localhost:7345/invoke',
+      ]);
+      const invokeBody = JSON.parse(calls[1].init?.body as string);
+      expect(invokeBody.sessionId).toBe('sess_signed');
+      expect(invokeBody.input).toEqual({ invoiceId: 'inv_123' });
+      expect(invokeBody.signedRequest.payload.issuer).toBe(requesterDid);
+      expect(invokeBody.signedRequest.payload.session_id).toBe('sess_signed');
+      expect(invokeBody.signedRequest.proof.verificationMethod).toBe(requesterDid);
+      await expect(verifySignedInvocationRequestIssuer(invokeBody.signedRequest)).resolves.toBe(true);
     });
   });
 
@@ -238,6 +474,65 @@ describe('CLI Commands', () => {
         id: 'did:fides:agent',
         name: 'Agent',
       }, null, 2));
+    });
+
+    it('uses the root AgentCard API for local create, sign, inspect, and verify', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        card: { id: 'did:fides:agent' },
+        signed: { payload: { id: 'did:fides:agent' } },
+        valid: true,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createCardCommand } = await import('../src/commands/card.js');
+      const cmd = createCardCommand();
+
+      await cmd.parseAsync([
+        'create',
+        '--did',
+        'did:fides:agent',
+        '--name',
+        'Invoice Agent',
+        '--capabilities',
+        '[{"id":"invoice.reconcile"}]',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['sign', 'did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['inspect', 'did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['verify', 'did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/agent-cards',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            name: 'Invoice Agent',
+            capabilities: [{ id: 'invoice.reconcile' }],
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/agent-cards/did%3Afides%3Aagent/sign',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/agent-cards/did%3Afides%3Aagent',
+        expect.objectContaining({ method: 'GET' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        4,
+        'http://agentd.test/agent-cards/did%3Afides%3Aagent/verify',
+        expect.objectContaining({ method: 'POST' })
+      );
     });
   });
 
@@ -412,9 +707,208 @@ describe('CLI Commands', () => {
       expect(mockDiscoveryClient.resolve).toHaveBeenCalledWith('did:fides:test123');
       expect(mockTrustClient.getScore).toHaveBeenCalledWith(mockIdentity.did);
     });
+
+    it('discovers capabilities through a selected local agentd provider', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        provider: 'registry',
+        authorityGranted: false,
+        records: [{ agentId: 'did:fides:agent' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDiscoverCommand } = await import('../src/commands/discover.js');
+      const cmd = createDiscoverCommand();
+
+      await cmd.parseAsync([
+        'reconcile invoices',
+        '--capability',
+        'invoice.reconcile',
+        '--provider',
+        'registry',
+        '--constraints',
+        '{"tenant":"acme"}',
+        '--supported-versions',
+        'fides.v2.0,fides.v2.1',
+        '--required-versions',
+        'fides.v2.0',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/discover/registry',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            intent: 'reconcile invoices',
+            capability: 'invoice.reconcile',
+            constraints: { tenant: 'acme' },
+            supported_versions: ['fides.v2.0', 'fides.v2.1'],
+            required_versions: ['fides.v2.0'],
+          }),
+        })
+      );
+    });
+
+    it('discovers capabilities through every local agentd provider', async () => {
+      const mockFetch = vi.fn(async (url: string | URL | Request) => new Response(JSON.stringify({
+        provider: String(url).split('/').at(-1),
+        authorityGranted: false,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDiscoverCommand } = await import('../src/commands/discover.js');
+      const cmd = createDiscoverCommand();
+
+      await cmd.parseAsync([
+        '--capability',
+        'calendar.schedule',
+        '--all-providers',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/discover/local',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/discover/well-known',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/discover/registry',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        4,
+        'http://agentd.test/discover/relay',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        5,
+        'http://agentd.test/discover/dht',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        6,
+        'http://agentd.test/discover/federation',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenCalledTimes(6);
+    });
+
+    it('keeps all-provider discovery results when one provider fails', async () => {
+      const mockFetch = vi.fn(async (url: string | URL | Request) => {
+        if (String(url).endsWith('/discover/relay')) {
+          return new Response(JSON.stringify({
+            error: { code: 'RELAY_UNAVAILABLE' },
+          }), { status: 503, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response(JSON.stringify({
+          provider: String(url).split('/').at(-1),
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDiscoverCommand } = await import('../src/commands/discover.js');
+      const cmd = createDiscoverCommand();
+
+      await cmd.parseAsync([
+        '--capability',
+        'calendar.schedule',
+        '--all-providers',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledTimes(6);
+      const output = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0] as string);
+      expect(output.authorityGranted).toBe(false);
+      expect(output.results).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          provider: 'relay',
+          ok: false,
+          authorityGranted: false,
+          error: expect.stringContaining('HTTP 503'),
+        }),
+        expect.objectContaining({
+          provider: 'local',
+          ok: true,
+          result: expect.objectContaining({ authorityGranted: false }),
+        }),
+      ]));
+    });
   });
 
   describe('identity domain commands', () => {
+    it('identity commands can use root local agentd APIs', async () => {
+      const mockFetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).endsWith('/identities') && init?.method === 'POST') {
+          return new Response(JSON.stringify({
+            type: 'principal',
+            identity: { did: 'did:fides:principal', displayName: 'Efe' },
+            publicKeyHex: 'ab'.repeat(32),
+          }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (String(url).endsWith('/identities') && init?.method === 'GET') {
+          return new Response(JSON.stringify({
+            identities: [{ did: 'did:fides:principal', type: 'principal' }],
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response(JSON.stringify({
+          type: 'principal',
+          identity: { did: 'did:fides:principal' },
+          publicKeyHex: 'ab'.repeat(32),
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createIdentityCommand } = await import('../src/commands/identity.js');
+      const cmd = createIdentityCommand();
+
+      await cmd.parseAsync([
+        'create',
+        '--type',
+        'principal',
+        '--name',
+        'Efe',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['show', 'did:fides:principal', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/identities',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ type: 'principal', name: 'Efe' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/identities',
+        expect.objectContaining({ method: 'GET' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/identities/did%3Afides%3Aprincipal',
+        expect.objectContaining({ method: 'GET' })
+      );
+      const outputs = vi.mocked(console.log).mock.calls.map(call => String(call[0]));
+      expect(outputs.join('\n')).not.toContain('privateKeyHex');
+    });
+
     it('prints a domain verification challenge as JSON', async () => {
       const { createIdentityCommand } = await import('../src/commands/identity.js');
       const cmd = createIdentityCommand();
@@ -525,6 +1019,12 @@ describe('CLI Commands', () => {
         'start',
         '--port',
         '7444',
+        '--sqlite-path',
+        '/tmp/fides.sqlite',
+        '--local-state',
+        'sqlite',
+        '--authority-store-path',
+        '/tmp/authority-store.json',
         '--pid-file',
         '/tmp/fides-agentd.pid',
         '--log-file',
@@ -534,9 +1034,37 @@ describe('CLI Commands', () => {
       expect(childProcess.spawn).toHaveBeenCalledWith('pnpm', ['--filter', '@fides/agentd', 'dev'], expect.objectContaining({
         detached: true,
         stdio: ['ignore', 1, 1],
-        env: expect.objectContaining({ AGENTD_PORT: '7444' }),
+        env: expect.objectContaining({
+          AGENTD_PORT: '7444',
+          AGENTD_SQLITE_PATH: '/tmp/fides.sqlite',
+          AGENTD_LOCAL_STATE: 'sqlite',
+          AGENTD_STATE_STORE_PATH: '/tmp/authority-store.json',
+        }),
       }));
       expect(fs.default.writeFileSync).toHaveBeenCalledWith('/tmp/fides-agentd.pid', '12345', 'utf-8');
+    });
+
+    it('rejects invalid local daemon state modes before spawning agentd', async () => {
+      const fs = await import('node:fs');
+      const childProcess = await import('node:child_process');
+      vi.mocked(fs.default.existsSync).mockReturnValue(false);
+
+      const { createDaemonCommand } = await import('../src/commands/daemon.js');
+      const cmd = createDaemonCommand();
+
+      await cmd.parseAsync([
+        'start',
+        '--local-state',
+        'file',
+        '--pid-file',
+        '/tmp/fides-agentd.pid',
+        '--log-file',
+        '/tmp/fides-agentd.log',
+      ], { from: 'user' });
+
+      expect(childProcess.spawn).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
+      expect(console.error).toHaveBeenCalledWith('Error:', '--local-state must be sqlite or memory');
     });
 
     it('should stop agentd from the pid file', async () => {
@@ -565,10 +1093,16 @@ describe('CLI Commands', () => {
           trustGraph: 'connected',
           registry: 'connected',
           authorityStore: 'ready',
+          localStateStore: 'ready',
         },
         authorityStore: {
           kind: 'file',
           ok: true,
+        },
+        localStateStore: {
+          kind: 'sqlite',
+          ok: true,
+          path: '/tmp/fides.sqlite',
         },
       }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
       vi.stubGlobal('fetch', mockFetch);
@@ -579,6 +1113,9 @@ describe('CLI Commands', () => {
       await cmd.parseAsync(['status', '--agentd-url', 'http://localhost:7345'], { from: 'user' });
 
       expect(mockFetch).toHaveBeenCalledWith('http://localhost:7345/health');
+      const output = vi.mocked(console.log).mock.calls.map(call => String(call[0])).join('\n');
+      expect(output).toContain('Local State Store:');
+      expect(output).toContain('sqlite (ready)');
       expect(process.exitCode).toBeUndefined();
     });
 
@@ -591,10 +1128,16 @@ describe('CLI Commands', () => {
           trustGraph: 'connected',
           registry: 'connected',
           authorityStore: 'ready',
+          localStateStore: 'ready',
         },
         authorityStore: {
           kind: 'postgres',
           ok: true,
+        },
+        localStateStore: {
+          kind: 'sqlite',
+          ok: true,
+          path: '/tmp/fides.sqlite',
         },
       }), { status: 503, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
       vi.stubGlobal('fetch', mockFetch);
@@ -606,6 +1149,7 @@ describe('CLI Commands', () => {
 
       const output = JSON.parse(vi.mocked(console.log).mock.calls[0][0] as string);
       expect(output.status).toBe('degraded');
+      expect(output.localStateStore).toMatchObject({ kind: 'sqlite', ok: true });
       expect(process.exitCode).toBe(1);
     });
   });
@@ -633,6 +1177,51 @@ describe('CLI Commands', () => {
       expect(output.delegatee).toBe('did:fides:agent');
       expect(output.capabilities).toEqual(['payments.execute', 'tools.call']);
       expect(output.constraints.maxActions).toBe(3);
+    });
+
+    it('delegate create can record a root v2 delegation through agentd', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        token: { id: 'del_1' },
+        authorityGranted: false,
+      }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDelegateCommand } = await import('../src/commands/delegate.js');
+      const cmd = createDelegateCommand();
+
+      await cmd.parseAsync([
+        'create',
+        '--delegator',
+        'did:fides:principal',
+        '--delegatee',
+        'did:fides:agent',
+        '--capabilities',
+        'invoice.reconcile,payments.prepare',
+        '--max-actions',
+        '2',
+        '--audience',
+        'agentd,invoice-agent',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/delegations',
+        expect.objectContaining({ method: 'POST' })
+      );
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body as string)).toMatchObject({
+        delegator: 'did:fides:principal',
+        delegatee: 'did:fides:agent',
+        capabilities: ['invoice.reconcile', 'payments.prepare'],
+        constraints: { maxActions: 2 },
+        expiresAt: expect.any(String),
+        audience: ['agentd', 'invoice-agent'],
+      });
     });
 
     it('session create should call agentd with a DelegationToken', async () => {
@@ -679,6 +1268,64 @@ describe('CLI Commands', () => {
           }),
         })
       );
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body as string)).toMatchObject({
+        token,
+        capabilityId: 'payments.execute',
+        audience: 'agentd',
+      });
+    });
+
+    it('session create should send canonical signed delegation tokens as signedToken', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        signedDelegationVerified: true,
+        session: { id: 'sess-1', sessionKey: 'redacted' },
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const signedToken = {
+        payload: {
+          schema_version: 'fides.delegation_token.v2',
+          id: 'dtok_1',
+          issuer: 'did:fides:principal',
+          subject: 'did:fides:agent',
+          capabilities: ['payments.execute'],
+          audience: ['agentd'],
+          issued_at: '2026-05-30T00:00:00.000Z',
+          expires_at: '2026-05-30T01:00:00.000Z',
+          nonce: 'nonce-1',
+          payload_hash: 'sha256:token',
+        },
+        proof: {
+          type: 'Ed25519Signature2024',
+          created: '2026-05-30T00:00:00.000Z',
+          verificationMethod: 'did:fides:principal',
+          proofPurpose: 'delegation',
+          canonicalizationAlgorithm: 'https://fides.dev/canonical-json/v1',
+          proofValue: 'proof',
+        },
+      };
+
+      const { createSessionCommand } = await import('../src/commands/session.js');
+      const cmd = createSessionCommand();
+
+      await cmd.parseAsync([
+        'create',
+        '--agentd-url',
+        'http://agentd.test',
+        '--capability',
+        'payments.execute',
+        '--token-json',
+        JSON.stringify(signedToken),
+        '--json',
+      ], { from: 'user' });
+
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body as string)).toEqual({
+        signedToken,
+        capabilityId: 'payments.execute',
+        audience: 'agentd',
+      });
     });
 
     it('session create should send a delegator public key when provided', async () => {
@@ -758,6 +1405,515 @@ describe('CLI Commands', () => {
       const body = JSON.parse(init.body as string);
       expect(body.record.did).toBe('did:fides:agent');
       expect(body.revokerPublicKey).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('root revoke commands should record and inspect v2 revocations', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        record: { id: 'rev_1' },
+        records: [{ id: 'rev_1' }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRevokeCommand } = await import('../src/commands/revoke.js');
+      const cmd = createRevokeCommand();
+
+      await cmd.parseAsync([
+        'agent',
+        'did:fides:agent',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--issuer',
+        'did:fides:operator',
+        '--reason',
+        'disabled',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'session',
+        'sess_1',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--reason',
+        'replay risk',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['inspect', 'rev_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/revocations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            targetType: 'agent',
+            targetId: 'did:fides:agent',
+            reason: 'disabled',
+            issuer: 'did:fides:operator',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/revocations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            targetType: 'session',
+            targetId: 'sess_1',
+            reason: 'replay risk',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(3, 'http://agentd.test/revocations', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(4, 'http://agentd.test/revocations/rev_1', expect.objectContaining({ method: 'GET' }));
+    });
+
+    it('attest runtime should issue a root v2 runtime attestation', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        attestation: { attestation_id: 'att_1' },
+        evidenceRefs: ['evt_1'],
+        authorityGranted: false,
+      }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createAttestCommand } = await import('../src/commands/attest.js');
+      const cmd = createAttestCommand();
+
+      await cmd.parseAsync([
+        'runtime',
+        '--agent',
+        'did:fides:agent',
+        '--code-hash',
+        'sha256:code',
+        '--runtime-hash',
+        'sha256:runtime',
+        '--policy-hash',
+        'sha256:policy',
+        '--enclave-measurement',
+        'sha256:measurement',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            codeHash: 'sha256:code',
+            runtimeHash: 'sha256:runtime',
+            policyHash: 'sha256:policy',
+            enclaveMeasurement: 'sha256:measurement',
+          }),
+        })
+      );
+    });
+
+    it('attest identity trust-anchor commands should call root v2 attestations', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        attestation: { id: 'att_identity_1' },
+        evidenceRefs: ['evt_1'],
+        authorityGranted: false,
+      }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createAttestCommand } = await import('../src/commands/attest.js');
+      const cmd = createAttestCommand();
+
+      await cmd.parseAsync(['github', '--identity', 'did:fides:publisher', '--handle', 'fides-dev', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['email', '--identity', 'did:fides:publisher', '--email', 'dev@example.com', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['domain', '--identity', 'did:fides:publisher', '--domain', 'example.com', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['package', '--identity', 'did:fides:publisher', '--registry', 'npm', '--package', '@fides/example-agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['wallet', '--identity', 'did:fides:publisher', '--address', '0xabc', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ type: 'github', identity: 'did:fides:publisher', handle: 'fides-dev' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ type: 'email', identity: 'did:fides:publisher', email: 'dev@example.com' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ type: 'domain', identity: 'did:fides:publisher', domain: 'example.com' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        4,
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'package',
+            identity: 'did:fides:publisher',
+            registry: 'npm',
+            package: '@fides/example-agent',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        5,
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ type: 'wallet', identity: 'did:fides:publisher', address: '0xabc' }),
+        })
+      );
+    });
+
+    it('attest show and verify should inspect root v2 runtime attestations', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        attestation: { attestation_id: 'att_1' },
+        valid: true,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createAttestCommand } = await import('../src/commands/attest.js');
+      const cmd = createAttestCommand();
+
+      await cmd.parseAsync(['show', 'att_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['verify', 'att_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/attestations/att_1',
+        expect.objectContaining({ method: 'GET' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/attestations/att_1/verify',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({}),
+        })
+      );
+    });
+
+    it('register and agents commands should manage local discovery candidates', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        registered: true,
+        agentId: 'did:fides:agent',
+        agents: [{ agentId: 'did:fides:agent' }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRegisterCommand, createAgentsCommand } = await import('../src/commands/agents.js');
+      const register = createRegisterCommand();
+      const agents = createAgentsCommand();
+
+      await register.parseAsync(['card_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await agents.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await agents.parseAsync(['inspect', 'did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/agents/register',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ agentCardId: 'card_1' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://agentd.test/agents', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/agents/did%3Afides%3Aagent',
+        expect.objectContaining({ method: 'GET' })
+      );
+    });
+
+    it('approval commands should create and decide root v2 approvals', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        approval: { id: 'appr_1' },
+        decisions: [],
+        authorityGranted: false,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createApprovalCommand } = await import('../src/commands/approval.js');
+      const cmd = createApprovalCommand();
+
+      await cmd.parseAsync([
+        'request',
+        '--agent',
+        'did:fides:target',
+        '--capability',
+        'payments.prepare',
+        '--requester-agent',
+        'did:fides:requester',
+        '--principal',
+        'did:fides:principal',
+        '--requested-scopes',
+        'payments:prepare,evidence:write',
+        '--risk-level',
+        'high',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync([
+        'approve',
+        'appr_1',
+        '--approver',
+        'did:fides:approver',
+        '--reason',
+        'human approved',
+        '--constraints',
+        '{"dryRunOnly":true}',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['deny', 'appr_2', '--reason', 'too risky', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/approvals',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            targetAgentId: 'did:fides:target',
+            capability: 'payments.prepare',
+            requesterAgentId: 'did:fides:requester',
+            principalId: 'did:fides:principal',
+            requestedScopes: ['payments:prepare', 'evidence:write'],
+            riskLevel: 'high',
+            evidenceRefs: [],
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://agentd.test/approvals', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/approvals/appr_1/approve',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            approverId: 'did:fides:approver',
+            reason: 'human approved',
+            constraints: { dryRunOnly: true },
+            evidenceRefs: [],
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        4,
+        'http://agentd.test/approvals/appr_2/deny',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            reason: 'too risky',
+            constraints: {},
+            evidenceRefs: [],
+          }),
+        })
+      );
+    });
+
+    it('trust and reputation commands should use root v2 evaluation APIs', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        trust: { agent_id: 'did:fides:agent', capability: 'invoice.reconcile' },
+        reputation: { agent_id: 'did:fides:agent', capability: 'invoice.reconcile' },
+        reputations: [
+          { agent_id: 'did:fides:agent', capability: 'invoice.reconcile' },
+          { agent_id: 'did:fides:agent', capability: 'calendar.schedule' },
+        ],
+        authorityGranted: false,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createTrustCommand } = await import('../src/commands/trust.js');
+      const { createReputationCommand } = await import('../src/commands/reputation.js');
+      const trustEvaluate = createTrustCommand();
+      const trustGet = createTrustCommand();
+      const reputation = createReputationCommand();
+      const reputationShortcut = createReputationCommand();
+
+      await trustEvaluate.parseAsync([
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await trustGet.parseAsync(['did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await reputation.parseAsync([
+        'update',
+        '--agent',
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--successful-invocations',
+        '5',
+        '--failed-invocations',
+        '1',
+        '--incident-count',
+        '0',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await reputation.parseAsync(['get', 'did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await reputationShortcut.parseAsync([
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/trust/evaluate',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            capability: 'invoice.reconcile',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://agentd.test/trust/did%3Afides%3Aagent', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/reputation/update',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            capability: 'invoice.reconcile',
+            successfulInvocations: 5,
+            failedInvocations: 1,
+            incidentCount: 0,
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(4, 'http://agentd.test/reputation/did%3Afides%3Aagent', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(5, 'http://agentd.test/reputation/did%3Afides%3Aagent', expect.objectContaining({ method: 'GET' }));
+      const shortcutOutput = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0] as string);
+      expect(shortcutOutput.capability).toBe('invoice.reconcile');
+      expect(shortcutOutput.reputations[0].capability).toBe('invoice.reconcile');
+    });
+
+    it('trust command defaults capability evaluation to the local agentd root API', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        trust: { agent_id: 'did:fides:agent', capability: 'invoice.reconcile' },
+        authorityGranted: false,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createTrustCommand } = await import('../src/commands/trust.js');
+      const trustEvaluate = createTrustCommand();
+
+      await trustEvaluate.parseAsync([
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:7345/trust/evaluate',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            capability: 'invoice.reconcile',
+          }),
+        })
+      );
+      const output = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0] as string);
+      expect(output.authorityGranted).toBe(false);
+    });
+
+    it('policy evaluate can use the root v2 policy API', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        policy: { decision: 'allow' },
+        requiresSessionGrant: true,
+        authorityGranted: false,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createPolicyCommand } = await import('../src/commands/policy.js');
+      const cmd = createPolicyCommand();
+
+      await cmd.parseAsync([
+        'evaluate',
+        '--agent',
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--principal',
+        'did:fides:principal',
+        '--requester-agent',
+        'did:fides:requester',
+        '--requested-scopes',
+        'read:invoices,write:evidence',
+        '--approval-granted',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/policy/evaluate',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            capability: 'invoice.reconcile',
+            principalId: 'did:fides:principal',
+            requesterAgentId: 'did:fides:requester',
+            requestedScopes: ['read:invoices', 'write:evidence'],
+            approvalGranted: true,
+            evidenceRefs: [],
+          }),
+        })
+      );
     });
 
     it('incident report should call agentd incidents', async () => {
@@ -971,6 +2127,414 @@ describe('CLI Commands', () => {
       );
     });
 
+    it('relay register and discover should use local agentd aliases', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        authorityGranted: false,
+        records: [{ agentId: 'did:fides:agent' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRelayCommand } = await import('../src/commands/relay.js');
+      const cmd = createRelayCommand();
+
+      await cmd.parseAsync([
+        'start',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'register',
+        'did:fides:agent',
+        '--endpoint-hints',
+        'local://agent',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'discover',
+        '--capability',
+        'invoice.reconcile',
+        '--supported-versions',
+        'fides.v2.0',
+        '--required-versions',
+        'fides.v2.0',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/relay/start',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/relay/register',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            endpointHints: ['local://agent'],
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/relay/discover',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            capability: 'invoice.reconcile',
+            supported_versions: ['fides.v2.0'],
+            required_versions: ['fides.v2.0'],
+          }),
+        })
+      );
+    });
+
+    it('registry publish and search should use local agentd aliases', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        authorityGranted: false,
+        records: [{ agentId: 'did:fides:agent' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRegistryCommand } = await import('../src/commands/registry.js');
+      const cmd = createRegistryCommand();
+
+      await cmd.parseAsync([
+        'start',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'publish',
+        'did:fides:agent',
+        '--mode',
+        'private',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'search',
+        '--capability',
+        'invoice.reconcile',
+        '--supported-versions',
+        'fides.v2.0',
+        '--required-versions',
+        'fides.v2.0',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/registry/start',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/registry/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ agentCardId: 'did:fides:agent', mode: 'private' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/registry/search',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            capability: 'invoice.reconcile',
+            supported_versions: ['fides.v2.0'],
+            required_versions: ['fides.v2.0'],
+          }),
+        })
+      );
+    });
+
+    it('prints typed agentd error codes for root v2 HTTP failures', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+          severity: 'error',
+          retryable: false,
+          message: 'agentCardId is required',
+          details: { field: 'agentCardId' },
+        },
+        authorityGranted: false,
+      }), { status: 400, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRegistryCommand } = await import('../src/commands/registry.js');
+      const cmd = createRegistryCommand();
+
+      await cmd.parseAsync([
+        'publish',
+        'card_1',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(console.error).toHaveBeenCalledWith('Error:', '[REQUEST_INVALID] agentCardId is required');
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('dht publish supports signed local pointer inputs without an AgentCard URL', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        accepted: true,
+        pointer: {
+          capability: 'invoice.reconcile',
+          agentId: 'did:fides:agent',
+          signed: true,
+          authorityGranted: false,
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDhtCommand } = await import('../src/commands/dht.js');
+      const cmd = createDhtCommand();
+
+      await cmd.parseAsync([
+        'publish',
+        '--capability',
+        'invoice.reconcile',
+        '--agent-id',
+        'did:fides:agent',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/dht/publish',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            capability: 'invoice.reconcile',
+            agentId: 'did:fides:agent',
+          }),
+        })
+      );
+    });
+
+    it('demo run should call the agentd demo endpoint', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        status: 'executed',
+        authority: { discoveryGrantsAuthority: false },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDemoCommand } = await import('../src/commands/demo.js');
+      const cmd = createDemoCommand();
+
+      await cmd.parseAsync([
+        'run',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/demo/run',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({}),
+        })
+      );
+    });
+
+    it('simulate adversarial should call the agentd simulation endpoint', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        status: 'detected',
+        authority: { discoveryGrantsAuthority: false },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createSimulateCommand } = await import('../src/commands/simulate.js');
+      const cmd = createSimulateCommand();
+
+      await cmd.parseAsync([
+        'adversarial',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/simulate/adversarial',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({}),
+        })
+      );
+    });
+
+    it('session request and verify should use root agentd session endpoints', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        authorized: true,
+        session: { session_id: 'sess_cli' },
+        valid: true,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createSessionCommand } = await import('../src/commands/session.js');
+      const cmd = createSessionCommand();
+
+      await cmd.parseAsync([
+        'request',
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--requested-scopes',
+        'read:invoices,write:evidence',
+        '--principal-id',
+        'did:fides:principal',
+        '--requester-agent-id',
+        'did:fides:requester',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'verify',
+        'sess_cli',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/sessions',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            capability: 'invoice.reconcile',
+            requestedScopes: ['read:invoices', 'write:evidence'],
+            principalId: 'did:fides:principal',
+            requesterAgentId: 'did:fides:requester',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/sessions/sess_cli/verify',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({}),
+        })
+      );
+    });
+
+    it('incident list inspect and resolve should use root agentd incident endpoints', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        record: { id: 'inc_1' },
+        records: [{ id: 'inc_1' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createIncidentCommand } = await import('../src/commands/incident.js');
+      const cmd = createIncidentCommand();
+
+      await cmd.parseAsync([
+        'report',
+        'did:fides:agent',
+        '--severity',
+        'high',
+        '--category',
+        'unauthorized_action',
+        '--description',
+        'policy bypass',
+        '--reporter',
+        'did:fides:principal',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['inspect', 'inc_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['resolve', 'inc_1', '--status', 'resolved', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/incidents',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            targetAgentId: 'did:fides:agent',
+            severity: 'high',
+            category: 'unauthorized_action',
+            description: 'policy bypass',
+            reporter: 'did:fides:principal',
+            evidenceRefs: [],
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://agentd.test/incidents', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(3, 'http://agentd.test/incidents/inc_1', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        4,
+        'http://agentd.test/incidents/inc_1/resolve',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ status: 'resolved' }),
+        })
+      );
+    });
+
+    it('killswitch enable disable and list should use root agentd kill switch endpoints', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        rule: { id: 'ks_1' },
+        rules: [{ id: 'ks_1' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createKillswitchCommand } = await import('../src/commands/killswitch.js');
+      const cmd = createKillswitchCommand();
+
+      await cmd.parseAsync([
+        'enable',
+        '--capability',
+        'payments.prepare',
+        '--reason',
+        'incident response',
+        '--issuer',
+        'did:fides:operator',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['disable', 'ks_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/killswitch',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            targetType: 'capability',
+            target: 'payments.prepare',
+            reason: 'incident response',
+            issuer: 'did:fides:operator',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://agentd.test/killswitch', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(3, 'http://agentd.test/killswitch/ks_1', expect.objectContaining({ method: 'DELETE' }));
+    });
+
     it('relay delete should remove messages by relay ID', async () => {
       process.env.SERVICE_API_KEY = 'relay-service-key';
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({
@@ -995,6 +2559,39 @@ describe('CLI Commands', () => {
           method: 'DELETE',
           headers: expect.objectContaining({
             'X-API-Key': 'relay-service-key',
+          }),
+        })
+      );
+    });
+
+    it('evidence export should pass privacy and metadata options to agentd', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        format: 'json',
+        valid: true,
+        events: [],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createEvidenceCommand } = await import('../src/commands/evidence.js');
+      const cmd = createEvidenceCommand();
+
+      await cmd.parseAsync([
+        'export',
+        '--privacy-mode',
+        'hash-only',
+        '--no-metadata',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/evidence/export',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            privacy_mode: 'hash_only',
+            include_metadata: false,
           }),
         })
       );

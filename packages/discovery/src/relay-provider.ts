@@ -1,4 +1,4 @@
-import { validateAgentCard, type AgentCard, type SignedAgentCard } from '@fides/core'
+import { validateAgentCard, verifySignedAgentCardIdentity, type AgentCard, type SignedAgentCard } from '@fides/core'
 import { DiscoveryProvider } from './provider.js'
 
 interface RelayMessage {
@@ -50,6 +50,9 @@ export class RelayDiscoveryProvider implements DiscoveryProvider {
   }
 
   async register(card: SignedAgentCard): Promise<void> {
+    if (!await verifySignedAgentCardIdentity(card)) {
+      throw new Error('Relay registration requires an identity-bound signed AgentCard')
+    }
     const did = card.payload.id
     const response = await fetch(`${this.baseUrl()}/v1/relay`, {
       method: 'POST',

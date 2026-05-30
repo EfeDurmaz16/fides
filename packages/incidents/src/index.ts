@@ -1,0 +1,16 @@
+export {
+  aggregateIncidentImpact,
+  createIncidentRecord,
+  createIncidentRecordV2,
+  resolveIncident,
+  resolveIncidentRecordV2,
+  signIncidentRecord,
+  signIncidentRecordV2,
+  verifyIncidentRecord,
+  verifySignedIncidentRecordV2,
+  verifySignedIncidentRecordV2Issuer,
+  type IncidentCategory,
+  type IncidentRecord,
+  type IncidentRecordV2,
+  type SignedIncidentRecordV2,
+} from '@fides/core'

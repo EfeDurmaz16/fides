@@ -2,7 +2,7 @@
 
 Standalone deterministic policy evaluation service for FIDES agents.
 
-The service wraps `@fides/policy` behind a small Hono HTTP API. It validates incoming policy bundles, evaluates them against request context, and returns the same `allow`, `deny`, `approve-required`, or `dry-run` decisions used by agentd guard flows.
+The service wraps `@fides/policy` behind a small Hono HTTP API. It validates incoming policy bundles, evaluates them against request context, and returns FIDES v2 decision names: `allow`, `deny`, `require_approval`, or `dry_run_only`. When a legacy policy bundle uses `approve-required` or `dry-run`, the response also includes `legacyDecision` for compatibility.
 
 ## Status
 
@@ -88,6 +88,7 @@ Example response:
 ```json
 {
   "decision": "deny",
+  "legacyDecision": "deny",
   "matchedRules": ["deny-large-transfer"],
   "explanation": {
     "decision": "Rule deny-large-transfer matched",

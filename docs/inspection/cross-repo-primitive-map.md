@@ -1,98 +1,93 @@
 # Cross-Repo Primitive Map
 
-This document maps key primitives across the five inspected repositories and determines the best source and action for each primitive in FIDES v2.
+This map reflects the current local inspection of:
 
-## Architecture Decisions (Context)
+- FIDES: `/Users/efebarandurmaz/fides`
+- AGIT: `/Users/efebarandurmaz/agit`
+- OSP: `/Users/efebarandurmaz/osp`
+- OAPS: `/Users/efebarandurmaz/OAPS`
+- Sardis: `/Users/efebarandurmaz/sardis`
 
-Before reading this map, the following decisions have been made:
+## Hard Architecture Decisions
 
-1. **TS-first, Rust adapter-ready.** FIDES v2 is implemented in TypeScript/Node. AGIT's Rust core may be used later through adapters for evidence chain, hashing, canonicalization, or other performance-critical primitives.
-2. **OAPS concepts are ported into FIDES, not imported as a runtime dependency.** OAPS remains the spec/source of semantic compatibility. FIDES owns the runtime types.
-3. **Sardis contributes generic patterns only:** policy-before-execution, guardrails, evidence ledger, approvals, kill switch, high-risk action handling. Sardis payment-specific domain models stay in Sardis: stablecoins, MPC wallets, payment rails, merchants, compliance, spending limits.
-4. **FIDES owns the generic authority/trust/evidence layer.** Sardis owns the payment-specific authority model.
-5. **Effect may be used for internal runtime orchestration** (service layers, typed errors, workflows, discovery/provider orchestration, daemon, CLI workflows, DHT/relay/registry orchestration).
-6. **Protocol objects, crypto, canonical JSON, signing primitives, and public schemas must remain framework-agnostic.**
-7. **Public SDK should expose Promise-based APIs, with optional Effect-native APIs later.**
-
----
+- FIDES v2 is TS-first and Rust adapter-ready.
+- OAPS concepts are ported into FIDES. FIDES must not depend on `@oaps/core` at runtime.
+- Sardis contributes generic authority patterns only; payment-specific models stay in Sardis.
+- Effect may be used internally later, but protocol objects, signing, schemas, AgentCards, evidence events, DHT records, session grants, attestations, revocations, and incidents stay framework-agnostic.
+- Public SDK remains Promise-based.
 
 ## Primitive Map
 
 | Primitive | FIDES | AGIT | OSP | OAPS | Sardis | Best source | Action |
-|-----------|-------|------|-----|------|--------|-------------|--------|
-| **Agent identity** | `did:fides:<base58>` (`packages/sdk/src/identity/did.ts`) | FIDES integration | None | `ActorRef` (`packages/core/src/index.ts:36`) | `KYA` (`packages/sardis-compliance/src/sardis_compliance/kya.py`) | FIDES | Extend with publisher + principal identity |
-| **Publisher identity** | Not found | Not found | Not found | `ActorCard.publisher` (conceptual) | Not found | OAPS concept | Create new in FIDES |
-| **Principal identity** | Not found | Not found | `principal_id` (spec only) | `ActorRef` | Embedded in mandates | OAPS concept | Create new in FIDES |
-| **DID / key format** | `did:fides:<base58>` | `FidesIdentity` | None | `actor_id` string | None | FIDES | Reuse, document W3C non-compliance |
-| **Signing** | RFC 9421 + Ed25519 (`packages/sdk/src/signing/`) | Ed25519 DID-signed commits | Ed25519 (`osp-crypto`) | `Proof`, canonical JSON | Ed25519 policy attestation | FIDES | Reuse, extend for new object types |
-| **HTTP message signatures** | Full implementation (`packages/sdk/src/signing/`) | Not found | Not found | Not found | Not found | FIDES | Reuse |
-| **Trust attestation** | `createAttestation` (`packages/sdk/src/trust/attestation.ts`) | Trust-gated merge | Not found | `trust-attestation.json` schema | Not found | FIDES | Extend with capability-scoped attestations |
-| **Trust graph** | BFS + scoring (`services/trust-graph/src/services/`) | Not found | Not found | Not found | Not found | FIDES | Extend with context-specific trust |
-| **Reputation** | Direct + transitive (`services/trust-graph/src/services/scoring.ts`) | Not found | Not found | Not found | Not found | FIDES | Extend with capability-specific reputation |
-| **Capability descriptor** | Basic in discovery (`packages/sdk/src/discovery/agent-client.ts`) | Not found | `ServiceOffering` (schema) | `CapabilityCard` (`packages/core/src/index.ts:81`) | Not found | OAPS | Port into FIDES |
-| **Agent card** | `AgentCard` (`packages/shared/src/types.ts`) | Not found | `ServiceManifest` | `ActorCard` (`packages/core/src/index.ts:68`) | Agent cards in `sardis-a2a` | OAPS + FIDES | Merge concepts, port into FIDES |
-| **Discovery** | Discovery service + well-known (`services/discovery/`) | Not found | `discover()` methods | `.well-known/aicp.json` | Not found | FIDES + OAPS | Extend FIDES with OAPS discovery patterns |
-| **Well-known discovery** | `/.well-known/fides.json` | Not found | Not found | `/.well-known/aicp.json` | Not found | FIDES + OAPS | Merge both paths into FIDES |
-| **Hosted registry** | Not found | Not found | `osp-registry` (Axum, SQLite) | Not found | Not found | OSP concept | Port concept into FIDES (TypeScript/Hono) |
-| **Public registry API** | Not found | Not found | Registry routes (`osp-registry/src/routes.rs`) | Not found | Not found | OSP concept | Create new in FIDES |
-| **Private registry mode** | Not found | Not found | Not found | Not found | Not found | None | Create new in FIDES |
-| **Relay-based discovery** | Not found | Not found | Not found | Not found | Not found | None | Create new in FIDES |
-| **DHT-based discovery** | Not found | Not found | Not found | Not found | Not found | None | Create new in FIDES |
-| **Federation-ready registry peering** | Not found | Not found | Not found | Not found | Not found | None | Create new in FIDES |
-| **Delegation token** | `DelegationToken` (`packages/core/src/delegation.ts`) | Not found | Not found | `DelegationToken` (`packages/core/src/index.ts:117`) | Embedded in `mandate_tree.py` | FIDES + OAPS | Harden delegation propagation and conformance |
-| **Session grant** | `SessionGrant` plus stores (`packages/core/src/delegation.ts`, `packages/core/src/session-store.ts`) | Not found | Not found | Not found | Not found | FIDES | Harden durable storage and auth boundaries |
-| **Policy bundle** | `PolicyBundle` (`packages/policy/src/index.ts`) plus standalone service (`services/policy-engine/src/index.ts`) | `GuardChain` (`guard.rs`) | Not found | `PolicyBundle` (`packages/policy/src/index.ts:24`) | `policy_dsl.py` | FIDES + OAPS | Harden FIDES policy persistence, approvals, and conformance |
-| **Policy engine** | Implemented evaluator and HTTP route (`packages/policy/src/index.ts`, `services/policy-engine/src/index.ts`) | `GuardChain`, `ApprovalStore` | Not found | `evaluatePolicy()` (`packages/policy/src/index.ts:162`) | `pre_execution_pipeline.py` | FIDES + Sardis patterns | Add production adapters and Sardis-style pre-execution pipeline integration |
-| **Intent** | Not found | Not found | Not found | `Intent` (`packages/core/src/index.ts:93`) | `mandates.py` | OAPS | Port into FIDES |
-| **Evidence event** | `EvidenceEvent` and hash-chain verifier (`packages/evidence/src/index.ts`) | Hash-chained audit log (`repo.rs:653-698`) | Not found | `EvidenceEvent` (`packages/core/src/index.ts:272`) + `EvidenceChain` | `policy_evidence.py`, ledger | FIDES + OAPS + AGIT | Harden persistence, anchoring, and cross-service use |
-| **Hash chain** | SHA-256 for Content-Digest | `compute_audit_hash` (`repo.rs:653-698`) | Not found | `EvidenceChain` (`packages/evidence/src/index.ts`) | Merkle ledger | AGIT + OAPS | Merge AGIT chaining + OAPS schema |
-| **Merkle proof** | Not found | `MerkleNode` (`state.rs:192-317`) | Not found | Not found | `merkle_tree.py` | AGIT + Sardis | Port concept for evidence verification |
-| **Revocation** | `createRevocation` (`rotation.ts`) — data only | Not found | Not found | Not found | Not found | FIDES | Extend into active revocation system |
-| **Incident** | Not found | Not found | Not found | Not found | Not found | None | Create new in FIDES |
-| **Runtime attestation** | Not found | Not found | Not found | Not found | Not found | None | Create new in FIDES |
-| **TEE** | Not found | Not found | Not found | Not found | Not found | None | Create new in FIDES |
-| **Approval workflow** | Not found | `ApprovalStore` (`approval.rs`) | Not found | `ApprovalRequest`/`ApprovalDecision` (`packages/core/src/index.ts:141-154`) | `approval_service.py` | OAPS + AGIT | Port OAPS primitives + AGIT guard pattern |
-| **Kill switch** | Not found | Not found | Not found | Not found | `kill_switch.py` | Sardis | Port concept, genericize in FIDES |
-| **Service lifecycle** | Not found | Not found | `ProvisionRequest`/`ProvisionResponse` | Not found | Not found | OSP concept | Port concept for agent lifecycle |
-| **Provisioning** | Not found | Not found | `provision()` (SDKs) | Not found | Not found | OSP concept | Port concept for agent registration |
-| **Rotation** | `rotateKey` (DID-changing) | Not found | `rotateCredentials()` | Not found | Not found | FIDES + OSP | Extend FIDES key rotation + credential rotation |
-| **Deprovisioning** | Not found | Not found | `deprovision()` (SDKs) | Not found | Not found | OSP concept | Port concept for agent deregistration |
-| **CLI** | `fides` CLI (`packages/cli/`) | `agit` CLI (`python/agit/cli/app.py`) | `osp` CLI (mostly stubs) | Python conformance CLI | `sardis` CLI (Python) | FIDES | Extend FIDES CLI |
-| **SDK** | `@fides/sdk` (`packages/sdk/`) | Python + TS SDKs | `@osp/client`, Go SDK | `@oaps/core` etc. | `@sardis/sdk`, `sardis-sdk-python` | FIDES | Extend FIDES SDK |
-| **Examples** | Limited | 16 demos | YAML examples | 100+ JSON payloads | Many Python/TS demos | FIDES + all | Create new FIDES examples |
-| **Tests** | Good coverage (`packages/sdk/test/`, `services/*/test/`) | Rust + Python + TS tests | Conformance tests (Python) | Node built-in test runner | 208 test files | FIDES | Extend FIDES test suite |
-| **Docs** | `docs/` (architecture, protocol spec) | `ARCHITECTURE.md`, `docs/` | `spec/`, `docs/` | `spec/`, `SPEC.md` | `docs-site/`, business docs | FIDES + OAPS spec | Extend FIDES docs |
-| **Canonical object signing** | Partial (HTTP signatures) | `canonical_serialize` (`hash.rs`) | `canonicalJson` (`crypto.ts`) | `canonicalJson` (`core/src/index.ts`) | Not found | AGIT + OAPS | Create unified canonical signing model |
-| **Version negotiation** | Not found | Not found | Not found | `negotiateVersion` (`core/src/index.ts:512`) | Not found | OAPS | Port into FIDES |
-| **Typed error vocabulary** | `FidesError` hierarchy (`packages/shared/src/errors.ts`) | `AgitError` (`error.rs`) | `ErrorResponse` schema | `ErrorObject` (`core/src/index.ts:253`) | Exception hierarchy | FIDES + OAPS | Extend FIDES errors with OAPS categories |
-| **Privacy model for evidence** | Not found | Not found | Not found | Not found | Not found | None | Create new in FIDES |
-| **Trust explainability** | Not found | Not found | Not found | Not found | Not found | None | Create new in FIDES |
-| **Adversarial simulation** | Not found | Not found | Not found | Not found | Not found | None | Create new in FIDES |
-| **Capability ontology** | Not found | Not found | `ServiceManifest` taxonomy | `CapabilityCard` | Not found | OAPS | Port into FIDES |
-| **Risk taxonomy** | Not found | `BlastRadiusReport` / `RiskLevel` | Not found | `compareRiskClass` | Anomaly engine | AGIT + Sardis | Port concepts into FIDES |
-| **Adapter interfaces** | A2A converter (`packages/sdk/src/discovery/a2a.ts`) | FIDES, A2A, MCP, LangGraph integrations | MCP server | MCP, A2A, x402, auth-web adapters | A2A, MCP, protocol verifiers | All | Create unified adapter framework in FIDES |
+|----------|-------|------|-----|------|--------|-------------|--------|
+| Agent identity | `packages/core/src/identity.ts`, `packages/shared/src/types.ts` | Adapter only: `python/agit/integrations/fides.py` | `osp-manifest/src/types.rs` | `ActorRef`/`ActorCard` | `fides_did.py`, `identity.py` | FIDES | extend existing |
+| Publisher identity | `packages/core/src/identity.ts` | not found | provider identity adjacent | ActorCard publisher semantics | publisher mixed with payment/API context | FIDES + OAPS | extend existing |
+| Principal identity | `packages/core/src/identity.ts` | not found | service principal adjacent | `ActorRef`, mandate principal | payment mandates/principals | FIDES + OAPS | extend existing |
+| DID/key format | `did:fides`, canonical signer | adapter-level FIDES DID | Ed25519 DID methods | DID as actor profile, no verifier | `fides_did.py` | FIDES | reuse existing |
+| Signing | `canonical-signer.ts`, SDK signing | canonical hashing, adapter signatures | `osp-crypto` | generic proof/HMAC | attestation envelope | FIDES | extend existing |
+| HTTP message signatures | SDK signing package | not core | not primary | documented gap | not generic | FIDES | reuse existing |
+| Canonical object signing | `packages/core/src/canonical-signer.ts` | `crates/agit-core/src/hash.rs` | `osp-crypto/src/canonical.rs` | core canonical JSON/hash | attestation envelope | FIDES + AGIT/OAPS prior art | extend existing |
+| Trust attestation | trust graph/service | adapter-only | trust tier/reputation metadata | profile draft | TrustFramework | FIDES | extend existing |
+| Trust graph | `services/trust-graph` | causal graph only | not found | not found | FIDES adapter/trust infra | FIDES | extend existing |
+| Reputation | capability scoring partial | not found | registry reputation metadata | not found | KYA/payment reputation | FIDES | extend existing |
+| Capability descriptor | `packages/core/src/capability.ts` | not found | service/capability manifest | CapabilityCard | agent auth/A2A/payment capabilities | OAPS + FIDES | extend existing |
+| Capability ontology | seed taxonomy + lookup helpers | blast radius/risk | service taxonomy | capability schemas/constants | risk/action patterns | FIDES + OAPS | extend existing |
+| AgentCard / ActorCard | `packages/core/src/agent-card.ts`, shared AgentCard | not found | service manifest | ActorCard | A2A AgentCard | FIDES + OAPS | extend existing |
+| Discovery | provider package/services | adapter only | service discovery | actor discovery | A2A/agent auth | FIDES | extend existing |
+| Well-known discovery | discovery service/provider | not found | manifest fetch | `.well-known/oaps.json` | agent auth/A2A well-known | FIDES | extend existing |
+| Registry | `services/registry` | not found | `osp-registry` | not broad runtime | not generic | FIDES + OSP | extend existing |
+| Relay | `services/relay`, relay provider | not found | not found | not found | not found | FIDES | extend existing |
+| DHT | signed pointer record + in-memory simulator | not found | not found | not found | not found | FIDES | extend existing |
+| Federation | signed peer record + local mock provider | not found | registry concepts | profile notes only | not found | FIDES + OSP | extend existing |
+| DelegationToken | `packages/core/src/delegation.ts` | not found | delegation chain structs | `DelegationToken` | mandates | FIDES + OAPS | extend existing |
+| SessionGrant | `packages/core/src/delegation.ts`, session store | not found | not found | auth-web session adjacent | grant/session-like agent auth | FIDES | extend existing |
+| PolicyBundle | `packages/policy` | guard chain | not core | policy package | policy DSL/pipeline | FIDES + OAPS | extend existing |
+| Policy engine | `packages/policy`, `services/policy-engine`, guard | guards/blast radius | not core | fail-closed evaluator | pre-execution pipeline | FIDES + Sardis | extend existing |
+| Intent | not first-class | not found | not found | foundation intent | AP2/payment intents | OAPS | create new |
+| ApprovalRequest | `packages/core/src/approval.ts` | `approval.rs` | HITL spec | core approvals | approval flow | FIDES + OAPS + Sardis | extend existing |
+| ApprovalDecision | `packages/core/src/approval.ts` | `approval.rs` | HITL spec | core approvals | approval flow | FIDES + OAPS + Sardis | extend existing |
+| EvidenceEvent | `packages/evidence` | commits/events/audit | webhook events | hash-linked evidence | evidence export/hash-chain | FIDES + OAPS + AGIT | extend existing |
+| Hash chain | `packages/evidence` | strong lineage/hash prior art | not generic | evidence package | policy hash-chain | FIDES + AGIT | extend existing |
+| Merkle proof | Merkle root + inclusion proof helpers | Merkle/state diff concepts | not found | not found | ledger anchor | FIDES + AGIT | extend existing |
+| Revocation | `packages/core/src/revocation.ts`, services | not core | docs/spec | revoke flow | identity/payment revocation | FIDES | extend existing |
+| Incident | `packages/core/src/revocation.ts`, services | not core | not found | not found | payment/trust context | FIDES | extend existing |
+| Runtime attestation | `packages/core/src/runtime-attestation.ts`, `packages/runtime` | not found | not found | not found | not generic | FIDES | extend existing |
+| TEE | Mock/HTTP adapter boundary | not found | not found | not found | not found | FIDES | adapter-ready |
+| Privacy/redaction | evidence privacy modes | not found | credential encryption | profile/spec only | payment privacy primitives | FIDES + Sardis prior art | extend existing |
+| Error vocabulary | broad error classes | `AgitError` | error responses | error taxonomy | exception/reason codes | FIDES + OAPS | extend existing |
+| Version negotiation | core record + discovery filters | not found | version fields | negotiateVersion | version fields | FIDES + OAPS | extend existing |
+| Kill switch | `packages/runtime`, CLI/agentd | not found | not found | revoke/fail-closed only | payment kill switch | FIDES + Sardis | extend existing |
+| Guardrails | guard/policy | guard chain/blast radius | not core | policy/approval | pre-execution pipeline | FIDES + Sardis + AGIT | extend existing |
+| Service lifecycle | agentd/services | not found | discover/provision/rotate/deprovision | not core | project provisioning payment-adjacent | OSP | adapter-ready |
+| Provisioning | not generic | not found | core OSP primitive | not core | payment/project-specific | OSP | adapter-ready |
+| Rotation | identity/session/revocation partial | not core | rotate credentials | not core | identity/payment rotation | FIDES + OSP | extend existing |
+| Deprovisioning | deregister/revoke partial | not found | core OSP primitive | revoke flows | payment/project-specific | OSP | adapter-ready |
+| CLI | `packages/cli`, binary `fides` | Python CLI | Rust/TS tools | CLI refs | several CLIs | FIDES | extend existing |
+| SDK | `packages/sdk` | TS/Python SDKs | TS/Python/Go/Rust | TS reference packages | TS/Python SDKs | FIDES | extend existing |
+| Examples | `examples/` | demos | examples | many fixtures/examples | many demos | FIDES | extend existing |
+| Tests | package/service/e2e/adversarial | Rust/Python/TS tests | conformance | reference tests | large suite | FIDES | extend existing |
+| Docs | docs present but stale | docs | spec/docs | spec/schemas | docs/site | FIDES | extend existing |
+| MCP adapter | adapter contract + manifest | exists | MCP server | MCP adapter | MCP server | OAPS + Sardis/OSP | adapter-ready |
+| A2A adapter | adapter contract + manifest | exists | A2A adjacent | A2A adapter | A2A resources/routes | FIDES + OAPS/Sardis | adapter-ready |
+| OAPS adapter | adapter contract + mapping set | not found | not found | source spec | not found | FIDES | extend existing |
+| OSP adapter | adapter contract + mapping set | not found | source spec | not found | not found | FIDES + OSP | adapter-ready |
+| AP2 adapter | payment action-flow adapter contract | not found | not core | payment profile | AP2 verifier/mandates | Sardis | adapter-ready |
+| x402 adapter | payment action-flow adapter contract | not found | not core | x402 adapter | x402 facilitator | Sardis/OAPS | adapter-ready |
+| Sardis adapter | payment action-flow adapter contract | FIDES adapter to AGIT | Sardis integration | profile relation | source consumer | FIDES + Sardis | extend existing |
 
----
+## Key Findings
 
-## Action Legend
+- FIDES already contains the most complete local runtime for this pivot, but it is not yet coherent enough to call FIDES v2 complete.
+- OAPS is the best semantic source for actor/delegation/mandate/approval/evidence/version/error concepts, but it is not a high-assurance trust runtime.
+- AGIT is useful for evidence lineage, hashing, state history, Merkle/diff concepts, and causal graph ideas.
+- OSP is useful for service lifecycle, registry, provisioning, rotation, deprovisioning, and provider/MCP integration semantics.
+- Sardis is useful for generic authority patterns but must remain payment-specific for actual payment execution.
 
-| Action | Meaning |
-|--------|---------|
-| **Reuse existing** | Use FIDES implementation as-is or with minor tweaks |
-| **Extend existing** | Build on top of FIDES implementation, add new features |
-| **Port from another repo** | Take concept/type/algorithm from another repo, reimplement in FIDES namespace |
-| **Create new** | No suitable source found; build from scratch |
-| **Leave as adapter-ready** | Define interface, expect external implementation |
-| **Leave as spec-complete** | Document the interface/protocol, no implementation yet |
+## Recommended Implementation Bias
 
----
-
-## Recommended Priority Order
-
-1. **Reuse FIDES identity + signing** — solid foundation
-2. **Port OAPS core primitives** — DelegationToken, PolicyBundle, EvidenceEvent, ActorCard, CapabilityCard, ApprovalRequest/Decision
-3. **Port AGIT hash-chain semantics** — for evidence ledger integrity
-4. **Port Sardis patterns** — pre-execution pipeline, kill switch, approval flow
-5. **Port OSP concepts** — registry pattern, service lifecycle, credential rotation
-6. **Create new** — session grants, runtime attestation, TEE, DHT/relay/federation, incidents, adversarial simulation
-7. **Leave as adapter-ready** — MCP, A2A, x402, AP2, OSP, Sardis runtime adapters
+1. Reuse and harden FIDES packages first.
+2. Port OAPS semantics into FIDES-owned types.
+3. Use AGIT as Rust adapter-ready prior art for evidence hashing/lineage.
+4. Use OSP for adapter semantics and lifecycle mapping only.
+5. Use Sardis for policy-before-execution, approvals, kill switch, evidence, high-risk action handling, and mandate-chain abstractions only.
+6. Keep DHT/relay/registry as discovery signals, never authority.

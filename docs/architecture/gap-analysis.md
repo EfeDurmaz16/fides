@@ -1,129 +1,303 @@
-# Gap Analysis
+# FIDES v2 Gap Analysis
 
-This document classifies the current status of every required FIDES v2 / Agent Trust Fabric feature after the first implementation pass. It is evidence-based and uses local files in this repository as the source of truth.
+This gap analysis compares the current local FIDES implementation with the requested FIDES v2 Agent Trust Fabric.
 
-## Status Legend
+## Summary
 
-| Status | Meaning |
-|--------|---------|
-| Implemented | Usable in code with tests or service routes |
-| Prototype | Usable local implementation, but not production-grade |
-| Mock | Intentionally local or fake provider for development/testing |
-| Adapter-ready | Interface or provider boundary exists; external production adapter is not implemented |
-| Spec-complete | Documented architecture/protocol exists; runtime implementation is not present |
-| Missing | Not implemented in this repository |
-| Avoid | Deliberately not included because it would weaken the trust-fabric boundary |
+FIDES is not a blank slate. It already has a strong TypeScript monorepo, packages, services, CLI, SDK, docs, tests, and several v2-shaped primitives.
 
-## Feature Gap Matrix
+The main gaps are not lack of code. They are:
 
-| # | Feature | Status | Evidence / notes |
-|---|---------|--------|------------------|
-| 1 | Local daemon | Prototype | `services/agentd/src/index.ts`, `services/agentd/test/routes.test.ts`; local HTTP API proxies identity/card/trust and hosts local policy/evidence/attestation/killswitch endpoints. |
-| 2 | Agent identity | Implemented | `packages/core/src/identity.ts`, `packages/sdk/src/identity/*`, `packages/core/test/identity.test.ts`, `packages/sdk/test/identity.test.ts`. |
-| 3 | Publisher identity | Prototype | `PublisherIdentity` in `packages/core/src/identity.ts`; verification providers are not production-backed. |
-| 4 | Principal identity | Prototype | `PrincipalIdentity` in `packages/core/src/identity.ts`; session/principal binding is basic. |
-| 5 | Domainless individual identity | Prototype | DID-based identity exists in SDK/core; individual proofing is not production-backed. |
-| 6 | Platform-hosted identity | Prototype | Architecture describes hosted identity. `services/platform-api` now exposes topology metadata and file-backed passkey credential binding persistence for platform-hosted principals, but does not issue identities or perform live verifier-backed proofing. |
-| 7 | Domain-verified identity | Prototype | `PublisherIdentity.verificationMethod = "dns"`, `packages/core/src/domain-verifier.ts`, `fides identity domain verify`, `GET /v1/identities/domain/verify`, discovery `POST /identities/{did}/domain/verify`, and registry rejection of unbacked `publisher.verified` claims. |
-| 8 | Organization-verified identity | Prototype | Org identity is modeled through `PrincipalIdentity.type = "organization"` with optional domain verification fields; `verifyOrganizationDomainDid` checks `_fides-org.<domain>` DNS TXT ownership, discovery persists organization-domain verification state, the SDK exposes `verifyOrganizationDomain`, and registry rejects unbacked `publisher.organization.verified` claims. |
-| 9 | Trust anchors | Prototype | `TrustAnchor` exists in `packages/core/src/identity.ts`; `GovernedTrustAnchor`, status/scope/issuer validation, and deterministic distribution bundles exist in `packages/core/src/trust-anchor.ts`; `services/platform-api` now exposes file-backed governed trust-anchor CRUD, status revocation, and distribution routes, but no federation peering or external governance workflow exists yet. |
-| 10 | Signed AgentCards | Implemented | `AgentCard` and `SignedAgentCard` in `packages/core/src/agent-card.ts`; canonical signing in `packages/core/src/canonical-signer.ts`; tests in `packages/core/test/agent-card.test.ts`. |
-| 11 | Capability descriptors | Implemented | `CapabilityDescriptor` and risk classifier in `packages/core/src/capability.ts`; tests in `packages/core/test/capability.test.ts`. |
-| 12 | Local discovery | Prototype | `packages/discovery/src/local-provider.ts`; file-backed local provider, not mDNS. |
-| 13 | Local network discovery interface | Adapter-ready | Provider abstraction exists in `packages/discovery/src/provider.ts`; LAN/mDNS transport not implemented. |
-| 14 | Well-known discovery | Implemented | `services/discovery/src/routes/well-known.ts`, `packages/discovery/src/well-known-provider.ts`, route tests. |
-| 15 | Hosted registry | Prototype | `services/registry/src/index.ts`; file-backed registry with public/private modes. |
-| 16 | Public registry API | Prototype | `services/registry/src/index.ts` exposes card registration, lookup, search, stats, mode updates. |
-| 17 | Private registry mode | Prototype | `services/registry/src/index.ts`, registry route tests cover private mode. |
-| 18 | Relay-based discovery | Prototype | `services/relay/src/index.ts`, `packages/discovery/src/relay-provider.ts`; relay is in-memory. |
-| 19 | DHT-based discovery | Mock | `packages/discovery/src/dht-provider.ts`; local/in-memory or pointer-level behavior, no libp2p production network. |
-| 20 | Federation-ready registry peering | Spec-complete | Architecture reserves the layer; peering protocol/runtime is not implemented. |
-| 21 | Trust graph | Implemented | `services/trust-graph/src/services/graph.ts`, route/service tests. |
-| 22 | Reputation engine | Implemented | `services/trust-graph/src/services/scoring.ts`, tests in `services/trust-graph/test/*`. |
-| 23 | Capability-specific reputation | Prototype | `services/trust-graph/src/services/capability-scoring.ts`, `services/trust-graph/test/capability-scoring.test.ts`. |
-| 24 | Trust scoring | Implemented | Direct/transitive scoring in `services/trust-graph/src/services/scoring.ts`. |
-| 25 | Policy engine | Implemented | `packages/policy/src/index.ts`, `packages/policy/test/policy.test.ts`; `services/policy-engine/src/index.ts` exposes standalone evaluation routes; `agentd` uses it in `/v1/policy/evaluate`. |
-| 26 | Delegation tokens | Implemented | `packages/core/src/delegation.ts`, `packages/core/test/delegation.test.ts`. |
-| 27 | Session grants | Implemented | `SessionGrant` helpers plus `SessionStore`, `InMemorySessionStore`, `FileSessionStore`, nonce replay rejection, and session invocation authorization in `packages/core/src/session-store.ts`; route coverage in `services/agentd/test/routes.test.ts`. |
-| 28 | Capability invocation | Prototype | Guard/policy decision path exists in `packages/guard/src/index.ts`; `services/agentd/src/index.ts` exposes `/v1/authorize`; actual remote invocation transport is adapter-ready. |
-| 29 | Evidence ledger | Implemented | `packages/evidence/src/index.ts`, `services/agentd/src/index.ts`, tests in `packages/evidence/test/evidence.test.ts`. |
-| 30 | Hash-chained evidence events | Implemented | `appendEvidenceEvent` and `verifyEvidenceChain` in `packages/evidence/src/index.ts`. |
-| 31 | Revocation records | Implemented | `packages/core/src/revocation.ts`, core tests, `agentd` revocation API routes, propagation outbox, and trust-graph record/read routes. |
-| 32 | Incident records | Implemented | `IncidentRecord` and impact aggregation in `packages/core/src/revocation.ts`; `agentd` incident API routes feed authorization context. |
-| 33 | Runtime attestation | Prototype | `packages/runtime/src/index.ts`, `services/agentd/src/index.ts`, runtime tests. |
-| 34 | TEE-ready attestation | Adapter-ready | `TEEAdapter`, `HttpTEEAdapter`, `AwsNitroTEEAdapter`, `IntelSGXTEEAdapter`, and `AmdSEVTEEAdapter` in `packages/runtime/src/index.ts`; vendor verification services are external adapters. |
-| 35 | Mock TEE provider | Mock | `MockTEEProvider` in `packages/runtime/src/index.ts`, `packages/runtime/test/runtime.test.ts`. |
-| 36 | Container image attestation provider interface | Prototype | `ContainerImageAttestationInput`, `ContainerImageAttestationAdapter`, and `ContainerImageAttestationProvider` validate registry/repository/digest claims locally; registry transparency or Sigstore verification is not implemented. |
-| 37 | Reproducible build attestation interface | Prototype | `BuildAttestationInput`, `BuildAttestationAdapter`, and `BuildProvenanceAttestationProvider` model image digest, source commit, and builder identity; external SLSA/in-toto verification is not implemented. |
-| 38 | GitHub attestation | Prototype | `GitHubAttestationInput`, `GitHubAttestationAdapter`, and `GitHubActionsAttestationProvider` validate structured workflow evidence and allowed repositories; GitHub artifact attestation API verification is not implemented. |
-| 39 | Email attestation | Missing | No email verifier/provider exists yet. |
-| 40 | Domain attestation | Prototype | DNS TXT verifier helper exists in `packages/core/src/domain-verifier.ts`; CLI, agentd, and discovery have Node DNS verification, with discovery persistence for verified identity domains. |
-| 41 | Package registry attestation | Prototype | `PackageAttestationInput`, `PackageAttestationAdapter`, and `PackageRegistryAttestationProvider` validate structured package integrity claims; live npm/PyPI/crates metadata verification is not implemented. |
-| 42 | Wallet attestation | Missing | Deliberately left out of FIDES core; Sardis should own payment/wallet-specific proofing. |
-| 43 | Passkey identity interface | Adapter-ready | `packages/core/src/passkey.ts` defines WebAuthn/passkey challenge, credential binding, verification result, and verifier adapter boundaries with local RP/origin/expiry/credential policy checks; `services/platform-api` persists verified credential bindings through memory/file storage; live WebAuthn cryptographic verification is external. |
-| 44 | CLI | Prototype | `packages/cli/src/index.ts` plus v2 commands for cards, policy, runtime, killswitch; daemon control is thin. |
-| 45 | Local HTTP API | Prototype | `services/agentd/src/index.ts`; local API tests in `services/agentd/test/routes.test.ts`. |
-| 46 | TypeScript SDK | Implemented | `packages/sdk/src/*`, SDK tests. |
-| 47 | Example agents | Prototype | `examples/calendar-agent.ts`, `examples/invoice-agent.ts`, `examples/payment-agent.ts`, `examples/requester-agent.ts`. |
-| 48 | End-to-end demo | Prototype | `examples/demo.ts`, `scripts/two-agents-demo.ts`, `scripts/authority-path-demo.ts`, `tests/e2e/full-flow.test.ts`. |
-| 49 | Threat model | Spec-complete | `docs/threat-model.md`. |
-| 50 | Protocol documentation | Spec-complete | `docs/protocol/fides-v2-spec.md`, `docs/protocol-spec.md`, architecture docs. |
-| 51 | Test suite | Implemented | `pnpm test` covers 15 packages and the service routes. |
-| 52 | Migration/versioning system | Spec-complete | `docs/migration-v1-v2.md`; runtime migration tooling is not implemented. |
-| 53 | Security review checklist | Spec-complete | `SECURITY.md`, `docs/threat-model.md`; no automated checklist gate yet. |
-| 54 | Future production hardening notes | Spec-complete | `docs/deployment.md`, `docs/threat-model.md`, implementation plan notes. |
+- protocol-object coherence,
+- signing envelope consistency,
+- capability-query discovery,
+- DHT pointer semantics,
+- first-class approval/invocation/version/error objects,
+- local daemon storage target,
+- interop adapter package,
+- complete CLI/API/SDK/demo alignment.
 
-## Current Reality by Layer
+## Baseline Strengths
 
-### Production-like
+| Area | Current evidence | Assessment |
+|---|---|---|
+| TS-first monorepo | `package.json`, `pnpm-workspace.yaml`, `turbo.json` | Strong. Keep. |
+| Core package | `packages/core/src/` | Good start, needs consolidation/hardening. |
+| Canonical signing | `packages/core/src/canonical-signer.ts` | Present, must become the one signing model. |
+| Policy/guard | `packages/policy/src/index.ts`, `packages/guard/src/index.ts` | Present, needs richer v2 decisions. |
+| Evidence | `packages/evidence/src/index.ts` | Present, needs signed v2 event model. |
+| Runtime attestation | `packages/runtime/src/index.ts` | Present, needs schema alignment and integration. |
+| Discovery providers | `packages/discovery/src/` | Present, needs capability-query and verification pipeline. |
+| Trust graph | `services/trust-graph/src/` | Present, needs v2 component scoring. |
+| Agent daemon | `services/agentd/src/` | Present, needs requested API/CLI/storage alignment. |
+| Registry/relay services | `services/registry/src/`, `services/relay/src/` | Present, prototype-to-v2 hardening needed. |
+| SDK | `packages/sdk/src/` | Present, Promise-based. |
+| CLI | `packages/cli/src/` | Present as `fides`; requested surface is `agentd`. |
+| Tests | `packages/*/test`, `services/*/test`, `tests/e2e`, `tests/adversarial` | Strong baseline. |
 
-- Existing v1 identity/signing SDK primitives: Ed25519 key generation, DID parsing, keystore, HTTP request signing and verification.
-- Trust graph service primitives: trust edge validation, graph traversal, trust/reputation scoring tests.
-- Core canonical signing, AgentCard validation, delegation signatures, evidence hash-chain verification, policy evaluator tests.
+## Blocking Architecture Gaps
 
-### Working prototype
+### 1. Protocol Object Model
 
-- `agentd` local HTTP API.
-- Hosted registry service with file persistence and public/private mode.
-- Relay service with in-memory queues and TTL.
-- Discovery provider orchestration.
-- Guard decision engine integrating trust, evidence, runtime attestation, incidents, kill switch, and policy.
-- Example agents and local demo scripts, including an authority path demo through service routes.
+Current state:
 
-### Local mock
+- Core objects exist across `packages/core`, `packages/shared`, package-specific types, and service-local payloads.
+- There are multiple AgentCard and identity shapes.
+- Signed objects use `SignedObject<T>` in some places, raw `signature` fields in others.
 
-- `MockTEEProvider` runtime attestation.
-- DHT discovery provider behavior.
-- Example-agent signatures in `examples/*`.
+Required:
 
-### Adapter-ready
+- One framework-agnostic protocol object model with shared signed fields:
+  - `schema_version`
+  - `id`
+  - `issuer`
+  - `subject` where applicable
+  - `created_at` or `issued_at`
+  - `expires_at` where applicable
+  - `payload_hash`
+  - `signature`
 
-- Runtime TEE adapters.
-- Local network/mDNS discovery.
-- DHT/libp2p discovery.
-- Federation peering.
-- Domain verification helper plus CLI, agentd, discovery DNS verification, and registry checks for claimed verified publishers.
-- External payment/action control plane integration through Sardis, not FIDES core.
+Action:
 
-### Still missing
+- Create/extend protocol modules under `packages/core`.
+- Keep compatibility exports until services/SDK/CLI migrate.
 
-- Production attestation providers: live Nitro, SGX, SEV, Sigstore/SLSA, GitHub artifact-attestation, email, package registry metadata, and WebAuthn verifier adapters.
-- Federation registry peering implementation.
-- Real mDNS/libp2p transport.
-- Platform metadata API under `services/platform-api/`.
+### 2. Identity v2 Hardening
 
-## Remaining Blockers for a Production FIDES v2
+Current state:
 
-1. Durable trust-fabric state: registry, evidence, revocation, and incidents need real storage contracts; sessions now have a file-backed local store but not a production database adapter.
-2. Production attestation providers: the TEE/build/container/package/GitHub/passkey providers now have adapter boundaries or local structured verification, but live vendor/API-backed verification is still missing; domain and organization verification still depend on DNS/discovery availability.
-3. Federation semantics: registry peering, cross-node revocation conflict handling, and cross-node trust-anchor governance workflows need implementation.
-4. Authority separation hardening: identity, trust score, and policy are separated conceptually, but remote invocation execution remains adapter-ready rather than implemented.
-5. Service packaging: platform-api and policy-engine now have standalone service packages, Dockerfiles, compose wiring, CI image builds, file-backed platform passkey binding routes, and policy evaluation routes; they still need production-grade auth beyond shared API keys.
+- `packages/core/src/identity.ts` defines Agent/Publisher/Principal types.
+- `createIdentity` accepts an external DID and fills `publicKey` with random bytes, not a real keypair.
 
-## Next Implementation Slice
+Required:
 
-1. Add production storage adapters for registry, evidence, revocation, incidents, and session state.
-2. Add live vendor-backed attestation verification for Nitro, SGX, SEV, Sigstore/SLSA, GitHub artifact attestations, email, package registries, and WebAuthn/passkey adapters.
-3. Add federation peering for trust-anchor governance and organization publisher policy beyond DNS-backed registry enforcement.
-4. Extend the authority path demo into a multi-process demo that starts discovery, trust-graph, registry, relay, policy-engine, agentd, and platform-api.
-5. Add federation peering and cross-node revocation conflict semantics.
+- Real Ed25519 keypair issuance.
+- Publisher type taxonomy.
+- Domainless, hosted, domain-verified, org-verified identities.
+- Trust anchors beyond domain.
+
+Action:
+
+- Add `packages/core/src/identity-v2.ts` or harden `identity.ts`.
+- Preserve existing exports but make new creation path cryptographically correct.
+
+### 3. Signing Consistency
+
+Current state:
+
+- `SignedObject<T>` proof model exists.
+- Delegation/revocation/incident use raw hex `signature` fields.
+- HTTP request signing exists separately.
+
+Required:
+
+- One canonical signing model for all signed protocol objects.
+- HTTP signatures remain transport-level, not object-level protocol signing.
+
+Action:
+
+- Add a signed envelope and helper functions.
+- Migrate object-specific signing to shared helpers.
+
+### 4. Discovery Semantics
+
+Current state:
+
+- Discovery provider interface resolves by DID.
+- DHT provider stores direct AgentCards.
+
+Required:
+
+- Discover by `DiscoveryQuery` containing capability, constraints, principal, policy context, and versions.
+- Providers return `DiscoveryCandidate[]`.
+- Verification pipeline:
+  1. verify signed records,
+  2. verify AgentCards,
+  3. check version compatibility,
+  4. check capability compatibility,
+  5. compute trust,
+  6. evaluate policy,
+  7. emit evidence.
+- DHT provides signed pointers only.
+
+Action:
+
+- Extend provider API while preserving existing `resolve` compatibility.
+- Add signed `DHTPointerRecord`.
+
+### 5. Trust/Reputation v2
+
+Current state:
+
+- Trust graph and capability scoring exist.
+- Guard explainability exists.
+
+Required:
+
+- `TrustResult` with component scores, band, reasons, risk flags, evidence refs, required controls.
+- Capability-specific, principal-specific, publisher-weighted reputation.
+- Incident, novelty, and context-boundary penalties.
+
+Action:
+
+- Add new types to core/shared.
+- Extend trust graph service scoring incrementally.
+
+### 6. Policy/Approval/Kill Switch
+
+Current state:
+
+- Policy evaluator returns `allow`, `deny`, `approve-required`, `dry-run`.
+- Guard handles approval and kill switch context.
+- Kill switch package exists.
+
+Required:
+
+- Decision vocabulary includes `require_approval`, `dry_run_only`, `scope_limit`, `risk_limit`.
+- First-class `ApprovalRequest`, `ApprovalDecision`, `ApprovalPolicy`.
+- Kill switch rules for agent, publisher, capability, session, principal, high-risk class.
+
+Action:
+
+- Add protocol objects and compatibility mapping.
+- Move approval from context flag to durable signed object lifecycle.
+
+### 7. Delegation/Session/Invocation
+
+Current state:
+
+- DelegationToken and SessionGrant exist.
+- Agentd authorizes sessions and invocation-style checks.
+
+Required:
+
+- SessionGrant fields: session_id, requester_agent_id, target_agent_id, principal_id, capability, scopes, constraints, policy_hash, trust_result_hash, issued_at, expires_at, nonce, signature.
+- Signed InvocationRequest and InvocationResult.
+- Input/output validation.
+- Evidence events for invocation lifecycle.
+
+Action:
+
+- Add v2 objects first.
+- Then adapt agentd route logic.
+
+### 8. Evidence v2
+
+Current state:
+
+- Evidence events have id/type/timestamp/actor/action/target/payload/privacy/prevHash/hash/signature.
+- Merkle root is computed.
+
+Required:
+
+- Event taxonomy and fields:
+  - event_id,
+  - actor,
+  - subject,
+  - principal,
+  - capability,
+  - input_hash,
+  - output_hash,
+  - policy_hash,
+  - decision,
+  - risk_level,
+  - privacy_mode,
+  - prev_event_hash,
+  - signature.
+- Default redacted/hash-only behavior.
+- Export and tamper detection.
+
+Action:
+
+- Add EvidenceEvent v2 and compatibility adapter.
+- Keep current chain verifier until migration is complete.
+
+### 9. Version/Error Vocabularies
+
+Current state:
+
+- Error classes exist but are broad.
+- Versioning error exists, not a negotiation protocol.
+
+Required:
+
+- `ErrorEnvelope` with code/category/severity/retryable/message/details.
+- Stable codes such as `IDENTITY_INVALID_SIGNATURE`, `POLICY_DENIED`, `DHT_POINTER_TAMPERED`.
+- `VersionNegotiationRecord` with supported/required/negotiated versions and compatibility errors.
+
+Action:
+
+- Add to `packages/core` and export via SDK/CLI/API.
+
+### 10. Interop Adapters
+
+Current state:
+
+- Some A2A-like types exist.
+- No unified `packages/adapters` package.
+
+Required:
+
+- MCP, A2A, OAPS, OSP, AP2, x402, Sardis adapter interfaces.
+
+Action:
+
+- Add interface-only package first.
+- Provide mapping docs.
+
+### 11. Local Daemon Storage
+
+Current state:
+
+- Agentd supports file-backed and Postgres authority stores.
+
+Required:
+
+- Local-first SQLite with versioned migrations and `~/.fides/` config layout.
+
+Action:
+
+- Add SQLite adapter without removing existing Postgres support.
+
+### 12. CLI/API/Demo
+
+Current state:
+
+- CLI binary is `fides`.
+- Agentd API is `/v1/*`.
+- Examples exist.
+
+Required:
+
+- `agentd` command surface.
+- Requested endpoint set.
+- Full demo and adversarial simulation command.
+
+Action:
+
+- Add `agentd` binary/alias or `fides agentd`.
+- Add compatibility routes where practical.
+- Add `demo run` and `simulate adversarial`.
+
+## Cross-Repo Import Boundaries
+
+| Repo | Bring into FIDES | Do not bring |
+|---|---|---|
+| AGIT | Hashing, lineage, Merkle/state diff concepts, audit/event ideas, causal graph, Rust adapter option | VCS semantics as core protocol, current FIDES adapter as canon |
+| OAPS | Actor/delegation/mandate/approval/evidence/version/error semantics | Runtime dependency on `@oaps/core`, payment profile execution |
+| OSP | Registry/provision/rotate/deprovision adapter semantics | Service lifecycle as FIDES core authority |
+| Sardis | Policy-before-execution, approvals, kill switch, evidence, mandate-chain abstraction | Stablecoins, wallets, merchants, compliance, spending limits, payment rails |
+
+## Definition of Publishable v2 Prototype
+
+Publishable prototype means:
+
+- Core packages build.
+- Signed protocol objects are coherent.
+- Discovery returns verified candidates, not authority.
+- Policy-before-execution gates invocation.
+- Evidence is hash-chained and privacy-aware.
+- DHT uses signed pointers only.
+- CLI/SDK/demo can run a full local scenario.
+- Adversarial simulation demonstrates tampering, revocation, expired attestation, and evidence-chain failure.
+- Docs and tests report current limitations honestly.

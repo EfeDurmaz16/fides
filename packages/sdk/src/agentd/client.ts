@@ -1,12 +1,16 @@
 import {
-  createDelegationToken,
+  createDelegationTokenV2,
   createIncidentRecord,
   createRevocationRecord,
   deriveEd25519PublicKeyHex,
-  signDelegationToken,
+  didFromPublicKey,
+  isErrorEnvelope,
+  signDelegationTokenV2,
   signIncidentRecord,
   signRevocationRecord,
   type DelegationToken as CoreDelegationToken,
+  type SignedDelegationTokenV2 as CoreSignedDelegationTokenV2,
+  type ErrorEnvelope,
   type IncidentRecord as CoreIncidentRecord,
   type RevocationRecord as CoreRevocationRecord,
 } from '@fides/core'
@@ -15,6 +19,23 @@ import type { AgentCard } from '../registry/client.js'
 export interface AgentdClientOptions {
   baseUrl: string
   apiKey?: string
+}
+
+export interface AgentdStoreHealth {
+  kind?: string
+  ok?: boolean
+  path?: string
+  detail?: string
+}
+
+export interface AgentdHealthResponse {
+  status: 'healthy' | 'degraded' | string
+  service: string
+  timestamp?: string
+  uptime?: number
+  checks?: Record<string, string>
+  authorityStore?: AgentdStoreHealth
+  localStateStore?: AgentdStoreHealth
 }
 
 export interface AuthorizationRequest {
@@ -34,6 +55,7 @@ export interface AuthorizationRequest {
 }
 
 export type DelegationToken = CoreDelegationToken
+export type SignedDelegationTokenV2 = CoreSignedDelegationTokenV2
 
 export interface SessionGrant {
   id: string
@@ -48,7 +70,8 @@ export interface SessionGrant {
 }
 
 export interface SessionCreateRequest {
-  token: DelegationToken
+  token?: DelegationToken
+  signedToken?: SignedDelegationTokenV2
   capabilityId?: string
   audience?: string
   boundTo?: string
@@ -60,6 +83,7 @@ export interface SessionCreateResponse {
   authorized: boolean
   session?: SessionGrant
   errors?: string[]
+  signedDelegationVerified?: boolean
 }
 
 export interface SessionLookupResponse {
@@ -111,7 +135,7 @@ export interface CreateSignedSessionOptions {
   delegatee: string
   capabilities: string[]
   privateKey: Uint8Array | string
-  constraints?: DelegationToken['constraints']
+  constraints?: Record<string, unknown>
   audience?: string[]
   capabilityId?: string
   boundTo?: string
@@ -160,7 +184,7 @@ export interface IncidentListResponse {
 }
 
 export interface AuthorizationDecision {
-  decision: 'allow' | 'deny'
+  decision: 'allow' | 'deny' | 'approve-required' | 'dry-run'
   explanation: string
   factors?: Array<Record<string, unknown>>
   session?: Record<string, unknown>
@@ -222,7 +246,8 @@ export class AgentdError extends Error {
   constructor(
     message: string,
     readonly status?: number,
-    readonly payload?: unknown
+    readonly payload?: unknown,
+    readonly error?: ErrorEnvelope
   ) {
     super(message)
     this.name = 'AgentdError'
@@ -232,14 +257,23 @@ export class AgentdError extends Error {
 export class AgentdClient {
   constructor(private options: AgentdClientOptions) {}
 
+  async health(): Promise<AgentdHealthResponse> {
+    return this.get<AgentdHealthResponse>('/health')
+  }
+
   async createSession(request: SessionCreateRequest): Promise<SessionCreateResponse> {
     return this.post<SessionCreateResponse>('/v1/sessions', request)
   }
 
   async createSignedSession(options: CreateSignedSessionOptions): Promise<SessionCreateResponse> {
     const privateKey = this.privateKeyBytes(options.privateKey)
+    const expectedDelegator = await this.didForPrivateKey(privateKey)
+    if (options.delegator !== expectedDelegator) {
+      throw new AgentdError('Delegator DID must match the supplied Ed25519 private key')
+    }
+
     const audience = options.audience ?? ['agentd']
-    const token = createDelegationToken({
+    const token = createDelegationTokenV2({
       delegator: options.delegator,
       delegatee: options.delegatee,
       capabilities: options.capabilities,
@@ -247,15 +281,14 @@ export class AgentdClient {
       expiresAt: options.tokenExpiresAt ?? this.expiresAt(options.tokenTtlMs ?? 3600_000),
       audience,
     })
-    const signedToken = await signDelegationToken(token, privateKey)
+    const signedToken = await signDelegationTokenV2(token, privateKey, options.delegator)
 
     return this.createSession({
-      token: signedToken,
+      signedToken,
       capabilityId: options.capabilityId,
       audience: options.sessionAudience ?? audience[0] ?? 'agentd',
       boundTo: options.boundTo,
       ttlMs: options.sessionTtlMs,
-      delegatorPublicKey: await this.publicKeyHex(options.privateKey),
     })
   }
 
@@ -369,6 +402,11 @@ export class AgentdClient {
     return deriveEd25519PublicKeyHex(hex)
   }
 
+  private async didForPrivateKey(key: Uint8Array): Promise<string> {
+    const publicKeyHex = await this.publicKeyHex(key)
+    return didFromPublicKey(Uint8Array.from(Buffer.from(publicKeyHex, 'hex')))
+  }
+
   private expiresAt(ttlMs: number): string {
     return new Date(Date.now() + ttlMs).toISOString()
   }
@@ -383,7 +421,9 @@ export class AgentdClient {
     const text = await response.text()
     const payload = text ? JSON.parse(text) : {}
     if (!response.ok) {
-      throw new AgentdError(`agentd request failed: ${response.status}`, response.status, payload)
+      const envelope = extractErrorEnvelope(payload)
+      const message = envelope?.message ?? extractStringError(payload) ?? `agentd request failed: ${response.status}`
+      throw new AgentdError(message, response.status, payload, envelope)
     }
     return payload as T
   }
@@ -391,4 +431,17 @@ export class AgentdClient {
   private baseUrl(): string {
     return this.options.baseUrl.replace(/\/$/, '')
   }
+}
+
+function extractErrorEnvelope(payload: unknown): ErrorEnvelope | undefined {
+  if (isErrorEnvelope(payload)) return payload
+  if (!payload || typeof payload !== 'object') return undefined
+  const error = (payload as { error?: unknown }).error
+  return isErrorEnvelope(error) ? error : undefined
+}
+
+function extractStringError(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== 'object') return undefined
+  const error = (payload as { error?: unknown }).error
+  return typeof error === 'string' ? error : undefined
 }

@@ -87,6 +87,8 @@ export {
   AgentdError,
   type AgentdCardResponse,
   type AgentdClientOptions,
+  type AgentdHealthResponse,
+  type AgentdStoreHealth,
   type AuthorizationDecision,
   type AuthorizationRequest,
   type AuthorityPropagationResponse,
@@ -134,11 +136,36 @@ export { metricsMiddleware } from './observability/metrics-middleware.js'
 
 // High-level API
 export { Fides } from './fides.js'
+export {
+  FidesClient,
+  FidesClientError,
+  type FidesClientOptions,
+  type FidesHealthResponse,
+  type FidesDiscoveryQuery,
+  type FidesDiscoveryResponse,
+  type FidesProviderRecord,
+  type FidesRegistryPublishRequest,
+  type FidesRelayRegisterRequest,
+  type FidesDhtPublishRequest,
+  type FidesInvocationRequest,
+  type FidesInvocationResponse,
+  type FidesGraphInspectionResponse,
+  type FidesPolicyDecision,
+  type FidesPolicyDecisionAction,
+  type FidesPolicyEvaluationResponse,
+} from './fides-client.js'
 
 // Integration exports
 export {
+  AgitPrimitiveBridge,
   AgitCommitSigner,
   TrustGatedAccess,
+  type AgitEvidenceHashChainInput,
+  type AgitEvidenceHashChainResult,
+  type AgitMerkleProofInput,
+  type AgitMerkleProofResult,
+  type AgitPrimitiveBridgeOptions,
+  type AgitRustPrimitiveAdapter,
   type CommitSignature,
   type CommitVerification,
   type TrustGateResult,

@@ -81,7 +81,8 @@ describe('policy-engine service', () => {
 
     expect(res.status).toBe(200)
     const data = await res.json()
-    expect(data.decision).toBe('approve-required')
+    expect(data.decision).toBe('require_approval')
+    expect(data.legacyDecision).toBe('approve-required')
   })
 
   it('returns dry-run when dry-run rule matches', async () => {
@@ -93,7 +94,8 @@ describe('policy-engine service', () => {
 
     expect(res.status).toBe(200)
     const data = await res.json()
-    expect(data.decision).toBe('dry-run')
+    expect(data.decision).toBe('dry_run_only')
+    expect(data.legacyDecision).toBe('dry-run')
   })
 
   it('rejects invalid policy bundles', async () => {

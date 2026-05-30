@@ -1,879 +1,511 @@
-# Implementation Plan
+# FIDES v2 Implementation Plan
 
-This document provides a detailed, milestone-based implementation plan for FIDES v2 / Agent Trust Fabric. Each milestone is designed to be executable by a coding agent with atomic commits.
+This plan is designed for a long-running coding goal on branch `fides-v2-agent-trust-fabric`.
 
-## Architecture Decisions (Enforced)
+Work style:
 
-- **TS-first, Rust adapter-ready.**
-- **OAPS concepts ported into FIDES, not imported as runtime dependencies.**
-- **Sardis contributes generic patterns only.**
-- **Protocol objects, crypto, canonical JSON, and public schemas remain framework-agnostic.**
-- **Public SDK exposes Promise-based APIs.**
+- Use atomic commits.
+- Run `git status` before edits.
+- Preserve untracked local instruction/config files unless explicitly asked otherwise.
+- Do not touch dirty sibling repos except read-only inspection.
+- Docs first, then code.
+- Verify after each meaningful milestone.
+- Do not claim completion without test/typecheck/demo status.
 
----
+## Phase 0: Inspection and Architecture Docs
 
-## Milestone 1: Stabilize FIDES Core
+Status: started.
 
-**Goal:** Fix known issues in FIDES v1 before building v2.
+Deliverables:
 
-**Files to modify:**
-- `packages/shared/src/errors.ts` — Add OAPS error categories
-- `packages/shared/src/constants.ts` — Add protocol version constant
-- `packages/sdk/src/identity/did.ts` — Document W3C non-compliance
-- `packages/sdk/src/identity/rotation.ts` — Document DID-changing rotation behavior
-- `services/trust-graph/src/services/scoring.ts` — Fix trust decay formula or update spec
-- `docs/protocol-spec.md` — Update to match implementation or vice versa
-- `package.json` (discovery, trust-graph) — Normalize to `@fides/discovery`, `@fides/trust-graph`
+- `docs/inspection/fides-report.md`
+- `docs/inspection/agit-report.md`
+- `docs/inspection/osp-report.md`
+- `docs/inspection/oaps-report.md`
+- `docs/inspection/sardis-report.md`
+- `docs/inspection/cross-repo-primitive-map.md`
+- `docs/architecture/fides-v2-agent-trust-fabric.md`
+- `docs/architecture/gap-analysis.md`
+- `docs/architecture/implementation-plan.md`
+- `docs/architecture/implementation-agent-prompt.md`
 
-**Packages to create:** None
+Commits:
 
-**Types/schemas to add:**
-- `ProtocolVersion = "fides-v2.0.0"`
-- Extended `FidesError` categories: `capability`, `execution`, `economic`, `settlement`, `versioning`
+- `docs: add fides v2 inspection reports`
+- `docs: add fides v2 architecture plan`
 
-**Tests to add:**
-- Test that trust decay formula matches spec (or update spec test)
-- Test nonce replay protection in server services
+Verification:
 
-**Docs to update:**
-- `docs/protocol-spec.md`
-- `docs/architecture.md`
+- `pnpm typecheck` after docs if package scripts tolerate doc-only changes.
+- `git diff --check`.
 
-**Expected CLI/API behavior:** No breaking changes. `fides status` should report protocol version.
+## Milestone 1: Stabilize Protocol Foundation
 
-**Commit checklist:**
-- [ ] Fix package names
-- [ ] Fix trust decay formula or spec
-- [ ] Extend error hierarchy
-- [ ] Add protocol version constant
-- [ ] Update docs
+Goal: establish a coherent v2 protocol surface without breaking existing services.
 
-**Validation command:** `pnpm test` (all existing tests pass)
+Tasks:
 
----
+1. Add v2 protocol constants and version list.
+2. Add `ErrorEnvelope` and stable error vocabulary.
+3. Add `VersionNegotiationRecord` and helper functions.
+4. Add `ProtocolObject` and `SignedProtocolObject` base types.
+5. Add compatibility helpers from current `SignedObject<T>`.
+6. Add tests for canonical hash stability and error/version records.
+
+Primary files:
+
+- `packages/core/src/protocol.ts`
+- `packages/core/src/errors.ts`
+- `packages/core/src/versioning.ts`
+- `packages/core/src/canonical-signer.ts`
+- `packages/core/src/index.ts`
+- `packages/core/test/*`
+- `packages/shared/src/errors.ts`
+
+Commit:
+
+- `feat(core): add protocol versioning and error envelopes`
+
+Verification:
+
+- `pnpm --filter @fides/core test`
+- `pnpm --filter @fides/core typecheck`
 
 ## Milestone 2: Identity v2
 
-**Goal:** Introduce AgentIdentity, PublisherIdentity, PrincipalIdentity, and trust anchors.
-
-**Files to modify:**
-- `packages/sdk/src/identity/` — Refactor to support multi-level identity
-- `packages/shared/src/types.ts` — Add new identity types
-
-**Packages to create:**
-- `packages/@fides/core/` — New package for core primitives
-
-**Types/schemas to add:**
-```typescript
-interface AgentIdentity {
-  did: string;
-  publicKey: Uint8Array;
-  keyType: "Ed25519";
-  createdAt: string;
-  publisher?: PublisherIdentity;
-  principal?: PrincipalIdentity;
-}
-
-interface PublisherIdentity {
-  did: string;
-  name: string;
-  domain?: string;
-  verified: boolean;
-  verificationMethod: "dns" | "github" | "email" | "manual";
-}
-
-interface PrincipalIdentity {
-  did: string;
-  type: "individual" | "organization" | "platform";
-  displayName: string;
-}
-
-interface TrustAnchor {
-  did: string;
-  name: string;
-  publicKey: Uint8Array;
-  attestation: SignedObject<TrustAttestation>;
-}
-```
-
-**Tests to add:**
-- Identity creation and round-trip
-- Publisher verification mock
-- Principal identity resolution
-- Trust anchor validation
-
-**Docs to update:**
-- `docs/protocol/identity-v2.md`
-
-**Expected CLI/API behavior:**
-- `fides identity create --type agent`
-- `fides identity create --type publisher --name "Acme Corp" --domain acme.com`
-- `fides identity create --type principal --name "Alice"`
-- `fides trust anchor add <did>`
-
-**Commit checklist:**
-- [ ] Create `@fides/core` package
-- [ ] Add identity v2 types
-- [ ] Refactor existing identity code to use new types (backward compatible)
-- [ ] Add trust anchor primitive
-- [ ] Add CLI commands
-- [ ] Write tests
-
-**Validation command:** `pnpm test && pnpm typecheck`
-
----
-
-## Milestone 3: AgentCards and Capabilities
-
-**Goal:** Signed AgentCards with CapabilityDescriptors.
-
-**Files to modify:**
-- `packages/shared/src/types.ts` — Extend AgentCard
-- `packages/sdk/src/discovery/agent-client.ts` — Use new AgentCard
-- `services/discovery/src/routes/well-known.ts` — Serve signed AgentCards
-
-**Packages to create:** None (use `@fides/core`)
-
-**Types/schemas to add:**
-```typescript
-interface AgentCard {
-  id: string;
-  identity: AgentIdentity;
-  publisher?: PublisherIdentity;
-  capabilities: CapabilityDescriptor[];
-  endpoints: EndpointDescriptor[];
-  policies: PolicyRequirement[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface CapabilityDescriptor {
-  id: string;
-  name: string;
-  description: string;
-  inputSchema: JSONSchema;
-  outputSchema: JSONSchema;
-  riskLevel: "low" | "medium" | "high" | "critical";
-  requiresApproval: boolean;
-  requiresRuntimeAttestation: boolean;
-}
-
-interface SignedAgentCard extends SignedObject<AgentCard> {}
-```
-
-**Tests to add:**
-- AgentCard creation and validation
-- CapabilityDescriptor risk classification
-- SignedAgentCard verification
-- A2A compatibility conversion
-
-**Docs to update:**
-- `docs/protocol/agent-cards.md`
-- `docs/protocol/capabilities.md`
-
-**Expected CLI/API behavior:**
-- `fides card create` — creates and signs AgentCard
-- `fides card verify <did>` — verifies signed AgentCard
-- `fides capability add <name> --risk high`
-
-**Commit checklist:**
-- [ ] Add AgentCard v2 types
-- [ ] Add CapabilityDescriptor
-- [ ] Implement canonical signing for AgentCard
-- [ ] Update discovery service to serve signed cards
-- [ ] Update CLI
-- [ ] Write tests
-
-**Validation command:** `pnpm test && pnpm typecheck`
-
----
-
-## Milestone 4: Discovery Provider Architecture
-
-**Goal:** Pluggable discovery with 5 providers.
-
-**Files to modify:**
-- `packages/sdk/src/discovery/` — Refactor to use provider pattern
-
-**Packages to create:**
-- `packages/@fides/discovery/` — Discovery provider framework
-
-**Types/schemas to add:**
-```typescript
-interface DiscoveryProvider {
-  readonly name: string;
-  resolve(did: string): Promise<AgentCard | null>;
-  register(card: SignedAgentCard): Promise<void>;
-  deregister(did: string): Promise<void>;
-}
-
-class LocalDiscoveryProvider implements DiscoveryProvider { /* mDNS / local network */ }
-class WellKnownDiscoveryProvider implements DiscoveryProvider { /* HTTP .well-known */ }
-class RegistryDiscoveryProvider implements DiscoveryProvider { /* Hosted registry */ }
-class RelayDiscoveryProvider implements DiscoveryProvider { /* Relay server */ }
-class DHTDiscoveryProvider implements DiscoveryProvider { /* DHT pointers */ }
-
-class DiscoveryOrchestrator {
-  constructor(providers: DiscoveryProvider[]);
-  resolve(did: string): Promise<AgentCard | null>;
-}
-```
-
-**Tests to add:**
-- Each provider unit test
-- Orchestrator fallback test
-- Provider priority test
-
-**Docs to update:**
-- `docs/protocol/discovery.md`
-
-**Expected CLI/API behavior:**
-- `fides discover --provider local`
-- `fides discover --provider registry`
-- `fides discover --provider all`
-
-**Commit checklist:**
-- [ ] Create `@fides/discovery` package
-- [ ] Implement provider interface
-- [ ] Implement WellKnown provider (port from existing)
-- [ ] Implement Local provider (stub with mDNS-ready interface)
-- [ ] Implement Registry provider (stub with HTTP interface)
-- [ ] Implement Relay provider (stub)
-- [ ] Implement DHT provider (stub)
-- [ ] Write tests
-
-**Validation command:** `pnpm test && pnpm typecheck`
-
----
-
-## Milestone 5: Registry and Relay
-
-**Goal:** Hosted registry (public/private) and mock relay server.
-
-**Files to modify:**
-- `services/discovery/src/` — Extend with registry routes
-
-**Packages to create:**
-- `services/registry/` — New registry service (or extend discovery)
-- `services/relay/` — Mock relay server
-
-**Types/schemas to add:**
-```typescript
-interface RegistryRecord {
-  did: string;
-  card: SignedAgentCard;
-  registeredAt: string;
-  updatedAt: string;
-  registryMode: "public" | "private";
-  federationPeers: string[];
-}
-
-interface RelayMessage {
-  id: string;
-  to: string;
-  payload: unknown;
-  ttl: number;
-}
-```
-
-**Tests to add:**
-- Registry CRUD
-- Private registry access control
-- Relay message routing
-- Federation peering (stub)
-
-**Docs to update:**
-- `docs/protocol/registry.md`
-- `docs/protocol/relay.md`
-
-**Expected CLI/API behavior:**
-- `fides registry register --card ./agent-card.json`
-- `fides registry resolve <did>`
-- `fides registry set-mode <did> private`
-- `fides relay send --to <did> --message "..."`
-
-**Commit checklist:**
-- [ ] Create registry service
-- [ ] Add public/private mode
-- [ ] Create mock relay server
-- [ ] Add federation peering stubs
-- [ ] Update discovery service to use registry
-- [ ] Write tests
-
-**Validation command:** `pnpm test && docker-compose -f docker-compose.dev.yml up --build`
-
----
-
-## Milestone 6: DHT Discovery
-
-**Goal:** Signed DHT pointer records and in-memory DHT simulator.
-
-**Files to modify:**
-- `packages/@fides/discovery/src/dht-provider.ts`
-
-**Packages to create:** None
-
-**Types/schemas to add:**
-```typescript
-interface DHTPointerRecord {
-  did: string;
-  registryUrl: string;
-  relayUrl?: string;
-  signature: string;  // signed by DID
-  ttl: number;
-}
-```
-
-**Tests to add:**
-- DHT record creation and validation
-- In-memory DHT simulator lookup
-- Record expiry
-
-**Docs to update:**
-- `docs/protocol/dht.md`
-
-**Expected CLI/API behavior:**
-- `fides dht publish --registry <url>`
-- `fides dht resolve <did>`
-
-**Commit checklist:**
-- [ ] Implement DHT pointer record
-- [ ] Implement in-memory DHT simulator
-- [ ] Add libp2p adapter interface (stub)
-- [ ] Write tests
-
-**Validation command:** `pnpm test`
-
----
-
-## Milestone 7: Trust and Reputation v2
-
-**Goal:** Capability-specific reputation, context-specific trust, incident penalties.
-
-**Files to modify:**
-- `services/trust-graph/src/services/scoring.ts`
-- `services/trust-graph/src/db/schema.ts`
-- `packages/sdk/src/trust/`
-
-**Packages to create:** None
-
-**Types/schemas to add:**
-```typescript
-interface ReputationScore {
-  did: string;
-  globalScore: number;
-  capabilityScores: Record<string, number>;
-  contextScores: Record<string, number>;
-  incidentPenalty: number;
-  noveltyPenalty: number;
-  runtimeSafetyScore: number;
-  calculatedAt: string;
-}
-
-interface TrustEdge {
-  from: string;
-  to: string;
-  level: TrustLevel;
-  capability?: string;
-  context?: string;
-  createdAt: string;
-  expiresAt?: string;
-}
-```
-
-**Tests to add:**
-- Capability-specific reputation calculation
-- Context-specific trust path
-- Incident penalty application
-- Time-based decay
-
-**Docs to update:**
-- `docs/protocol/trust-v2.md`
-- `docs/protocol/reputation.md`
-
-**Expected CLI/API behavior:**
-- `fides trust score <did> --capability <id>`
-- `fides trust score <did> --context <context>`
-
-**Commit checklist:**
-- [ ] Update DB schema for capability/context trust edges
-- [ ] Update scoring algorithm
-- [ ] Add incident/novelty/runtime penalties
-- [ ] Update trust attestation to support capability scope
-- [ ] Write tests
-
-**Validation command:** `pnpm test`
-
----
-
-## Milestone 8: Policy Engine
-
-**Goal:** Full policy engine with risk taxonomy, guardrails, and pre-execution pipeline.
-
-**Files to modify:**
-- `services/policy-engine/` — Replace stub with full implementation
-
-**Packages to create:**
-- `packages/@fides/policy/` — Policy engine package
-
-**Types/schemas to add:**
-```typescript
-interface PolicyBundle {
-  id: string;
-  version: string;
-  rules: PolicyRule[];
-  defaultAction: "allow" | "deny" | "approve-required";
-}
-
-interface PolicyRule {
-  id: string;
-  condition: PolicyExpression;
-  action: "allow" | "deny" | "approve-required" | "dry-run";
-  explanation: string;
-}
-
-interface PolicyExpression {
-  operator: "eq" | "neq" | "lt" | "lte" | "gt" | "gte" | "in" | "all" | "any";
-  field: string;
-  value: unknown;
-}
-
-interface PolicyResult {
-  decision: "allow" | "deny" | "approve-required" | "dry-run";
-  explanation: DecisionExplanation;
-  matchedRules: string[];
-}
-
-interface DecisionExplanation {
-  decision: string;
-  factors: { factor: string; weight: number; description: string }[];
-}
-```
-
-**Tests to add:**
-- Policy evaluation (all expression operators)
-- Guardrail Allow/Warn/Block
-- High-risk capability handling
-- Revoked agent denial
-- Invalid runtime attestation denial
-
-**Docs to update:**
-- `docs/protocol/policy.md`
-- `docs/protocol/guardrails.md`
-- `docs/protocol/risk.md`
-
-**Expected CLI/API behavior:**
-- `fides policy evaluate --bundle ./policy.json --request ./request.json`
-- `fides policy explain --did <did> --capability <id>`
-
-**Commit checklist:**
-- [ ] Create `@fides/policy` package
-- [ ] Implement policy evaluator (ported from OAPS)
-- [ ] Implement pre-execution pipeline (ported from Sardis pattern)
-- [ ] Implement risk taxonomy
-- [ ] Integrate with trust graph scores
-- [ ] Integrate with runtime attestation
-- [ ] Write tests
-
-**Validation command:** `pnpm test && pnpm typecheck`
-
----
-
-## Milestone 9: Delegation and Sessions
-
-**Goal:** DelegationToken, SessionGrant, scoped authority.
-
-**Files to modify:**
-- `packages/@fides/core/` — Add delegation primitives
-
-**Packages to create:** None
-
-**Types/schemas to add:**
-```typescript
-interface DelegationToken {
-  id: string;
-  delegator: string;      // DID
-  delegatee: string;      // DID
-  capabilities: string[]; // capability IDs
-  constraints: DelegationConstraint;
-  issuedAt: string;
-  expiresAt: string;
-  nonce: string;
-  audience?: string[];
-  signature: string;
-}
-
-interface SessionGrant {
-  id: string;
-  token: DelegationToken;
-  sessionKey: string;
-  expiresAt: string;
-  boundTo?: string;       // IP, device fingerprint, etc.
-}
-
-interface DelegationConstraint {
-  maxActions?: number;
-  maxSpend?: string;      // currency amount
-  allowedContexts?: string[];
-  forbiddenContexts?: string[];
-}
-```
-
-**Tests to add:**
-- DelegationToken creation and verification
-- SessionGrant issuance and expiry
-- Replay protection (nonce)
-- Audience restriction
-- Constraint enforcement
-
-**Docs to update:**
-- `docs/protocol/delegation.md`
-- `docs/protocol/sessions.md`
-
-**Expected CLI/API behavior:**
-- `fides delegate --to <did> --capability <id> --expires 1h`
-- `fides session grant --token <token-id>`
-- `fides session revoke <session-id>`
-
-**Commit checklist:**
-- [ ] Add DelegationToken type and signing
-- [ ] Add SessionGrant type
-- [ ] Implement nonce/replay protection
-- [ ] Implement audience restriction
-- [ ] Implement constraint validation
-- [ ] Write tests
-
-**Validation command:** `pnpm test`
-
----
-
-## Milestone 10: Evidence Ledger
-
-**Goal:** Append-only evidence ledger with hash chain and Merkle proofs.
-
-**Files to modify:** None
-
-**Packages to create:**
-- `packages/@fides/evidence/` — Evidence ledger package
-
-**Types/schemas to add:**
-```typescript
-interface EvidenceEvent {
-  id: string;
-  type: string;
-  timestamp: string;
-  actor: string;          // DID
-  action: string;
-  target?: string;
-  payload: unknown;
-  privacy: EvidencePrivacy;
-  prevHash: string;
-  hash: string;
-  signature: string;
-}
-
-interface EvidencePrivacy {
-  level: "public" | "private" | "redacted" | "hash-only";
-  redactionKey?: string;
-}
-
-interface EvidenceChain {
-  events: EvidenceEvent[];
-  merkleRoot?: string;
-}
-```
-
-**Tests to add:**
-- EvidenceEvent creation and signing
-- Hash chain integrity
-- Merkle proof generation and verification
-- Privacy level application
-- Chain export
-
-**Docs to update:**
-- `docs/protocol/evidence.md`
-- `docs/protocol/evidence-privacy.md`
-
-**Expected CLI/API behavior:**
-- `fides evidence append --type invocation --actor <did> --action <capability>`
-- `fides evidence verify --chain ./evidence.json`
-- `fides evidence export --did <did> --format json`
-
-**Commit checklist:**
-- [ ] Create `@fides/evidence` package
-- [ ] Implement EvidenceEvent with canonical signing
-- [ ] Implement hash chain (SHA-256 chaining)
-- [ ] Implement Merkle tree builder
-- [ ] Implement privacy levels
-- [ ] Write tests
-
-**Validation command:** `pnpm test && pnpm typecheck`
-
----
-
-## Milestone 11: Revocation and Incidents
-
-**Goal:** RevocationRecord, IncidentRecord, and automated response.
-
-**Files to modify:**
-- `packages/sdk/src/identity/rotation.ts` — Extend revocation
-
-**Packages to create:** None
-
-**Types/schemas to add:**
-```typescript
-interface RevocationRecord {
-  id: string;
-  did: string;
-  reason: string;
-  revokedAt: string;
-  revokedBy: string;
-  signature: string;
-  propagatedTo: string[];
-}
-
-interface IncidentRecord {
-  id: string;
-  type: "compromise" | "misbehavior" | "policy_violation" | "runtime_failure" | "sybil";
-  severity: "low" | "medium" | "high" | "critical";
-  actor: string;
-  description: string;
-  evidenceRefs: string[];
-  reportedAt: string;
-  resolvedAt?: string;
-  impact: {
-    trustPenalty: number;
-    reputationPenalty: number;
-    capabilitiesRevoked: string[];
-  };
-}
-```
-
-**Tests to add:**
-- RevocationRecord creation and propagation
-- IncidentRecord creation and impact calculation
-- Policy engine integration (revoked agent denial)
-- Trust graph integration (incident penalties)
-
-**Docs to update:**
-- `docs/protocol/revocation.md`
-- `docs/protocol/incidents.md`
-
-**Expected CLI/API behavior:**
-- `fides revoke <did> --reason "key compromise"`
-- `fides incident report --actor <did> --type misbehavior`
-- `fides incident list --severity critical`
-
-**Commit checklist:**
-- [ ] Add RevocationRecord type
-- [ ] Add IncidentRecord type
-- [ ] Implement revocation propagation interface
-- [ ] Integrate with policy engine
-- [ ] Integrate with trust graph
-- [ ] Write tests
-
-**Validation command:** `pnpm test`
-
----
-
-## Milestone 12: Runtime Attestation
-
-**Goal:** RuntimeAttestation, MockTEEProvider, adapter interfaces.
-
-**Files to modify:** None
-
-**Packages to create:**
-- `packages/@fides/runtime/` — Runtime attestation package
-
-**Types/schemas to add:**
-```typescript
-interface RuntimeAttestation {
-  id: string;
-  agentDid: string;
-  provider: string;       // "mock-tee", "aws-nitro", "intel-sgx", "amd-sev"
-  measurement: string;    // hash of runtime state
-  timestamp: string;
-  expiresAt: string;
-  evidence: unknown;      // provider-specific attestation evidence
-  signature: string;
-}
-
-interface TEEAdapter {
-  readonly provider: string;
-  attest(agentDid: string): Promise<RuntimeAttestation>;
-  verify(attestation: RuntimeAttestation): Promise<boolean>;
-}
-
-interface BuildAttestationAdapter {
-  attest(imageHash: string): Promise<RuntimeAttestation>;
-}
-```
-
-**Tests to add:**
-- MockTEEProvider attestation and verification
-- RuntimeAttestation expiry
-- Policy engine integration (invalid attestation denial)
-- Adapter interface compliance
-
-**Docs to update:**
-- `docs/protocol/runtime-attestation.md`
-- `docs/protocol/tee-adapters.md`
-
-**Expected CLI/API behavior:**
-- `fides runtime attest --provider mock-tee`
-- `fides runtime verify --attestation ./attestation.json`
-
-**Commit checklist:**
-- [ ] Create `@fides/runtime` package
-- [ ] Implement RuntimeAttestation type
-- [ ] Implement MockTEEProvider
-- [ ] Add adapter interfaces (Nitro, SGX, SEV stubs)
-- [ ] Add container/build attestation interfaces
-- [ ] Integrate with policy engine
-- [ ] Write tests
-
-**Validation command:** `pnpm test && pnpm typecheck`
-
----
-
-## Milestone 13: CLI and API
-
-**Goal:** Extended CLI and local HTTP API.
-
-**Files to modify:**
-- `packages/cli/src/` — Add new commands
-- `services/` — Ensure all services expose stable APIs
-
-**Packages to create:**
-- `services/agentd/` — Local daemon
-
-**Types/schemas to add:**
-```typescript
-// agentd HTTP API routes
-POST /v1/identities
-GET  /v1/identities/:did
-POST /v1/cards
-GET  /v1/cards/:did
-POST /v1/trust
-GET  /v1/trust/:did/score
-POST /v1/delegate
-POST /v1/sessions
-POST /v1/evidence
-GET  /v1/evidence/:did
-POST /v1/policy/evaluate
-POST /v1/revoke
-POST /v1/incidents
-GET  /v1/runtime/attest
-```
-
-**Tests to add:**
-- CLI command tests for all new commands
-- agentd HTTP API integration tests
-
-**Docs to update:**
-- `docs/api/README.md`
-- `docs/cli/README.md`
-
-**Expected CLI/API behavior:**
-- All previous CLI commands work
-- New commands: `fides card`, `fides delegate`, `fides session`, `fides evidence`, `fides policy`, `fides revoke`, `fides incident`, `fides runtime`, `fides registry`, `fides relay`, `fides dht`
-- `agentd` runs local HTTP API on port 7345 (FIDES)
-
-**Commit checklist:**
-- [ ] Extend CLI with all new commands
-- [ ] Create `agentd` service
-- [ ] Add local HTTP API
-- [ ] Write CLI tests
-- [ ] Write agentd integration tests
-
-**Validation command:** `pnpm test && pnpm build`
-
----
-
-## Milestone 14: Examples and Full Demo
-
-**Goal:** Runnable example agents and end-to-end demo.
-
-**Files to modify:** None
-
-**Packages to create:** None
-
-**Files to add:**
-- `examples/calendar-agent/` — Calendar agent with FIDES identity
-- `examples/invoice-agent/` — Invoice agent with delegation
-- `examples/payment-agent/` — Payment agent with policy + evidence
-- `examples/requester-agent/` — Agent that discovers and invokes others
-- `examples/demo/` — Full demo script
-
-**Tests to add:**
-- E2E demo test
-
-**Docs to update:**
-- `examples/README.md`
-- `docs/getting-started.md`
-
-**Expected behavior:**
-- `pnpm demo` runs full multi-agent trust fabric demo
-- Demo shows: identity creation, discovery, trust attestation, delegation, policy enforcement, evidence collection, revocation
-
-**Commit checklist:**
-- [ ] Create example agents
-- [ ] Create demo script
-- [ ] Write E2E test
-- [ ] Update docs
-
-**Validation command:** `pnpm demo` (manual verification)
-
----
-
-## Milestone 15: Docs and Tests
-
-**Goal:** Complete documentation, threat model, and test suite.
-
-**Files to modify:** None
-
-**Files to add:**
+Goal: harden identity around real cryptographic issuance and trust anchors.
+
+Tasks:
+
+1. Replace loose identity creation with real Ed25519 keypair creation.
+2. Add `AgentIdentity`, `PublisherIdentity`, `PrincipalIdentity` v2 fields.
+3. Add publisher types: anonymous, self_signed, verified_individual, platform_hosted, domain_verified, organization_verified.
+4. Add trust anchor types: domain, GitHub, email, npm, PyPI, wallet, passkey, organization invitation, runtime attestation, build attestation, peer attestation.
+5. Keep domain and org DNS verification.
+6. Add tests for domainless identity and trust anchor validation.
+
+Primary files:
+
+- `packages/core/src/identity.ts`
+- `packages/core/src/trust-anchor.ts`
+- `packages/core/src/domain-verifier.ts`
+- `packages/core/src/passkey.ts`
+- `packages/core/test/identity.test.ts`
+- `packages/core/test/trust-anchor.test.ts`
+
+Commit:
+
+- `feat(identity): harden fides identity v2`
+
+Verification:
+
+- `pnpm --filter @fides/core test`
+- `pnpm --filter @fides/core typecheck`
+
+## Milestone 3: AgentCards and Capability Ontology
+
+Goal: signed AgentCards that describe capability, risk, transport, policy, and trust metadata.
+
+Tasks:
+
+1. Add AgentCard v2 fields from the pivot.
+2. Add `CapabilityDescriptor` fields: namespace, action, resource, capability id, input/output schemas, risk class, scopes, controls, dry-run, approval, policy proof.
+3. Add `CapabilityOntologyEntry`.
+4. Add risk classes and sample capabilities.
+5. Add signed AgentCard creation/verification helpers.
+6. Add compatibility mapping for current AgentCard shapes.
+
+Primary files:
+
+- `packages/core/src/agent-card.ts`
+- `packages/core/src/capability.ts`
+- `packages/core/src/canonical-signer.ts`
+- `packages/core/test/agent-card.test.ts`
+- `packages/core/test/capability.test.ts`
+
+Commit:
+
+- `feat(cards): add signed agent cards and capability ontology`
+
+Verification:
+
+- `pnpm --filter @fides/core test`
+- `pnpm --filter @fides/core typecheck`
+
+## Milestone 4: Evidence v2
+
+Goal: signed, privacy-aware, hash-chained evidence events.
+
+Tasks:
+
+1. Add EvidenceEvent v2 with requested fields and event taxonomy.
+2. Default sensitive payloads to hash-only/redacted.
+3. Add input/output/policy/decision hashing helpers.
+4. Add signed event append/verify.
+5. Add Merkle proof-ready export shape.
+6. Add compatibility adapter from current evidence event.
+
+Primary files:
+
+- `packages/evidence/src/index.ts`
+- `packages/evidence/test/evidence.test.ts`
+- `packages/core/src/protocol.ts`
+
+Commit:
+
+- `feat(evidence): add signed privacy-aware evidence events`
+
+Verification:
+
+- `pnpm --filter @fides/evidence test`
+- `pnpm --filter @fides/evidence typecheck`
+
+## Milestone 5: Discovery v2 and DHT Pointers
+
+Goal: discovery returns verified candidates and never authority.
+
+Tasks:
+
+1. Add `DiscoveryQuery` and `DiscoveryCandidate`.
+2. Extend provider interface with `discover(query): Promise<DiscoveryCandidate[]>`.
+3. Preserve old `resolve(did)` as compatibility.
+4. Add verification pipeline in orchestrator.
+5. Add signed `DHTPointerRecord`.
+6. Replace DHT direct-card lookup with pointer publish/find path while keeping compatibility methods behind tests.
+7. Add DHT tests: valid pointer, tamper rejection, expiry, card hash mismatch, revoked agent.
+
+Primary files:
+
+- `packages/discovery/src/provider.ts`
+- `packages/discovery/src/orchestrator.ts`
+- `packages/discovery/src/dht-provider.ts`
+- `packages/discovery/src/local-provider.ts`
+- `packages/discovery/src/registry-provider.ts`
+- `packages/discovery/src/relay-provider.ts`
+- `packages/discovery/test/*`
+- `packages/core/src/discovery.ts`
+- `packages/core/src/dht.ts`
+
+Commits:
+
+- `feat(discovery): add capability query provider contract`
+- `feat(dht): add signed pointer records`
+
+Verification:
+
+- `pnpm --filter @fides/discovery test`
+- `pnpm --filter @fides/discovery typecheck`
+
+## Milestone 6: Trust and Reputation v2
+
+Goal: capability-specific trust and explainable scoring.
+
+Tasks:
+
+1. Add `TrustResult`, trust bands, score component types.
+2. Add `ReputationRecord`.
+3. Extend trust graph service scoring with component explanations.
+4. Integrate incidents, novelty, context boundary, publisher weighting.
+5. Add API/SDK compatibility layer.
+
+Primary files:
+
+- `packages/core/src/trust.ts`
+- `services/trust-graph/src/services/trust-service.ts`
+- `services/trust-graph/src/services/capability-scoring.ts`
+- `services/trust-graph/src/routes/trust.ts`
+- `packages/sdk/src/trust/client.ts`
+
+Commit:
+
+- `feat(trust): add explainable capability trust results`
+
+Verification:
+
+- `pnpm --filter @fides/trust-graph test`
+- `pnpm --filter @fides/sdk test`
+
+## Milestone 7: Policy, Approvals, Kill Switch
+
+Goal: policy-before-execution with durable approval and kill switch primitives.
+
+Tasks:
+
+1. Add decision vocabulary compatibility.
+2. Add `ApprovalRequest`, `ApprovalDecision`, `ApprovalPolicy`.
+3. Add `KillSwitchRule` protocol object.
+4. Wire guard/policy to durable approval state.
+5. Add evidence events for approval and kill-switch lifecycle.
+
+Primary files:
+
+- `packages/core/src/approval.ts`
+- `packages/core/src/kill-switch.ts`
+- `packages/policy/src/index.ts`
+- `packages/guard/src/index.ts`
+- `packages/runtime/src/index.ts`
+- `services/agentd/src/index.ts`
+
+Commits:
+
+- `feat(policy): add approval primitives`
+- `feat(policy): add kill switch rules`
+
+Verification:
+
+- `pnpm --filter @fides/policy test`
+- `pnpm --filter @fides/guard test`
+- `pnpm --filter @fides/agentd test`
+
+## Milestone 8: Delegation, Sessions, Invocation
+
+Goal: signed scoped authority and generic invocation flow.
+
+Tasks:
+
+1. Harden `DelegationToken`.
+2. Add v2 `SessionGrant`.
+3. Add replay protection and audience restriction tests.
+4. Add `InvocationRequest` and `InvocationResult`.
+5. Add dry-run/approval-required/denied/allowed/failed status flow.
+6. Emit evidence events.
+
+Primary files:
+
+- `packages/core/src/delegation.ts`
+- `packages/core/src/session-store.ts`
+- `packages/core/src/invocation.ts`
+- `services/agentd/src/index.ts`
+- `packages/sdk/src/agentd/client.ts`
+
+Commits:
+
+- `feat(delegation): add signed session grants`
+- `feat(invocation): add capability invocation objects`
+
+Verification:
+
+- `pnpm --filter @fides/core test`
+- `pnpm --filter @fides/agentd test`
+- `pnpm --filter @fides/sdk test`
+
+## Milestone 9: Revocation, Incidents, Runtime Attestation
+
+Goal: revocation/incident/attestation become first-class v2 signed objects.
+
+Tasks:
+
+1. Add revocation target taxonomy.
+2. Add incident categories and resolution status.
+3. Add `RuntimeAttestation` v2 schema fields.
+4. Add `NullAttestationProvider`.
+5. Integrate invalid/expired attestations into policy/trust.
+
+Primary files:
+
+- `packages/core/src/revocation.ts`
+- `packages/core/src/runtime-attestation.ts`
+- `packages/runtime/src/index.ts`
+- `services/agentd/src/index.ts`
+- `services/trust-graph/src/services/trust-service.ts`
+
+Commits:
+
+- `feat(revocation): add v2 revocation records`
+- `feat(incidents): add incident resolution records`
+- `feat(attestations): add runtime attestation v2`
+
+Verification:
+
+- `pnpm --filter @fides/core test`
+- `pnpm --filter @fides/runtime test`
+- `pnpm --filter @fides/trust-graph test`
+
+## Milestone 10: Registry, Relay, Federation
+
+Goal: hosted/public/private registry, relay presence, and federation-ready records.
+
+Tasks:
+
+1. Add signed `RegistryIndexRecord`.
+2. Add `RegistryPeerRecord`.
+3. Add public/private mode docs and tests.
+4. Add local mock federation provider.
+5. Add revocation/incident propagation interfaces.
+6. Keep relay as presence/rendezvous only.
+
+Primary files:
+
+- `services/registry/src/`
+- `services/relay/src/`
+- `packages/core/src/registry.ts`
+- `packages/core/src/federation.ts`
+- `packages/discovery/src/registry-provider.ts`
+- `packages/discovery/src/relay-provider.ts`
+
+Commits:
+
+- `feat(registry): add signed index records`
+- `feat(registry): add federation peer records`
+- `feat(relay): clarify relay discovery authority boundaries`
+
+Verification:
+
+- `pnpm --filter @fides/registry-service test`
+- `pnpm --filter @fides/relay-service test`
+- `pnpm --filter @fides/discovery test`
+
+## Milestone 11: Adapters
+
+Goal: FIDES has explicit interop boundaries.
+
+Tasks:
+
+1. Add `packages/adapters`.
+2. Add interfaces for MCP, A2A, OAPS, OSP, AP2, x402, Sardis.
+3. Add mapping docs.
+4. Add simple no-network tests.
+
+Primary files:
+
+- `packages/adapters/`
+- `docs/protocol/interop-adapters.md`
+
+Commit:
+
+- `feat(adapters): add interop adapter interfaces`
+
+Verification:
+
+- `pnpm --filter @fides/adapters test`
+- `pnpm --filter @fides/adapters typecheck`
+
+## Milestone 12: Agentd CLI/API/SDK Alignment
+
+Goal: make local developer flow match the requested `agentd` surface.
+
+Tasks:
+
+1. Add `agentd` binary or alias.
+2. Add missing CLI commands:
+   - identity create/list/show,
+   - attest,
+   - card create/sign/verify/inspect,
+   - registry/relay/dht,
+   - demo run,
+   - simulate adversarial.
+3. Add requested local HTTP endpoints as compatibility routes where needed.
+4. Add SDK methods matching the example.
+5. Add local SQLite store if still pending.
+
+Primary files:
+
+- `packages/cli/src/index.ts`
+- `packages/cli/src/commands/`
+- `services/agentd/src/index.ts`
+- `services/agentd/src/storage.ts`
+- `packages/sdk/src/`
+- `docs/api/agentd.yaml`
+- `docs/cli-reference.md`
+- `docs/sdk-reference.md`
+
+Commits:
+
+- `feat(cli): add agentd command surface`
+- `feat(api): add fides v2 local endpoints`
+- `feat(sdk): add promise client v2 flow`
+
+Verification:
+
+- `pnpm --filter @fides/cli test`
+- `pnpm --filter @fides/agentd test`
+- `pnpm --filter @fides/sdk test`
+
+## Milestone 13: Examples, Demo, Adversarial Simulation
+
+Goal: prove the full local DX.
+
+Tasks:
+
+1. Add example agent folders.
+2. Add full demo scenario.
+3. Add malicious agent.
+4. Add adversarial simulation harness.
+5. Add manual DX script/runbook.
+
+Primary files:
+
+- `examples/calendar-agent/`
+- `examples/invoice-agent/`
+- `examples/payment-agent/`
+- `examples/malicious-agent/`
+- `examples/requester-agent/`
+- `examples/full-demo/`
+- `tests/adversarial/`
+- `docs/adversarial-simulation.md`
+
+Commits:
+
+- `feat(examples): add fides v2 demo agents`
+- `feat(sim): add adversarial simulation harness`
+
+Verification:
+
+- `pnpm test`
+- `agentd demo run`
+- `agentd simulate adversarial`
+
+## Milestone 14: Docs Completion
+
+Goal: make the repo publishable.
+
+Tasks:
+
+1. Add protocol docs from the pivot.
+2. Add ADRs.
+3. Update README and getting started.
+4. Add API/CLI/SDK references.
+5. Add threat model.
+6. Document limitations honestly.
+
+Primary files:
+
+- `docs/protocol/*.md`
+- `docs/adr/*.md`
 - `docs/threat-model.md`
-- `docs/security-review-checklist.md`
-- `docs/production-hardening.md`
-- `tests/adversarial/` — Adversarial simulation harness
-
-**Tests to add:**
-- Adversarial tests: Sybil, replay, policy bypass, delegation abuse
-- Load tests for trust graph
-- Fuzz tests for policy evaluator
-
-**Docs to update:**
+- `docs/getting-started.md`
+- `docs/api-reference.md`
+- `docs/cli-reference.md`
+- `docs/sdk-reference.md`
 - `README.md`
-- `docs/README.md`
-- All protocol docs reviewed and cross-linked
 
-**Expected behavior:**
-- All docs are consistent and cross-referenced
-- Adversarial tests run in CI
-- Test coverage > 80% for new packages
+Commits:
 
-**Commit checklist:**
-- [ ] Write threat model
-- [ ] Write security review checklist
-- [ ] Write production hardening notes
-- [ ] Implement adversarial simulation harness
-- [ ] Add adversarial tests to CI
-- [ ] Review and update all docs
+- `docs: add fides v2 protocol docs`
+- `docs: add fides v2 getting started`
 
-**Validation command:** `pnpm test && pnpm coverage`
+Verification:
 
----
+- `pnpm verify`
+- Manual CLI demo.
 
-## Summary Timeline
+## Final Completion Contract
 
-| Phase | Milestones | Estimated Duration |
-|-------|-----------|-------------------|
-| Phase 0: Foundation | 1-3 | 2 weeks |
-| Phase 1: Discovery | 4-6 | 2 weeks |
-| Phase 2: Trust & Policy | 7-9 | 2 weeks |
-| Phase 3: Evidence & Runtime | 10-12 | 2 weeks |
-| Phase 4: Developer Surface | 13-15 | 2 weeks |
-| **Total** | **1-15** | **10 weeks** |
+Final report must include:
 
-This is a rough estimate. Parallel work on independent milestones can shorten the timeline.
+1. What was implemented.
+2. What is production-like.
+3. What is working prototype.
+4. What is local mock.
+5. What is adapter-ready.
+6. What is spec-complete.
+7. Package overview.
+8. CLI command overview.
+9. API endpoint overview.
+10. SDK example.
+11. How to run tests.
+12. How to run demo.
+13. How to run adversarial simulation.
+14. Known limitations.
+15. Future hardening steps.
+16. Commit history summary.

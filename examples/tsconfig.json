@@ -2,6 +2,9 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    "rootDir": "..",
+    "types": ["node"],
+    "typeRoots": ["../packages/core/node_modules/@types"],
     "baseUrl": ".",
     "paths": {
       "@fides/core": ["../packages/core/src/index.ts"],
@@ -14,6 +17,6 @@
       "@fides/sdk": ["../packages/sdk/src/index.ts"]
     }
   },
-  "include": ["*.ts"],
+  "include": ["**/*.ts"],
   "exclude": ["node_modules"]
 }

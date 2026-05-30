@@ -6,9 +6,15 @@ import {
   deriveSessionPublicKey,
   revokeSession,
   createDelegationToken,
+  createDelegationTokenV2,
   signDelegationToken,
+  signDelegationTokenV2,
+  validateDelegationTokenV2,
+  verifySignedDelegationTokenV2,
+  verifySignedDelegationTokenV2Issuer,
 } from '../src/delegation.js'
 import * as ed from '@noble/ed25519'
+import bs58 from 'bs58'
 
 function makeValidToken(overrides: Record<string, unknown> = {}) {
   const token = createDelegationToken({
@@ -23,6 +29,73 @@ function makeValidToken(overrides: Record<string, unknown> = {}) {
 }
 
 describe('SessionGrant', () => {
+  describe('DelegationTokenV2', () => {
+    it('creates canonical delegation token payloads with issuer-bound signatures', async () => {
+      const privateKey = ed.utils.randomPrivateKey()
+      const publicKey = await ed.getPublicKeyAsync(privateKey)
+      const delegator = `did:fides:${bs58.encode(publicKey)}`
+
+      const token = createDelegationTokenV2({
+        delegator,
+        delegatee: 'did:fides:delegatee',
+        capabilities: ['invoice.reconcile'],
+        constraints: { maxActions: 3 },
+        audience: ['did:fides:delegatee'],
+        issuedAt: '2026-05-30T00:00:00.000Z',
+        expiresAt: '2026-05-31T00:00:00.000Z',
+        nonce: 'nonce_123',
+      })
+
+      expect(token).toMatchObject({
+        schema_version: 'fides.delegation_token.v1',
+        issuer: delegator,
+        subject: 'did:fides:delegatee',
+        delegator,
+        delegatee: 'did:fides:delegatee',
+        capabilities: ['invoice.reconcile'],
+        audience: ['did:fides:delegatee'],
+        nonce: 'nonce_123',
+      })
+      expect(token.payload_hash).toMatch(/^sha256:[0-9a-f]{64}$/)
+      expect(validateDelegationTokenV2(token, new Date('2026-05-30T00:00:01.000Z'))).toEqual({
+        valid: true,
+        errors: [],
+      })
+
+      const signed = await signDelegationTokenV2(token, privateKey, delegator)
+      expect(signed.proof.proofPurpose).toBe('delegation')
+      await expect(verifySignedDelegationTokenV2(signed)).resolves.toBe(true)
+      await expect(verifySignedDelegationTokenV2Issuer(signed)).resolves.toBe(true)
+    })
+
+    it('rejects mutated delegation token v2 hashes and issuer mismatches', async () => {
+      const privateKey = ed.utils.randomPrivateKey()
+      const publicKey = await ed.getPublicKeyAsync(privateKey)
+      const delegator = `did:fides:${bs58.encode(publicKey)}`
+      const token = createDelegationTokenV2({
+        delegator,
+        delegatee: 'did:fides:delegatee',
+        capabilities: ['calendar.schedule'],
+        expiresAt: '2026-05-31T00:00:00.000Z',
+      })
+
+      const mutated = {
+        ...token,
+        capabilities: ['payments.execute'],
+      }
+      expect(validateDelegationTokenV2(mutated, new Date('2026-05-30T00:00:01.000Z'))).toMatchObject({
+        valid: false,
+        errors: ['DelegationToken.payload_hash mismatch'],
+      })
+
+      const otherPrivateKey = ed.utils.randomPrivateKey()
+      const otherPublicKey = await ed.getPublicKeyAsync(otherPrivateKey)
+      const signedByWrongIssuer = await signDelegationTokenV2(token, otherPrivateKey, `did:fides:${bs58.encode(otherPublicKey)}`)
+      await expect(verifySignedDelegationTokenV2(signedByWrongIssuer)).resolves.toBe(true)
+      await expect(verifySignedDelegationTokenV2Issuer(signedByWrongIssuer)).resolves.toBe(false)
+    })
+  })
+
   describe('createSessionGrant', () => {
     it('creates a valid session with default TTL (1 hour)', () => {
       const token = makeValidToken()

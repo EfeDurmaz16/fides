@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import type { MiddlewareHandler } from 'hono'
-import { evaluatePolicy, type PolicyBundle, type PolicyContext } from '@fides/policy'
+import { evaluatePolicy, type PolicyBundle, type PolicyContext, type PolicyResult } from '@fides/policy'
 import { evaluateApiKeyAuth, MetricsCollector, metricsMiddleware, parseScopedApiKeys } from '@fides/shared'
 
 const app = new Hono()
@@ -45,7 +45,7 @@ app.post('/v1/policies/evaluate', apiKeyAuth(), async (c) => {
     ...(body.capabilityId && { capabilityId: body.capabilityId }),
   }
 
-  return c.json(evaluatePolicy(body.policy as PolicyBundle, context))
+  return c.json(normalizePolicyResult(evaluatePolicy(body.policy as PolicyBundle, context)))
 })
 
 app.post('/v1/evaluate', apiKeyAuth(), async (c) => {
@@ -59,7 +59,7 @@ app.post('/v1/evaluate', apiKeyAuth(), async (c) => {
     return c.json({ error: 'invalid policy bundle', details: validation.errors }, 400)
   }
 
-  return c.json(evaluatePolicy(body.policy as PolicyBundle, isRecord(body.context) ? body.context : {}))
+  return c.json(normalizePolicyResult(evaluatePolicy(body.policy as PolicyBundle, isRecord(body.context) ? body.context : {})))
 })
 
 export { app }
@@ -117,6 +117,18 @@ function getCorsOrigin(): string {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null
+}
+
+function normalizePolicyResult(result: PolicyResult) {
+  return {
+    ...result,
+    decision: result.decision === 'approve-required'
+      ? 'require_approval'
+      : result.decision === 'dry-run'
+        ? 'dry_run_only'
+        : result.decision,
+    legacyDecision: result.decision,
+  }
 }
 
 function apiKeyAuth(): MiddlewareHandler {

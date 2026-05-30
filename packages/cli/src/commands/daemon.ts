@@ -18,6 +18,13 @@ interface AgentdHealth {
   authorityStore?: {
     kind?: string
     ok?: boolean
+    path?: string
+    detail?: string
+  }
+  localStateStore?: {
+    kind?: string
+    ok?: boolean
+    path?: string
     detail?: string
   }
 }
@@ -29,6 +36,9 @@ export function createDaemonCommand(): Command {
   cmd.command('start')
     .description('Start agentd')
     .option('--port <port>', 'Port to listen on', '7345')
+    .option('--sqlite-path <path>', 'SQLite path for root v2 local daemon state')
+    .option('--local-state <mode>', 'Local daemon state mode: sqlite or memory')
+    .option('--authority-store-path <path>', 'File authority store path')
     .option('--command <command>', 'Command used to start agentd', 'pnpm')
     .option('--args <args>', 'Comma-separated command args', '--filter,@fides/agentd,dev')
     .option('--pid-file <path>', 'PID file path', AGENTD_PID_PATH)
@@ -45,12 +55,16 @@ export function createDaemonCommand(): Command {
         ensureDir(options.logFile)
         const logFd = fs.openSync(options.logFile, 'a')
         const args = String(options.args).split(',').map(item => item.trim()).filter(Boolean)
+        const localState = normalizeLocalStateMode(options.localState)
         const child = spawn(options.command, args, {
           detached: true,
           stdio: ['ignore', logFd, logFd],
           env: {
             ...process.env,
             AGENTD_PORT: String(options.port),
+            ...(options.sqlitePath && { AGENTD_SQLITE_PATH: String(options.sqlitePath) }),
+            ...(localState && { AGENTD_LOCAL_STATE: localState }),
+            ...(options.authorityStorePath && { AGENTD_STATE_STORE_PATH: String(options.authorityStorePath) }),
           },
         })
         if (!child.pid) {
@@ -148,8 +162,20 @@ function printAgentdHealth(agentdUrl: string, health: AgentdHealth): void {
   }
   if (health.authorityStore) {
     rows.push(['Authority Store:', `${health.authorityStore.kind ?? 'unknown'} (${health.authorityStore.ok ? 'ready' : 'unready'})`])
+    if (health.authorityStore.path) {
+      rows.push(['Authority Path:', health.authorityStore.path])
+    }
     if (health.authorityStore.detail) {
       rows.push(['Authority Detail:', health.authorityStore.detail])
+    }
+  }
+  if (health.localStateStore) {
+    rows.push(['Local State Store:', `${health.localStateStore.kind ?? 'unknown'} (${health.localStateStore.ok ? 'ready' : 'unready'})`])
+    if (health.localStateStore.path) {
+      rows.push(['Local State Path:', health.localStateStore.path])
+    }
+    if (health.localStateStore.detail) {
+      rows.push(['Local State Detail:', health.localStateStore.detail])
     }
   }
   for (const [name, status] of Object.entries(checks)) {
@@ -183,4 +209,10 @@ function readPid(pidFile: string): number | null {
     fs.rmSync(pidFile, { force: true })
     return null
   }
+}
+
+function normalizeLocalStateMode(mode?: string): 'sqlite' | 'memory' | undefined {
+  if (mode === undefined) return undefined
+  if (mode === 'sqlite' || mode === 'memory') return mode
+  throw new Error('--local-state must be sqlite or memory')
 }

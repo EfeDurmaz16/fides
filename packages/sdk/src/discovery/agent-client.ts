@@ -5,7 +5,7 @@ export interface RegisterAgentParams {
   did: string
   name: string
   description?: string
-  url: string
+  url?: string
   version?: string
   provider?: AgentProvider
   capabilities?: AgentCapabilities
@@ -51,7 +51,9 @@ export class AgentDiscoveryClient {
         throw new DiscoveryError(`Failed to register agent: ${response.status} ${text}`)
       }
 
-      return await response.json()
+      const agent: AgentCard = await response.json()
+      this.clearCache()
+      return agent
     } catch (error) {
       if (error instanceof DiscoveryError) throw error
       throw new DiscoveryError(
@@ -172,6 +174,8 @@ export class AgentDiscoveryClient {
         const text = await response.text()
         throw new DiscoveryError(`Heartbeat failed: ${response.status} ${text}`)
       }
+
+      this.clearCache()
     } catch (error) {
       if (error instanceof DiscoveryError) throw error
       throw new DiscoveryError(

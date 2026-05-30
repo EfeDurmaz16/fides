@@ -5,10 +5,10 @@
  * Run: pnpm demo
  */
 
-import { createIdentity, classifyCapabilityRisk, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
+import { createAgentIdentity, createPrincipalIdentity, classifyCapabilityRisk, validateAgentCard, createDelegationToken, validateDelegationToken, signDelegationToken } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { evaluatePolicy } from '@fides/policy'
-import { createEvidenceChain, appendEvidenceEvent, buildMerkleRoot, verifyEvidenceChain } from '@fides/evidence'
+import { createEvidenceChain, appendEvidenceEvent, buildMerkleRoot, verifyEvidenceChain, hashEvidenceValue } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 import { evaluateGuard, createTrustContext } from './src/index.js'
 
@@ -20,9 +20,14 @@ async function demo() {
 
   // Step 1: Identities
   console.log('📝 Step 1: Creating Identities')
-  const alice = createIdentity('did:fides:alice', 'agent', { name: 'Alice Assistant' })
-  const bob = createIdentity('did:fides:bob', 'agent', { name: 'Bob Scheduler' })
-  const charlie = createIdentity('did:fides:charlie', 'principal', { name: 'Charlie User' })
+  const { identity: alice } = await createAgentIdentity()
+  alice.metadata = { name: 'Alice Assistant' }
+  const { identity: bob } = await createAgentIdentity()
+  bob.metadata = { name: 'Bob Scheduler' }
+  const { identity: charlie, privateKey: charliePrivateKey } = await createPrincipalIdentity({
+    type: 'individual',
+    displayName: 'Charlie User',
+  })
   console.log(`  Alice: ${alice.did}`)
   console.log(`  Bob: ${bob.did}`)
   console.log(`  Charlie: ${charlie.did}`)
@@ -57,13 +62,13 @@ async function demo() {
 
   // Step 4: Delegation
   console.log('🔑 Step 4: Delegation Token')
-  const delegation = createDelegationToken({
+  const delegation = await signDelegationToken(createDelegationToken({
     delegator: charlie.did, delegatee: alice.did,
     capabilities: ['email:send', 'calendar:create'],
     constraints: { maxActions: 10, maxSpend: '10.00', allowedContexts: ['work'] },
     expiresAt: new Date(Date.now() + 3600000).toISOString(),
-  })
-  const valid = validateDelegationToken({ ...delegation, signature: 'demo-signature' })
+  }), charliePrivateKey)
+  const valid = validateDelegationToken(delegation)
   console.log(`  Token: ${delegation.id}`)
   console.log(`  Delegator: ${delegation.delegator} → ${delegation.delegatee}`)
   console.log(`  Valid: ${valid.valid}`)
@@ -90,10 +95,10 @@ async function demo() {
   let chain = createEvidenceChain()
   for (const evt of [
     { id: 'e1', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'email:send', payload: {}, privacy: { level: 'redacted' as const } },
-    { id: 'e2', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'calendar:create', payload: {}, privacy: { level: 'hash-only' as const } },
+    { id: 'e2', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'calendar:create', payload: {}, privacy: { level: 'hash_only' as const } },
     { id: 'e3', type: 'policy', timestamp: new Date().toISOString(), actor: alice.did, action: 'evaluate', payload: {}, privacy: { level: 'public' as const } },
   ]) {
-    chain = appendEvidenceEvent(chain, evt, 'mock-sig')
+    chain = appendEvidenceEvent(chain, evt, localEvidenceSignature(evt))
   }
   console.log(`  Events: ${chain.events.length}`)
   console.log(`  Chain valid: ${verifyEvidenceChain(chain)}`)
@@ -135,6 +140,10 @@ async function demo() {
   console.log('═'.repeat(60))
   console.log('  Demo Complete — All 9 subsystems operational')
   console.log('═'.repeat(60))
+}
+
+function localEvidenceSignature(event: unknown): string {
+  return `local-evidence:${hashEvidenceValue(event).slice('sha256:'.length)}`
 }
 
 demo().catch(console.error)

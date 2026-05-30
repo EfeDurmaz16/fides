@@ -1,0 +1,151 @@
+import { describe, expect, it } from 'vitest'
+import { DHTDiscoveryProvider } from '../src/dht-provider.js'
+import {
+  createAgentIdentity,
+  createCapabilityDescriptor,
+  createDHTPointerRecord,
+  createDiscoveryQuery,
+  hashAgentCard,
+  signAgentCard,
+  signDHTPointerRecord,
+  type AgentCard,
+} from '@fides/core'
+
+describe('DHTDiscoveryProvider', () => {
+  async function fixture() {
+    const publisher = await createAgentIdentity()
+    const agent = await createAgentIdentity()
+    const card: AgentCard = {
+      id: agent.identity.did,
+      agent_id: agent.identity.did,
+      identity: agent.identity,
+      capabilities: [createCapabilityDescriptor({ id: 'invoice.reconcile' })],
+      endpoints: [{ url: 'https://agent.example/card.json', protocol: 'https' }],
+      policies: [{ requiresRuntimeAttestation: false, requiresApproval: false }],
+      createdAt: '2026-05-29T00:00:00.000Z',
+      updatedAt: '2026-05-29T00:00:00.000Z',
+    }
+    const signedCard = await signAgentCard(card, agent.privateKey, agent.identity.did)
+    const pointer = await signDHTPointerRecord(createDHTPointerRecord({
+      capability: 'invoice.reconcile',
+      agentId: agent.identity.did,
+      agentCardUrl: 'https://agent.example/card.json',
+      agentCardHash: hashAgentCard(signedCard.payload),
+      publisherId: publisher.identity.did,
+      expiresAt: '2999-01-01T00:00:00.000Z',
+    }), publisher.privateKey)
+    return { card, signedCard, pointer }
+  }
+
+  it('discovers cards through signed DHT pointers', async () => {
+    const { signedCard, pointer } = await fixture()
+    const provider = new DHTDiscoveryProvider()
+
+    await provider.register(signedCard)
+    await provider.publishPointer(pointer)
+
+    const candidates = await provider.discover(createDiscoveryQuery({
+      capability: 'invoice.reconcile',
+    }))
+
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0]).toMatchObject({
+      provider: 'dht',
+      capability: 'invoice.reconcile',
+      verified: true,
+    })
+    expect(candidates[0].explanations[0]).toContain('not an authority')
+  })
+
+  it('does not return mismatched capability pointers', async () => {
+    const { signedCard, pointer } = await fixture()
+    const provider = new DHTDiscoveryProvider()
+
+    await provider.register(signedCard)
+    await provider.publishPointer(pointer)
+
+    const candidates = await provider.discover(createDiscoveryQuery({
+      capability: 'calendar.schedule',
+    }))
+
+    expect(candidates).toEqual([])
+  })
+
+  it('rejects tampered DHT pointers', async () => {
+    const { signedCard, pointer } = await fixture()
+    const provider = new DHTDiscoveryProvider()
+
+    await provider.register(signedCard)
+    await provider.publishPointer({
+      ...pointer,
+      capability_hash: 'sha256:tampered',
+    })
+
+    const candidates = await provider.discover(createDiscoveryQuery({
+      capability: 'invoice.reconcile',
+    }))
+
+    expect(candidates).toEqual([])
+  })
+
+  it('rejects AgentCards not signed by the advertised agent identity', async () => {
+    const { card } = await fixture()
+    const attacker = await createAgentIdentity()
+    const signedCard = await signAgentCard(card, attacker.privateKey, attacker.identity.did)
+    const provider = new DHTDiscoveryProvider()
+
+    await expect(provider.register(signedCard)).rejects.toThrow(
+      'DHT registration requires an identity-bound signed AgentCard',
+    )
+  })
+
+  it('rejects expired DHT pointers', async () => {
+    const { signedCard, pointer } = await fixture()
+    const provider = new DHTDiscoveryProvider()
+
+    await provider.register(signedCard)
+    await provider.publishPointer({
+      ...pointer,
+      expires_at: '2000-01-01T00:00:00.000Z',
+    })
+
+    const candidates = await provider.discover(createDiscoveryQuery({
+      capability: 'invoice.reconcile',
+    }))
+
+    expect(candidates).toEqual([])
+  })
+
+  it('rejects DHT pointers whose AgentCard hash does not match', async () => {
+    const { signedCard, pointer } = await fixture()
+    const provider = new DHTDiscoveryProvider()
+
+    await provider.register(signedCard)
+    await provider.publishPointer({
+      ...pointer,
+      agent_card_hash: 'sha256:mismatch',
+    })
+
+    const candidates = await provider.discover(createDiscoveryQuery({
+      capability: 'invoice.reconcile',
+    }))
+
+    expect(candidates).toEqual([])
+  })
+
+  it('rejects revoked agents before returning DHT candidates', async () => {
+    const { signedCard, pointer } = await fixture()
+    const provider = new DHTDiscoveryProvider({
+      revokedAgentIds: [signedCard.payload.id],
+    })
+
+    await provider.register(signedCard)
+    await provider.publishPointer(pointer)
+
+    const candidates = await provider.discover(createDiscoveryQuery({
+      capability: 'invoice.reconcile',
+    }))
+
+    expect(candidates).toEqual([])
+  })
+})

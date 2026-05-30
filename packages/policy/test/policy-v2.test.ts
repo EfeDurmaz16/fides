@@ -1,0 +1,134 @@
+import { describe, expect, it } from 'vitest'
+import { evaluateFidesPolicy } from '../src/index.js'
+import type { CapabilityDescriptor, TrustResult } from '@fides/core'
+
+const capability = (riskLevel: CapabilityDescriptor['riskLevel']): CapabilityDescriptor => ({
+  id: riskLevel === 'critical' ? 'payments.execute' : 'invoice.reconcile',
+  namespace: riskLevel === 'critical' ? 'payments' : 'invoice',
+  action: riskLevel === 'critical' ? 'execute' : 'reconcile',
+  name: riskLevel,
+  description: riskLevel,
+  inputSchema: { type: 'object' },
+  outputSchema: { type: 'object' },
+  riskLevel,
+  requiresApproval: riskLevel === 'critical',
+  requiresRuntimeAttestation: riskLevel === 'high' || riskLevel === 'critical',
+  requiredScopes: riskLevel === 'critical' ? ['payments:execute'] : ['invoice:read'],
+  supportedControls: ['dry_run', 'human_approval', 'runtime_attestation', 'scope_limit'],
+})
+
+const trust = (band: TrustResult['band'], score: number): TrustResult => ({
+  schema_version: 'fides.trust.result.v1',
+  id: `trust_${band}_${score}`,
+  issuer: 'did:fides:trust-engine',
+  subject: 'did:fides:agent',
+  agent_id: 'did:fides:agent',
+  capability: 'invoice.reconcile',
+  score,
+  band,
+  reasons: [],
+  risk_flags: [],
+  evidence_refs: ['evt_1'],
+  required_controls: [],
+  computed_at: '2026-05-29T00:00:00.000Z',
+  payload_hash: `sha256:${'0'.repeat(64)}`,
+})
+
+describe('FIDES policy v2', () => {
+  it('denies revoked agents before trust or capability scoring', () => {
+    const decision = evaluateFidesPolicy({
+      issuerId: 'did:fides:policy-engine',
+      decisionId: 'pol_decision_1',
+      principalId: 'did:fides:principal',
+      requesterAgentId: 'did:fides:requester',
+      targetAgentId: 'did:fides:agent',
+      capability: capability('low'),
+      trustResult: trust('verified', 0.95),
+      requestedScopes: ['invoice:read'],
+      revocationActive: true,
+      evaluatedAt: '2026-05-29T00:00:00.000Z',
+    })
+
+    expect(decision.id).toBe('pol_decision_1')
+    expect(decision.issuer).toBe('did:fides:policy-engine')
+    expect(decision.subject).toBe('did:fides:agent')
+    expect(decision.issued_at).toBe('2026-05-29T00:00:00.000Z')
+    expect(decision.payload_hash).toMatch(/^sha256:/)
+    expect(decision.decision).toBe('deny')
+    expect(decision.reason_codes).toContain('REVOCATION_ACTIVE')
+    expect(decision.human_reasons[0]).toContain('revocation')
+  })
+
+  it('lets unknown agents dry-run only instead of granting authority', () => {
+    const decision = evaluateFidesPolicy({
+      principalId: 'did:fides:principal',
+      requesterAgentId: 'did:fides:requester',
+      targetAgentId: 'did:fides:agent',
+      capability: capability('medium'),
+      trustResult: trust('unknown', 0.1),
+      requestedScopes: ['invoice:read'],
+    })
+
+    expect(decision.decision).toBe('dry_run_only')
+    expect(decision.required_controls).toEqual(expect.arrayContaining(['dry_run']))
+    expect(decision.reason_codes).toContain('TRUST_UNKNOWN_DRY_RUN_ONLY')
+  })
+
+  it('requires runtime attestation or approval for high-risk capabilities', () => {
+    const decision = evaluateFidesPolicy({
+      principalId: 'did:fides:principal',
+      requesterAgentId: 'did:fides:requester',
+      targetAgentId: 'did:fides:agent',
+      capability: capability('high'),
+      trustResult: trust('high', 0.74),
+      requestedScopes: ['invoice:read'],
+      runtimeAttestationValid: false,
+    })
+
+    expect(decision.decision).toBe('require_approval')
+    expect(decision.required_controls).toEqual(expect.arrayContaining([
+      'runtime_attestation',
+      'human_approval',
+    ]))
+    expect(decision.reason_codes).toContain('HIGH_RISK_REQUIRES_ATTESTATION_OR_APPROVAL')
+  })
+
+  it('allows scoped medium-risk actions with compatible trust and scopes', () => {
+    const decision = evaluateFidesPolicy({
+      principalId: 'did:fides:principal',
+      requesterAgentId: 'did:fides:requester',
+      targetAgentId: 'did:fides:agent',
+      capability: capability('medium'),
+      trustResult: trust('high', 0.72),
+      requestedScopes: ['invoice:read'],
+      runtimeAttestationValid: false,
+    })
+
+    expect(decision.decision).toBe('allow')
+    expect(decision.reason_codes).toContain('POLICY_ALLOWED')
+    expect(decision.machine_reasons.length).toBeGreaterThan(0)
+  })
+
+  it('changes payload_hash when machine-readable policy reasons change', () => {
+    const base = {
+      issuerId: 'did:fides:policy-engine',
+      decisionId: 'pol_decision_stable',
+      principalId: 'did:fides:principal',
+      requesterAgentId: 'did:fides:requester',
+      targetAgentId: 'did:fides:agent',
+      capability: capability('medium'),
+      trustResult: trust('high' as const, 0.72),
+      requestedScopes: ['invoice:read'],
+      evaluatedAt: '2026-05-29T00:00:00.000Z',
+    }
+
+    const allowed = evaluateFidesPolicy(base)
+    const scopeLimited = evaluateFidesPolicy({
+      ...base,
+      requestedScopes: [],
+    })
+
+    expect(allowed.payload_hash).not.toBe(scopeLimited.payload_hash)
+    expect(scopeLimited.reason_codes).toContain('SESSION_SCOPE_INVALID')
+  })
+})

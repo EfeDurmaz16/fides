@@ -61,14 +61,22 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Created local identity without private key material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIdentityResponse"
     get:
       operationId: listLocalIdentities
       tags: [Identity]
       summary: List local FIDES identities
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local identity summaries without private key material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIdentityListResponse"
 
   /identities/{id}:
     get:
@@ -79,7 +87,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local identity without private key material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIdentityResponse"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -1516,6 +1528,41 @@ components:
               enum: [memory, file, postgres]
             detail:
               type: string
+
+    LocalIdentitySummary:
+      type: object
+      required: [type, did, publicKeyHex, createdAt]
+      properties:
+        type:
+          type: string
+          enum: [agent, publisher, principal]
+        did:
+          type: string
+        publicKeyHex:
+          type: string
+          description: Public Ed25519 key hex. Private keys are never returned by this API.
+        createdAt:
+          type: string
+          format: date-time
+
+    LocalIdentityResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalIdentitySummary"
+        - type: object
+          required: [identity]
+          properties:
+            identity:
+              type: object
+              description: FIDES AgentIdentity, PublisherIdentity, or PrincipalIdentity object.
+
+    LocalIdentityListResponse:
+      type: object
+      required: [identities]
+      properties:
+        identities:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalIdentitySummary"
 
     IdentityResolutionResponse:
       type: object

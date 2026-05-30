@@ -44,28 +44,31 @@ export interface MerkleProof {
   steps: MerkleProofStep[]
 }
 
-export type EvidenceEventType =
-  | 'agent.registered'
-  | 'agent.updated'
-  | 'agent.revoked'
-  | 'discovery.performed'
-  | 'trust.computed'
-  | 'policy.evaluated'
-  | 'approval.requested'
-  | 'approval.granted'
-  | 'approval.denied'
-  | 'session.requested'
-  | 'session.granted'
-  | 'session.denied'
-  | 'capability.invoked'
-  | 'capability.completed'
-  | 'capability.failed'
-  | 'attestation.issued'
-  | 'attestation.verified'
-  | 'attestation.failed'
-  | 'revocation.recorded'
-  | 'incident.reported'
-  | 'kill_switch.triggered'
+export const EVIDENCE_EVENT_TYPES = [
+  'agent.registered',
+  'agent.updated',
+  'agent.revoked',
+  'discovery.performed',
+  'trust.computed',
+  'policy.evaluated',
+  'approval.requested',
+  'approval.granted',
+  'approval.denied',
+  'session.requested',
+  'session.granted',
+  'session.denied',
+  'capability.invoked',
+  'capability.completed',
+  'capability.failed',
+  'attestation.issued',
+  'attestation.verified',
+  'attestation.failed',
+  'revocation.recorded',
+  'incident.reported',
+  'kill_switch.triggered',
+] as const
+
+export type EvidenceEventType = typeof EVIDENCE_EVENT_TYPES[number]
 
 export type EvidencePrivacyMode = 'public' | 'private' | 'redacted' | 'hash_only'
 
@@ -128,6 +131,28 @@ export function hashEvidenceValue(value: unknown): string {
   return `sha256:${bytesToHex(sha256(new TextEncoder().encode(canonicalJson(value))))}`
 }
 
+function isEvidenceEventType(value: unknown): value is EvidenceEventType {
+  return typeof value === 'string' && EVIDENCE_EVENT_TYPES.includes(value as EvidenceEventType)
+}
+
+function isEvidencePrivacyMode(value: unknown): value is EvidencePrivacyMode {
+  return value === 'public' || value === 'private' || value === 'redacted' || value === 'hash_only'
+}
+
+function isRiskLevel(value: unknown): value is EvidenceEventV2['risk_level'] {
+  return value === 'low' || value === 'medium' || value === 'high' || value === 'critical'
+}
+
+function optionalString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key]
+  return typeof value === 'string' ? value : undefined
+}
+
+function optionalMetadata(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  return value as Record<string, unknown>
+}
+
 export function createEvidenceEventV2(
   input: EvidenceEventV2Input,
   previousEventHash = '0'
@@ -171,6 +196,73 @@ export function createEvidenceEventV2(
     event_hash,
     signature: '',
   }
+}
+
+export function normalizeEvidenceEventV2(
+  input: EvidenceEventV2 | Record<string, unknown>,
+  previousEventHash?: string
+): EvidenceEventV2 {
+  const event = input as Record<string, unknown>
+  const eventId = optionalString(event, 'event_id') ?? optionalString(event, 'id') ?? crypto.randomUUID()
+  const actor = optionalString(event, 'actor') ?? optionalString(event, 'issuer') ?? 'did:fides:unknown'
+  const timestamp = optionalString(event, 'timestamp') ?? optionalString(event, 'issued_at') ?? new Date().toISOString()
+  const legacyEventHash = optionalString(event, 'event_hash')
+  const legacyPrevEventHash = optionalString(event, 'prev_event_hash')
+  const hasEnvelope =
+    typeof event.id === 'string' &&
+    typeof event.issuer === 'string' &&
+    typeof event.issued_at === 'string' &&
+    typeof event.payload_hash === 'string'
+  const existingMetadata = optionalMetadata(event.metadata)
+  const metadata = hasEnvelope
+    ? existingMetadata
+    : {
+      ...(existingMetadata ?? {}),
+      migrated_from_legacy_evidence_event: true,
+      ...(legacyEventHash !== undefined && { legacy_event_hash: legacyEventHash }),
+      ...(legacyPrevEventHash !== undefined && { legacy_prev_event_hash: legacyPrevEventHash }),
+    }
+
+  const eventPayload: Omit<EvidenceEventV2, 'payload_hash' | 'event_hash' | 'signature'> = {
+    schema_version: 'fides.evidence_event.v1',
+    id: eventId,
+    event_id: eventId,
+    issuer: actor,
+    type: isEvidenceEventType(event.type) ? event.type : 'capability.failed',
+    actor,
+    privacy_mode: isEvidencePrivacyMode(event.privacy_mode) ? event.privacy_mode : 'hash_only',
+    issued_at: timestamp,
+    timestamp,
+    prev_event_hash: previousEventHash ?? legacyPrevEventHash ?? '0',
+    ...(optionalString(event, 'subject') !== undefined && { subject: optionalString(event, 'subject') }),
+    ...(optionalString(event, 'principal') !== undefined && { principal: optionalString(event, 'principal') }),
+    ...(optionalString(event, 'capability') !== undefined && { capability: optionalString(event, 'capability') }),
+    ...(optionalString(event, 'input_hash') !== undefined && { input_hash: optionalString(event, 'input_hash') }),
+    ...(optionalString(event, 'output_hash') !== undefined && { output_hash: optionalString(event, 'output_hash') }),
+    ...(optionalString(event, 'policy_hash') !== undefined && { policy_hash: optionalString(event, 'policy_hash') }),
+    ...(optionalString(event, 'decision') !== undefined && { decision: optionalString(event, 'decision') }),
+    ...(isRiskLevel(event.risk_level) && { risk_level: event.risk_level }),
+    ...(metadata !== undefined && { metadata }),
+  }
+  const eventWithoutHash: Omit<EvidenceEventV2, 'event_hash' | 'signature'> = {
+    ...eventPayload,
+    payload_hash: hashEvidenceValue(eventPayload),
+  }
+  return {
+    ...eventWithoutHash,
+    event_hash: hashEvidenceValue(eventWithoutHash),
+    signature: optionalString(event, 'signature') ?? '',
+  }
+}
+
+export function normalizeEvidenceEventsV2(
+  events: Array<EvidenceEventV2 | Record<string, unknown>>
+): EvidenceEventV2[] {
+  const normalized: EvidenceEventV2[] = []
+  for (const event of events) {
+    normalized.push(normalizeEvidenceEventV2(event, normalized.at(-1)?.event_hash ?? '0'))
+  }
+  return normalized
 }
 
 export async function signEvidenceEventV2(

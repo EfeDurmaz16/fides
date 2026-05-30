@@ -16,6 +16,7 @@ import {
   appendEvidenceEventV2,
   createEvidenceChain,
   createEvidenceEventV2,
+  normalizeEvidenceEventsV2,
   verifyEvidenceChain,
   verifyEvidenceEventsV2,
   type EvidenceEventV2,
@@ -275,7 +276,7 @@ function hydrateLocalState(snapshot: LocalDaemonStateSnapshot): void {
   for (const attestation of snapshot.runtimeAttestations as RuntimeAttestation[]) {
     if (attestation?.attestation_id) localRuntimeAttestations.set(attestation.attestation_id, attestation)
   }
-  localEvidenceEvents = snapshot.evidenceEvents as EvidenceEventV2[]
+  localEvidenceEvents = normalizeEvidenceEventsV2(snapshot.evidenceEvents as Array<Record<string, unknown>>)
   localSessionGrants.clear()
   for (const record of snapshot.sessionGrants as LocalSessionRecord[]) {
     if (record?.session?.session_id) localSessionGrants.set(record.session.session_id, record)

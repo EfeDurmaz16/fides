@@ -21,6 +21,14 @@ Current implementation anchors:
 The event still keeps evidence-native fields such as `prev_event_hash` and
 `event_hash` for hash-chain verification.
 
+Local daemon state can contain older V2 evidence events created before the
+shared envelope fields existed. On load, `agentd` normalizes those legacy
+events into the current envelope, recomputes the local chain links, and
+preserves previous `event_hash` and `prev_event_hash` values in event metadata
+as `legacy_event_hash` and `legacy_prev_event_hash`. This is a local migration
+path for unanchored daemon state; externally anchored evidence exports should be
+verified against the format and root that were originally exported.
+
 The event taxonomy includes agent registration, discovery, trust computation, policy evaluation, approval, session, invocation, attestation, revocation, incident, and kill switch events.
 
 Current root `agentd` mutations append hash-only lifecycle evidence for:

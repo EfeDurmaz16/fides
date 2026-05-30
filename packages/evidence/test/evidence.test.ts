@@ -8,6 +8,7 @@ import {
   createEvidenceEventV2,
   exportEvidenceEventsV2,
   hashEvidenceValue,
+  normalizeEvidenceEventsV2,
   redactEvidenceEventV2,
   redactEvent,
   signEvidenceEventV2,
@@ -198,6 +199,51 @@ describe('Evidence Ledger', () => {
 
     expect(verifyEvidenceEventsV2(events)).toBe(true)
     expect(verifyEvidenceEventsV2([{ ...second, prev_event_hash: 'wrong' }])).toBe(false)
+  })
+
+  it('normalizes legacy v2 events into the signed object envelope', () => {
+    const legacyFirst = {
+      schema_version: 'fides.evidence_event.v1',
+      event_id: 'evt_legacy_1',
+      type: 'session.requested',
+      actor: 'did:fides:requester',
+      privacy_mode: 'hash_only',
+      timestamp: '2026-05-29T00:00:00.000Z',
+      prev_event_hash: '0',
+      event_hash: 'sha256:legacy-first',
+      signature: '',
+    }
+    const legacySecond = {
+      schema_version: 'fides.evidence_event.v1',
+      event_id: 'evt_legacy_2',
+      type: 'session.granted',
+      actor: 'did:fides:target',
+      privacy_mode: 'hash_only',
+      timestamp: '2026-05-29T00:00:01.000Z',
+      prev_event_hash: 'sha256:legacy-first',
+      event_hash: 'sha256:legacy-second',
+      signature: '',
+    }
+
+    const normalized = normalizeEvidenceEventsV2([legacyFirst, legacySecond])
+
+    expect(normalized[0].id).toBe('evt_legacy_1')
+    expect(normalized[0].issuer).toBe('did:fides:requester')
+    expect(normalized[0].issued_at).toBe('2026-05-29T00:00:00.000Z')
+    expect(normalized[0].payload_hash).toMatch(/^sha256:/)
+    expect(normalized[0].event_hash).toMatch(/^sha256:/)
+    expect(normalized[0].metadata).toMatchObject({
+      migrated_from_legacy_evidence_event: true,
+      legacy_event_hash: 'sha256:legacy-first',
+      legacy_prev_event_hash: '0',
+    })
+    expect(normalized[1].prev_event_hash).toBe(normalized[0].event_hash)
+    expect(normalized[1].metadata).toMatchObject({
+      migrated_from_legacy_evidence_event: true,
+      legacy_event_hash: 'sha256:legacy-second',
+      legacy_prev_event_hash: 'sha256:legacy-first',
+    })
+    expect(verifyEvidenceEventsV2(normalized)).toBe(true)
   })
 
   it('exports v2 events according to privacy mode without exposing metadata by default', () => {

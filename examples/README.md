@@ -32,6 +32,21 @@ Type-check every example agent and demo contract:
 pnpm examples:typecheck
 ```
 
+Verify that the canonical v2 example catalog includes the requested agent
+roles, capabilities, risk classes, and authority notes:
+
+```bash
+pnpm examples:audit
+```
+
+The canonical catalog lives in `examples/agent-catalog.ts` and uses the v2
+capability names:
+
+- `calendar.schedule`
+- `invoice.reconcile`
+- `payments.prepare`
+- `payments.execute`
+
 ## Example Agents
 
 Each example is a self-contained script that demonstrates specific FIDES concepts.

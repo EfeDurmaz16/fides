@@ -1005,7 +1005,11 @@ paths:
         - ApiKeyAuth: []
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Full local demo result with trust, policy, invocation, and evidence summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDemoRunResponse"
 
   /simulate/adversarial:
     post:
@@ -1016,7 +1020,11 @@ paths:
         - ApiKeyAuth: []
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local adversarial simulation detection result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAdversarialSimulationResponse"
 
   /v1/identities/{did}:
     get:
@@ -3336,6 +3344,160 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/EvidenceEventV2"
+
+    LocalDemoAuthoritySummary:
+      type: object
+      required: [discoveryGrantsAuthority, policyBeforeExecution, evidenceProduced]
+      properties:
+        discoveryGrantsAuthority:
+          type: boolean
+          enum: [false]
+        identityEqualsTrust:
+          type: boolean
+          enum: [false]
+        trustScoreEqualsPermission:
+          type: boolean
+          enum: [false]
+        policyBeforeExecution:
+          type: boolean
+        evidenceProduced:
+          type: boolean
+
+    LocalDemoRunResponse:
+      type: object
+      required: [status, mode, steps, identities, discovery, verification, authority, surfaces, limitations]
+      properties:
+        status:
+          type: string
+          enum: [executed]
+        mode:
+          type: string
+          enum: [local-first]
+        steps:
+          type: array
+          items:
+            type: string
+        identities:
+          type: object
+          additionalProperties:
+            type: string
+        discovery:
+          type: object
+          additionalProperties: true
+        verification:
+          type: object
+          required: [agentCardsVerified, evidenceHashChainValid, evidenceEventCount, evidenceExport]
+          properties:
+            agentCardsVerified:
+              type: boolean
+            evidenceHashChainValid:
+              type: boolean
+            evidenceEventCount:
+              type: integer
+            evidenceExport:
+              type: object
+              additionalProperties: true
+        trust:
+          type: object
+          additionalProperties: true
+        reputation:
+          type: object
+          additionalProperties: true
+        policy:
+          type: object
+          additionalProperties: true
+        sessions:
+          type: object
+          additionalProperties: true
+        invocation:
+          type: object
+          additionalProperties: true
+        governance:
+          type: object
+          additionalProperties: true
+        authority:
+          $ref: "#/components/schemas/LocalDemoAuthoritySummary"
+        surfaces:
+          type: object
+          additionalProperties: true
+        limitations:
+          type: array
+          items:
+            type: string
+
+    LocalAdversarialScenario:
+      type: object
+      required: [name, detected, outcome, evidenceRef]
+      properties:
+        name:
+          type: string
+        detected:
+          type: boolean
+        outcome:
+          type: string
+        evidenceRef:
+          type: string
+        policy:
+          type: object
+          additionalProperties: true
+        trust:
+          type: object
+          additionalProperties: true
+        reputation:
+          type: object
+          additionalProperties: true
+        errors:
+          type: array
+          items:
+            type: string
+
+    LocalAdversarialSimulationResponse:
+      type: object
+      required: [status, mode, detections, scenarios, evidence, authority, limitations]
+      properties:
+        status:
+          type: string
+          enum: [detected, partial]
+        mode:
+          type: string
+          enum: [local-first]
+        detections:
+          type: array
+          items:
+            type: string
+        scenarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalAdversarialScenario"
+        incident:
+          $ref: "#/components/schemas/IncidentRecordV2"
+        revocation:
+          $ref: "#/components/schemas/RevocationRecordV2"
+        preflight:
+          type: object
+          additionalProperties: true
+        evidence:
+          type: object
+          required: [scenarioEvents, incidentEvidenceRef, rootChainValid, rootEventCount, brokenEvidenceChainValid]
+          properties:
+            scenarioEvents:
+              type: object
+              additionalProperties:
+                type: string
+            incidentEvidenceRef:
+              type: string
+            rootChainValid:
+              type: boolean
+            rootEventCount:
+              type: integer
+            brokenEvidenceChainValid:
+              type: boolean
+        authority:
+          $ref: "#/components/schemas/LocalDemoAuthoritySummary"
+        limitations:
+          type: array
+          items:
+            type: string
 
     EvidenceSubmitRequest:
       type: object

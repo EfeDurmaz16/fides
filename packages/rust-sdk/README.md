@@ -33,6 +33,7 @@ Future Rust adapters may implement:
 - Rust adapters must not introduce a separate wire format.
 - Public SDK APIs remain Promise-based TypeScript APIs.
 - Effect, if used internally, must not leak into Rust adapter protocol objects.
+- No Rust crate is required or published yet.
 
 ## Current Status
 

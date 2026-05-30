@@ -54,6 +54,9 @@ Last verified locally: 2026-05-30.
 - Publishable package hygiene and dry-run pack checks now cover all 25
   non-private packages under `packages/*`, and fail if a publishable package is
   omitted from the public package gate.
+- Rust remains adapter-ready rather than required: `pnpm rust-adapter:audit`
+  verifies `packages/rust-sdk` stays documentation-only, has no Rust/package
+  runtime manifest, and matches the `@fides/adapters` Rust primitive surfaces.
 - Canonical v2 example agent catalog for calendar, invoice, payment, requester,
   and malicious agents, with audited capability IDs, risk classes, required
   scopes, and authority notes.
@@ -323,6 +326,7 @@ pnpm --filter @fides/cli build
 pnpm package:hygiene
 pnpm api:audit
 pnpm cli:audit
+pnpm rust-adapter:audit
 pnpm smoke:agentd
 ```
 
@@ -388,6 +392,7 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `TBD test(adapters): audit rust adapter readiness`
 - `cb14b16 test(examples): enforce target agent layout`
 - `86c719e feat(packages): publish guard and adapters surfaces`
 - `33a6de8 feat(packages): add daemon and runtime effect boundaries`

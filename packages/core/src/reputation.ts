@@ -1,3 +1,5 @@
+import { hashProtocolPayload, type HashValue } from './protocol.js'
+
 export interface ReputationReason {
   factor: 'success_rate' | 'volume_confidence' | 'publisher_weight' | 'incident_penalty' | 'context_boundary_penalty'
   value: number
@@ -6,6 +8,9 @@ export interface ReputationReason {
 
 export interface ReputationRecord {
   schema_version: 'fides.reputation.record.v1'
+  id: string
+  issuer: string
+  subject: string
   agent_id: string
   publisher_id?: string
   principal_id?: string
@@ -18,10 +23,13 @@ export interface ReputationRecord {
   context_boundary_penalty: number
   reasons: ReputationReason[]
   computed_at: string
+  payload_hash: HashValue
 }
 
 export interface ComputeCapabilityReputationInput {
   agentId: string
+  issuer?: string
+  recordId?: string
   publisherId?: string
   principalId?: string
   capability: string
@@ -48,6 +56,7 @@ export function computeCapabilityReputation(input: ComputeCapabilityReputationIn
   const publisherWeight = clamp01(input.publisherWeight ?? 0.5)
   const incidentPenalty = Math.min(1, incidentCount * 0.18)
   const contextBoundaryPenalty = input.contextBoundaryMismatch ? 0.2 : 0
+  const computedAt = input.computedAt ?? new Date().toISOString()
 
   const score = clamp01(
     (successRate * 0.48) +
@@ -58,8 +67,11 @@ export function computeCapabilityReputation(input: ComputeCapabilityReputationIn
     contextBoundaryPenalty
   )
 
-  return {
+  const payload = {
     schema_version: 'fides.reputation.record.v1',
+    id: input.recordId ?? crypto.randomUUID(),
+    issuer: input.issuer ?? 'fides.reputation-engine',
+    subject: input.agentId,
     agent_id: input.agentId,
     publisher_id: input.publisherId,
     principal_id: input.principalId,
@@ -77,7 +89,12 @@ export function computeCapabilityReputation(input: ComputeCapabilityReputationIn
       { factor: 'incident_penalty', value: incidentPenalty, description: 'Penalty from incidents scoped to this capability or agent' },
       { factor: 'context_boundary_penalty', value: contextBoundaryPenalty, description: 'Penalty for applying reputation outside its capability context' },
     ],
-    computed_at: input.computedAt ?? new Date().toISOString(),
+    computed_at: computedAt,
+  } satisfies Omit<ReputationRecord, 'payload_hash'>
+
+  return {
+    ...payload,
+    payload_hash: hashProtocolPayload(payload),
   }
 }
 

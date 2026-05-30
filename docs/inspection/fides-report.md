@@ -58,7 +58,7 @@ Local evidence:
 | DHT discovery | Present, local simulator | `packages/core/src/dht.ts` defines signed `DHTPointerRecord`; `packages/discovery/src/dht-provider.ts` rejects tampered, expired, hash-mismatched, or revoked pointer candidates. |
 | Federation | Present, local mock | `packages/core/src/registry.ts` defines `RegistryPeerRecord`; `packages/discovery/src/federation-provider.ts` verifies signed peer records for candidate-only federation discovery. |
 | Trust graph | Present | `services/trust-graph/src/services/graph.ts`, `services/trust-graph/src/services/trust-service.ts`. |
-| Capability-specific reputation | Partial | `services/trust-graph/src/db/migrations/003_capability_scoring.sql`, `services/trust-graph/src/services/capability-scoring.ts`. |
+| Capability-specific reputation | Present, evolving | `packages/core/src/reputation.ts` defines canonical-hashable capability-specific `ReputationRecord` objects with publisher/principal scope, incident and context-boundary penalties; trust graph services provide additional scoring infrastructure. |
 | Context-specific trust scoring | Present, evolving | `packages/core/src/trust.ts` defines componentized `TrustResult` scoring with identity, publisher, trust anchor, capability fit, evidence, policy compliance, runtime safety, peer attestation, incident, novelty, and context-boundary components plus canonical `payload_hash`. |
 | Policy engine | Present, simple | `packages/policy/src/index.ts`, `services/policy-engine/src/index.ts`. |
 | Delegation tokens | Present | `packages/core/src/delegation.ts`. |

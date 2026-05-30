@@ -83,4 +83,22 @@ describe('DHT pointer records', () => {
     expect(result.valid).toBe(false)
     expect(result.errors).toContain('DHT pointer agent_card_hash mismatch')
   })
+
+  it('rejects pointers for capabilities not advertised by the AgentCard', async () => {
+    const { card, publisher } = await fixture()
+    const record = createDHTPointerRecord({
+      capability: 'payments.execute',
+      agentId: card.identity.did,
+      agentCardUrl: 'https://agent.example/card.json',
+      agentCardHash: hashAgentCard(card),
+      publisherId: publisher.identity.did,
+      expiresAt: '2999-01-01T00:00:00.000Z',
+    })
+    const signed = await signDHTPointerRecord(record, publisher.privateKey)
+
+    const result = await verifyDHTPointerRecord(signed, { card })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContain('DHT pointer capability is not advertised by AgentCard')
+  })
 })

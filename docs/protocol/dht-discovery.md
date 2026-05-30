@@ -24,12 +24,14 @@ publishes are accepted only as local mock records and are marked unverified.
 2. Query DHT for pointers.
 3. Verify pointer signature and expiry.
 4. Resolve AgentCard.
-5. Verify AgentCard hash and signature.
+5. Verify AgentCard hash, agent identity, advertised capability, and signature.
 6. Continue to trust and policy.
 
 `/dht/find` and `/discover/dht` verify signed local pointer records before
 returning them. Expired, tampered, or AgentCard-hash-mismatched pointers are
-reported as rejected pointers and do not become authority.
+reported as rejected pointers and do not become authority. A pointer is also
+rejected when it claims a capability that the resolved AgentCard does not
+advertise.
 
 The package-level `DHTDiscoveryProvider` also rejects invalid pointers before
 returning candidates. Tampered pointer hashes, expired pointers, AgentCard hash

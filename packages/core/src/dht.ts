@@ -92,6 +92,9 @@ export async function verifyDHTPointerRecord(
     if ((options.card.agent_id ?? options.card.identity.did) !== record.agent_id) {
       errors.push('DHT pointer agent_id does not match AgentCard')
     }
+    if (!options.card.capabilities.some(capability => capability.id === record.capability)) {
+      errors.push('DHT pointer capability is not advertised by AgentCard')
+    }
   }
 
   if (!record.signature) {

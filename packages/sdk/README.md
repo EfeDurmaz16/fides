@@ -72,6 +72,7 @@ await client.discovery.local({ capability: 'invoice.reconcile' })
 await client.discovery.registry({ capability: 'invoice.reconcile' })
 await client.discovery.relay({ capability: 'invoice.reconcile' })
 await client.discovery.dht({ capability: 'invoice.reconcile' })
+const providerResults = await client.discovery.allProviders({ capability: 'invoice.reconcile' })
 const trust = await client.trust.evaluate({
   agentId: identity.identity.did,
   capability: 'invoice.reconcile',
@@ -165,7 +166,10 @@ responses preserve `authority: "candidate_only"`, `authorityGranted: false`,
 `verified`, and machine-readable `reasons`. Standalone discovery responses
 preserve `verified: false`, `authorityGranted: false`, and machine-readable
 `reasons` so SDK callers do not accidentally treat metadata discovery as trust
-or permission. Trust and reputation are capability-scoped signals; policy
+or permission. `client.discovery.allProviders()` queries local, well-known,
+registry, relay, DHT, and federation surfaces and preserves partial provider
+failures as `ok: false` results instead of granting authority or dropping
+successful candidates. Trust and reputation are capability-scoped signals; policy
 decisions still require scoped session grants before invocation.
 Root session and invocation helpers use the local daemon preflight path and are
 currently in-memory. Session responses preserve `authorityMode` and

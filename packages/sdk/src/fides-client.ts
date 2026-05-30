@@ -30,6 +30,9 @@ export interface FidesDiscoveryQuery {
   required_versions?: string[]
 }
 
+export const FIDES_DISCOVERY_PROVIDERS = ['local', 'well-known', 'registry', 'relay', 'dht', 'federation'] as const
+export type FidesDiscoveryProviderName = typeof FIDES_DISCOVERY_PROVIDERS[number]
+
 export interface FidesProviderRecord {
   agentId?: string
   agent_id?: string
@@ -66,6 +69,32 @@ export interface FidesDiscoveryResponse {
   authorityGranted: false
   explanation?: string
   [key: string]: unknown
+}
+
+export interface FidesDiscoveryProviderSuccess {
+  provider: FidesDiscoveryProviderName
+  ok: true
+  result: FidesDiscoveryResponse
+}
+
+export interface FidesDiscoveryProviderFailure {
+  provider: FidesDiscoveryProviderName
+  ok: false
+  authorityGranted: false
+  error: {
+    message: string
+    status?: number
+    code?: string
+    payload?: unknown
+  }
+}
+
+export type FidesDiscoveryProviderResult = FidesDiscoveryProviderSuccess | FidesDiscoveryProviderFailure
+
+export interface FidesAllProvidersDiscoveryResponse {
+  query: FidesDiscoveryQuery
+  authorityGranted: false
+  results: FidesDiscoveryProviderResult[]
 }
 
 export interface FidesLocalAgentRegistration {
@@ -280,6 +309,10 @@ export class FidesClient {
     relay: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/relay', query) as Promise<FidesDiscoveryResponse>,
     dht: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/dht', query) as Promise<FidesDiscoveryResponse>,
     federation: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/federation', query) as Promise<FidesDiscoveryResponse>,
+    allProviders: (
+      query: FidesDiscoveryQuery,
+      providers: readonly FidesDiscoveryProviderName[] = FIDES_DISCOVERY_PROVIDERS
+    ): Promise<FidesAllProvidersDiscoveryResponse> => this.discoverAllProviders(query, providers),
   }
 
   readonly trust = {
@@ -437,6 +470,35 @@ export class FidesClient {
     return this.request(path, { method: 'DELETE' })
   }
 
+  private async discoverAllProviders(
+    query: FidesDiscoveryQuery,
+    providers: readonly FidesDiscoveryProviderName[]
+  ): Promise<FidesAllProvidersDiscoveryResponse> {
+    const results = await Promise.all(providers.map(async (provider): Promise<FidesDiscoveryProviderResult> => {
+      const path = provider === 'local' ? '/discover/local' : `/discover/${provider}`
+      try {
+        return {
+          provider,
+          ok: true,
+          result: await this.post(path, query) as FidesDiscoveryResponse,
+        }
+      } catch (err) {
+        return {
+          provider,
+          ok: false,
+          authorityGranted: false,
+          error: discoveryProviderError(err),
+        }
+      }
+    }))
+
+    return {
+      query,
+      authorityGranted: false,
+      results,
+    }
+  }
+
   private async request(path: string, init: RequestInit): Promise<unknown> {
     const headers = new Headers(init.headers)
     if (this.options.apiKey) {
@@ -463,6 +525,20 @@ function extractErrorEnvelope(payload: unknown): ErrorEnvelope | undefined {
   if (!payload || typeof payload !== 'object') return undefined
   const error = (payload as { error?: unknown }).error
   return isErrorEnvelope(error) ? error : undefined
+}
+
+function discoveryProviderError(err: unknown): FidesDiscoveryProviderFailure['error'] {
+  if (err instanceof FidesClientError) {
+    return {
+      message: err.message,
+      status: err.status || undefined,
+      code: err.error?.code,
+      payload: err.payload,
+    }
+  }
+  return {
+    message: err instanceof Error ? err.message : String(err),
+  }
 }
 
 function privateKeyBytes(key: Uint8Array | string): Uint8Array {

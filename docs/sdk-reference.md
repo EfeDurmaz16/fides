@@ -194,7 +194,12 @@ registration and discovery return candidates only; `authorityGranted` remains
 `authorityGranted: false`, `verified`, and machine-readable `reasons`.
 Standalone discovery candidate metadata also carries `verified: false` and
 machine-readable `reasons`, which the SDK preserves on returned AgentCard
-objects. Trust and reputation APIs return capability-scoped signals, and policy
+objects. `client.discovery.allProviders()` queries local, well-known, registry,
+relay, DHT, and federation providers and returns one result per provider; failed
+providers are preserved as `ok: false` records with typed error metadata while
+successful provider responses remain available. The aggregate response keeps
+`authorityGranted: false`; provider orchestration is still discovery, not
+authority. Trust and reputation APIs return capability-scoped signals, and policy
 evaluation explains the decision but still requires session grant issuance
 before invocation. Delegation helpers create local DelegationToken intents; the
 daemon signs them when the delegator identity is locally managed, but they still

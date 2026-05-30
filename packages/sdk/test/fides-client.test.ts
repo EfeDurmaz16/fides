@@ -75,6 +75,7 @@ describe('FidesClient', () => {
     })
     await client.discovery.dht({ capability: 'invoice.reconcile' })
     await client.discovery.federation({ capability: 'invoice.reconcile' })
+    await client.discovery.allProviders({ capability: 'invoice.reconcile' })
     await client.trust.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.trust.get('did:fides:agent')
     await client.reputation.update({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
@@ -146,6 +147,12 @@ describe('FidesClient', () => {
       'http://localhost:4817/discover/relay',
       'http://localhost:4817/discover/dht',
       'http://localhost:4817/discover/federation',
+      'http://localhost:4817/discover/local',
+      'http://localhost:4817/discover/well-known',
+      'http://localhost:4817/discover/registry',
+      'http://localhost:4817/discover/relay',
+      'http://localhost:4817/discover/dht',
+      'http://localhost:4817/discover/federation',
       'http://localhost:4817/trust/evaluate',
       'http://localhost:4817/trust/did%3Afides%3Aagent',
       'http://localhost:4817/reputation/update',
@@ -195,6 +202,12 @@ describe('FidesClient', () => {
       'http://localhost:4817/invoke',
     ])
     expect(calls.map(call => call.init?.method)).toEqual([
+      'POST',
+      'POST',
+      'POST',
+      'POST',
+      'POST',
+      'POST',
       'POST',
       'POST',
       'POST',
@@ -259,16 +272,16 @@ describe('FidesClient', () => {
       supported_versions: ['fides.v2.0'],
       required_versions: ['fides.v2.0'],
     })
-    expect(JSON.parse(calls[39].init?.body as string)).toEqual({
+    expect(JSON.parse(calls[45].init?.body as string)).toEqual({
       capability: 'invoice.reconcile',
       supported_versions: ['fides.v2.0'],
       required_versions: ['fides.v2.0'],
     })
-    expect(JSON.parse(calls[45].init?.body as string)).toEqual({
+    expect(JSON.parse(calls[51].init?.body as string)).toEqual({
       capability: 'invoice.reconcile',
       agentId: 'did:fides:agent',
     })
-    expect(JSON.parse(calls[54].init?.body as string)).toEqual({
+    expect(JSON.parse(calls[60].init?.body as string)).toEqual({
       privacy_mode: 'hash_only',
       include_metadata: false,
     })
@@ -657,5 +670,57 @@ describe('FidesClient', () => {
       'http://localhost:7345/agents/did%3Afides%3Aagent',
       'http://localhost:7345/discover',
     ])
+  })
+
+  it('keeps SDK all-provider discovery results when one provider fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => {
+      if (String(url).endsWith('/discover/relay')) {
+        return new Response(JSON.stringify({
+          error: {
+            code: 'VERSION_INCOMPATIBLE',
+            category: 'version',
+            severity: 'error',
+            retryable: false,
+            message: 'Relay candidate protocol version is incompatible',
+            details: { provider: 'relay' },
+          },
+        }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      return new Response(JSON.stringify({
+        provider: String(url).split('/').at(-1),
+        authorityGranted: false,
+        candidates: [{ agentId: 'did:fides:agent', authorityGranted: false }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const result = await client.discovery.allProviders({ capability: 'invoice.reconcile' })
+
+    expect(result.authorityGranted).toBe(false)
+    expect(result.results).toHaveLength(6)
+    expect(result.results).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: 'local',
+        ok: true,
+        result: expect.objectContaining({ authorityGranted: false }),
+      }),
+      expect.objectContaining({
+        provider: 'relay',
+        ok: false,
+        authorityGranted: false,
+        error: expect.objectContaining({
+          status: 503,
+          code: 'VERSION_INCOMPATIBLE',
+          message: 'Relay candidate protocol version is incompatible',
+        }),
+      }),
+    ]))
   })
 })

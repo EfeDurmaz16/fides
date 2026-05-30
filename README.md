@@ -185,7 +185,9 @@ intent/capability + constraints
 | `@fides/guard` | Guard decision engine combining trust, evidence, attestation, and policy into allow/deny decisions |
 | `@fides/evidence` | Evidence ledger with hash-chained events, Merkle root computation, and privacy levels |
 | `@fides/runtime` | Runtime attestation adapter interfaces, mock attestation, and kill switch (global/agent/capability/principal) |
+| `@fides/runtime-effect` | Effect-ready internal workflow boundary using framework-agnostic protocol objects |
 | `@fides/discovery` | Discovery provider architecture with priority-based orchestration |
+| `@fides/daemon` | Local daemon defaults, config paths, well-known endpoints, and SDK client factory |
 | `@fides/sdk` | TypeScript SDK for identity, RFC 9421 signing, trust graph, agentd authority APIs, and hosted registry APIs |
 | `@fides/shared` | Shared types, constants, and utilities |
 | `@fides/cli` | Command-line interface for agent management and diagnostics |

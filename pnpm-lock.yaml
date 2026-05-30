@@ -169,6 +169,22 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.10)
 
+  packages/daemon:
+    dependencies:
+      '@fides/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.10)
+
   packages/delegation:
     dependencies:
       '@fides/core':
@@ -409,6 +425,22 @@ importers:
       '@fides/shared':
         specifier: workspace:*
         version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.10)
+
+  packages/runtime-effect:
+    dependencies:
+      '@fides/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^22.10.5

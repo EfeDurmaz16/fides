@@ -11,6 +11,7 @@ export const publicPackageDirs = [
   'packages/delegation',
   'packages/invocation',
   'packages/runtime',
+  'packages/runtime-effect',
   'packages/discovery',
   'packages/dht',
   'packages/relay',
@@ -18,6 +19,7 @@ export const publicPackageDirs = [
   'packages/evidence',
   'packages/revocation',
   'packages/incidents',
+  'packages/daemon',
   'packages/sdk',
   'packages/cli',
 ]

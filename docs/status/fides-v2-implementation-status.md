@@ -48,7 +48,7 @@ Last verified locally: 2026-05-30.
   sessions, evidence events, revocations, incidents, and kill switch rules.
 - Public target-structure facade packages for crypto, identity, attestations,
   cards, trust, reputation, delegation, invocation, DHT, relay, registry,
-  revocation, and incidents.
+  revocation, incidents, runtime-effect, and daemon.
 - Public facade packages include export contract tests and no longer depend on
   empty-test fallback behavior.
 - Canonical v2 example agent catalog for calendar, invoice, payment, requester,
@@ -149,6 +149,7 @@ Last verified locally: 2026-05-30.
 | Invocation | `packages/invocation` |
 | Guard decision pipeline | `packages/guard` |
 | Runtime attestation and kill switch | `packages/runtime` |
+| Effect-ready runtime workflow boundary | `packages/runtime-effect` |
 | Discovery providers | `packages/discovery` |
 | DHT pointer records | `packages/dht` |
 | Relay discovery facade | `packages/relay` |
@@ -158,6 +159,7 @@ Last verified locally: 2026-05-30.
 | SDK | `packages/sdk` |
 | CLI | `packages/cli` |
 | Local daemon/API | `services/agentd` |
+| Local daemon package boundary | `packages/daemon` |
 | Adapters | `packages/adapters` |
 
 Some target packages are currently domain facades over the TS-first core

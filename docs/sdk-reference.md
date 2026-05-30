@@ -219,10 +219,13 @@ Approval helpers return typed `ApprovalRequest` / `ApprovalDecision` responses
 and keep `authorityGranted: false`; an approval record is evidence for policy,
 not invocation authority by itself.
 Revocation and incident helpers expose local governance records that feed root
-session policy decisions. Attestation helpers include local mock identity trust
-anchors for GitHub, email, domain, package registry, and wallet claims, plus
-runtime MockTEE attestations that can satisfy high-risk session policy when
-passed as an `attestationId`. Registry, relay, DHT, federation, and well-known
+session policy decisions. Revocation helpers return typed `RevocationRecordV2`
+responses, and active revocations are authority overrides that deny matching
+trust and policy paths rather than grant new authority. Attestation helpers
+include local mock identity trust anchors for GitHub, email, domain, package
+registry, and wallet claims, plus runtime MockTEE attestations that can satisfy
+high-risk session policy when passed as an `attestationId`. Registry, relay,
+DHT, federation, and well-known
 helpers expose the local mock discovery surfaces. They return candidate records
 or pointers only; they do not convert discovery into authority. Discovery,
 registry, relay, and federation helpers accept `supported_versions` and

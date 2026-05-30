@@ -164,6 +164,60 @@ describe('FidesClient', () => {
     expect(disabled.rule.enabled).toBe(false)
   })
 
+  it('types root revocation responses as authority overrides', async () => {
+    const record = {
+      schema_version: 'fides.revocation.record.v1',
+      id: 'rev_1',
+      issuer: 'did:fides:operator',
+      subject: 'did:fides:agent',
+      target_type: 'agent',
+      target_id: 'did:fides:agent',
+      reason: 'compromised deployment key',
+      status: 'active',
+      evidence_refs: [],
+      created_at: '2026-05-30T00:00:00.000Z',
+      payload_hash: 'sha256:revocation',
+    }
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).endsWith('/revocations/rev_1')) {
+        return new Response(JSON.stringify({
+          id: 'rev_1',
+          revoked: true,
+          record,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/revocations') && init?.method === 'GET') {
+        return new Response(JSON.stringify({
+          records: [record],
+          active: [record],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({
+        record,
+        evidenceRefs: ['evt_revocation'],
+        authorityOverride: true,
+        explanation: 'Active revocation records override normal trust and policy evaluation for matching requests.',
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const created = await client.revocations.create({
+      targetType: 'agent',
+      targetId: 'did:fides:agent',
+      reason: 'compromised deployment key',
+    })
+    expect(created.record.status).toBe('active')
+    expect(created.authorityOverride).toBe(true)
+
+    const listed = await client.revocations.list()
+    expect(listed.active[0]?.target_type).toBe('agent')
+
+    const status = await client.revocations.get('rev_1')
+    expect(status.revoked).toBe(true)
+    expect(status.record?.target_id).toBe('did:fides:agent')
+  })
+
   it('exposes promise-based identity, card, discovery, trust, session, and invocation namespaces', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {

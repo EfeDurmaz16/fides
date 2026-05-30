@@ -6,6 +6,7 @@ import {
   type KillSwitchRule,
   type PrincipalIdentity,
   type PublisherIdentity,
+  type RevocationRecordV2,
   type TrustResult,
   createInvocationRequest,
   isErrorEnvelope,
@@ -300,6 +301,27 @@ export interface FidesKillSwitchListResponse {
   [key: string]: unknown
 }
 
+export interface FidesRevocationRecordResponse {
+  record: RevocationRecordV2
+  evidenceRefs?: string[]
+  authorityOverride?: boolean
+  explanation?: string
+  [key: string]: unknown
+}
+
+export interface FidesRevocationListResponse {
+  records: RevocationRecordV2[]
+  active: RevocationRecordV2[]
+  [key: string]: unknown
+}
+
+export interface FidesRevocationStatusResponse {
+  id: string
+  revoked: boolean
+  record?: RevocationRecordV2
+  [key: string]: unknown
+}
+
 export interface FidesSessionResponse {
   authorized: boolean
   authorityGranted: boolean
@@ -428,9 +450,13 @@ export class FidesClient {
   }
 
   readonly revocations = {
-    create: (body: Record<string, unknown>) => this.post('/revocations', body),
-    list: () => this.get('/revocations'),
-    get: (recordId: string) => this.get(`/revocations/${encodeURIComponent(recordId)}`),
+    create: (body: Record<string, unknown>): Promise<FidesRevocationRecordResponse> => (
+      this.post('/revocations', body) as Promise<FidesRevocationRecordResponse>
+    ),
+    list: (): Promise<FidesRevocationListResponse> => this.get('/revocations') as Promise<FidesRevocationListResponse>,
+    get: (recordId: string): Promise<FidesRevocationStatusResponse> => (
+      this.get(`/revocations/${encodeURIComponent(recordId)}`) as Promise<FidesRevocationStatusResponse>
+    ),
   }
 
   readonly incidents = {

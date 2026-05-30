@@ -185,7 +185,10 @@ rule is an authority override that denies or limits policy, not a session grant.
 Approval helpers return typed `ApprovalRequest` / `ApprovalDecision` responses
 and keep `authorityGranted: false`; approval records inform policy but do not
 grant invocation authority by themselves. Revocation and incident helpers expose
-local governance records that feed root session policy decisions. Runtime attestation helpers issue and verify local MockTEE
+local governance records that feed root session policy decisions. Revocation
+helpers return typed `RevocationRecordV2` responses, and active revocations are
+authority overrides that deny matching trust and policy paths rather than grant
+new authority. Runtime attestation helpers issue and verify local MockTEE
 attestations that can satisfy high-risk session policy when passed as an
 `attestationId`. Evidence helpers append hash-only events by default, inspect
 individual events, verify the root hash chain, and export the current local

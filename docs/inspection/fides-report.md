@@ -63,14 +63,14 @@ Local evidence:
 | Policy engine | Present, simple | `packages/policy/src/index.ts`, `services/policy-engine/src/index.ts`. |
 | Delegation tokens | Present | `packages/core/src/delegation.ts`. |
 | Session grants | Present, evolving | `packages/core/src/delegation.ts` defines scoped v2 `SessionGrant` objects with shared `id`, `issuer`, `subject`, session id, requester, target, principal, capability, scopes, policy/trust hashes, nonce, audience, expiry, and payload hash; `packages/core/src/session-store.ts` and `services/agentd/src/index.ts` use them locally. |
-| Capability invocation | Partial | Guard/agentd authorization exists; no generic signed InvocationRequest/InvocationResult protocol object found. |
+| Capability invocation | Present, evolving | `packages/core/src/invocation.ts` defines signed `InvocationRequest` and `InvocationResult` protocol objects with shared issuer/subject/payload hash fields, schema validation helpers, and policy preflight mapping. |
 | Runtime attestation | Present | `packages/core/src/runtime-attestation.ts` defines canonical-hashable v2 `RuntimeAttestation` objects; `packages/runtime/src/index.ts` provides MockTEE, HTTP TEE, build, container, package, and GitHub adapter-ready providers. |
 | TEE-ready attestation | Present as adapter boundary | `packages/runtime/src/index.ts`. |
 | MockTEE | Present | `packages/runtime/src/index.ts`. |
 | Evidence ledger | Present, package-level | `packages/evidence/src/index.ts`; persisted locally by agentd authority store. |
 | Revocation records | Present | `packages/core/src/revocation.ts`, `services/agentd/src/index.ts`, `services/trust-graph/src/db/migrations/002_revocations.sql`. |
 | Incident records | Present | `packages/core/src/revocation.ts`, `services/agentd/src/index.ts`, `services/trust-graph/src/db/migrations/002_revocations.sql`. |
-| Approval primitives | Partial | Guard and policy can require approval; I could not find first-class ApprovalRequest/ApprovalDecision protocol objects in core. |
+| Approval primitives | Present, evolving | `packages/core/src/approval.ts` defines first-class `ApprovalRequest`, `ApprovalDecision`, and `KillSwitchRule` protocol objects with canonical payload hashes and signing helpers. |
 | Kill switch | Present | `packages/runtime/src/index.ts`, `packages/cli/src/commands/killswitch.ts`, `services/agentd/src/index.ts`. |
 | Evidence privacy | Present, basic | `packages/evidence/src/index.ts` supports public/private/redacted/hash-only export modes. |
 | Version negotiation | Present | `packages/core/src/versioning.ts`, `packages/core/src/discovery.ts`, and `packages/discovery/src/orchestrator.ts` negotiate and filter discovery candidates by protocol compatibility. |
@@ -145,9 +145,9 @@ Treat the current repo as an advanced prototype, not a blank MVP. The v2 work sh
 
 1. Freeze the current implemented surface as baseline.
 2. Consolidate core protocol objects under `packages/core`.
-3. Add missing v2 protocol objects and stable error/version vocabularies.
+3. Continue hardening v2 protocol objects and stable error/version vocabularies.
 4. Convert discovery from DID resolution to capability + constraints resolution.
 5. Replace DHT direct-card storage with signed pointer records.
-6. Promote approvals, invocation, revocation, incidents, and evidence into first-class signed objects.
+6. Continue promoting revocation, incidents, evidence, and authority lifecycle surfaces into first-class signed objects.
 7. Align CLI/API/SDK/demo surfaces to `agentd` v2.
 8. Keep AGIT/OAPS/OSP/Sardis as semantic or adapter inputs only; no runtime dependency on OAPS.

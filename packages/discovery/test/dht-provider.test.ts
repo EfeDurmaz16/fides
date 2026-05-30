@@ -70,4 +70,71 @@ describe('DHTDiscoveryProvider', () => {
 
     expect(candidates).toEqual([])
   })
+
+  it('rejects tampered DHT pointers', async () => {
+    const { signedCard, pointer } = await fixture()
+    const provider = new DHTDiscoveryProvider()
+
+    await provider.register(signedCard)
+    await provider.publishPointer({
+      ...pointer,
+      capability_hash: 'sha256:tampered',
+    })
+
+    const candidates = await provider.discover(createDiscoveryQuery({
+      capability: 'invoice.reconcile',
+    }))
+
+    expect(candidates).toEqual([])
+  })
+
+  it('rejects expired DHT pointers', async () => {
+    const { signedCard, pointer } = await fixture()
+    const provider = new DHTDiscoveryProvider()
+
+    await provider.register(signedCard)
+    await provider.publishPointer({
+      ...pointer,
+      expires_at: '2000-01-01T00:00:00.000Z',
+    })
+
+    const candidates = await provider.discover(createDiscoveryQuery({
+      capability: 'invoice.reconcile',
+    }))
+
+    expect(candidates).toEqual([])
+  })
+
+  it('rejects DHT pointers whose AgentCard hash does not match', async () => {
+    const { signedCard, pointer } = await fixture()
+    const provider = new DHTDiscoveryProvider()
+
+    await provider.register(signedCard)
+    await provider.publishPointer({
+      ...pointer,
+      agent_card_hash: 'sha256:mismatch',
+    })
+
+    const candidates = await provider.discover(createDiscoveryQuery({
+      capability: 'invoice.reconcile',
+    }))
+
+    expect(candidates).toEqual([])
+  })
+
+  it('rejects revoked agents before returning DHT candidates', async () => {
+    const { signedCard, pointer } = await fixture()
+    const provider = new DHTDiscoveryProvider({
+      revokedAgentIds: [signedCard.payload.id],
+    })
+
+    await provider.register(signedCard)
+    await provider.publishPointer(pointer)
+
+    const candidates = await provider.discover(createDiscoveryQuery({
+      capability: 'invoice.reconcile',
+    }))
+
+    expect(candidates).toEqual([])
+  })
 })

@@ -37,8 +37,8 @@ This map reflects the current local inspection of:
 | Well-known discovery | discovery service/provider | not found | manifest fetch | `.well-known/oaps.json` | agent auth/A2A well-known | FIDES | extend existing |
 | Registry | `services/registry` | not found | `osp-registry` | not broad runtime | not generic | FIDES + OSP | extend existing |
 | Relay | `services/relay`, relay provider | not found | not found | not found | not found | FIDES | extend existing |
-| DHT | in-memory direct-card provider | not found | not found | not found | not found | FIDES | extend existing |
-| Federation | partial/spec only | not found | registry concepts | profile notes only | not found | FIDES + OSP | create new |
+| DHT | signed pointer record + in-memory simulator | not found | not found | not found | not found | FIDES | extend existing |
+| Federation | signed peer record + local mock provider | not found | registry concepts | profile notes only | not found | FIDES + OSP | extend existing |
 | DelegationToken | `packages/core/src/delegation.ts` | not found | delegation chain structs | `DelegationToken` | mandates | FIDES + OAPS | extend existing |
 | SessionGrant | `packages/core/src/delegation.ts`, session store | not found | not found | auth-web session adjacent | grant/session-like agent auth | FIDES | extend existing |
 | PolicyBundle | `packages/policy` | guard chain | not core | policy package | policy DSL/pipeline | FIDES + OAPS | extend existing |

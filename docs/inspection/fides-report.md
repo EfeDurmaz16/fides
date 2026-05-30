@@ -55,8 +55,8 @@ Local evidence:
 | Well-known discovery | Present | `packages/discovery/src/well-known-provider.ts`, `services/discovery/src/routes/well-known.ts`. |
 | Registry discovery | Present | `packages/discovery/src/registry-provider.ts`, `services/registry/src/`. |
 | Relay discovery | Present, prototype | `packages/discovery/src/relay-provider.ts`, `services/relay/src/`. |
-| DHT discovery | Present, too weak | `packages/discovery/src/dht-provider.ts` stores AgentCards by DID in an in-memory peer graph; it does not yet implement signed DHT pointer records. |
-| Federation | Partial/spec only | Registry service exists, but I could not find federation peering records/runtime. |
+| DHT discovery | Present, local simulator | `packages/core/src/dht.ts` defines signed `DHTPointerRecord`; `packages/discovery/src/dht-provider.ts` rejects tampered, expired, hash-mismatched, or revoked pointer candidates. |
+| Federation | Present, local mock | `packages/core/src/registry.ts` defines `RegistryPeerRecord`; `packages/discovery/src/federation-provider.ts` verifies signed peer records for candidate-only federation discovery. |
 | Trust graph | Present | `services/trust-graph/src/services/graph.ts`, `services/trust-graph/src/services/trust-service.ts`. |
 | Capability-specific reputation | Partial | `services/trust-graph/src/db/migrations/003_capability_scoring.sql`, `services/trust-graph/src/services/capability-scoring.ts`. |
 | Context-specific trust scoring | Partial | Trust edges include optional capability/context, but no full v2 scoring component model. |

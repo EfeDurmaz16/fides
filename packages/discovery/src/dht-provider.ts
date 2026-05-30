@@ -31,9 +31,16 @@ export class DHTDiscoveryProvider implements DiscoveryProvider {
   private pointerStore = new Map<string, DHTPointerRecord[]>()
   // Replication factor
   private replicationFactor: number
+  private isRevoked: (agentId: string) => boolean | Promise<boolean>
 
-  constructor(options?: { replicationFactor?: number }) {
+  constructor(options?: {
+    replicationFactor?: number
+    revokedAgentIds?: Iterable<string>
+    isRevoked?: (agentId: string) => boolean | Promise<boolean>
+  }) {
     this.replicationFactor = options?.replicationFactor ?? 3
+    const revokedAgentIds = new Set(options?.revokedAgentIds ?? [])
+    this.isRevoked = options?.isRevoked ?? ((agentId: string) => revokedAgentIds.has(agentId))
   }
 
   async resolve(did: string): Promise<AgentCard | null> {
@@ -61,18 +68,22 @@ export class DHTDiscoveryProvider implements DiscoveryProvider {
     const pointers = await this.findPointers(query.capability)
     const candidates: DiscoveryCandidate[] = []
     for (const pointer of pointers) {
+      const pointerVerification = await verifyDHTPointerRecord(pointer)
+      if (!pointerVerification.valid) continue
+      if (await this.isRevoked(pointer.agent_id)) continue
+
       const card = await this.resolve(pointer.agent_id)
       if (!card || !cardSupportsCapability(card, query.capability)) continue
       const verification = await verifyDHTPointerRecord(pointer, { card })
+      if (!verification.valid) continue
+
       candidates.push(createDiscoveryCandidate({
         provider: this.name,
         card,
         capability: query.capability,
-        verified: verification.valid,
-        rank: verification.valid ? 50 : 0,
-        explanations: verification.valid
-          ? ['DHT returned a signed capability pointer; DHT is not an authority source']
-          : ['DHT pointer failed verification'],
+        verified: true,
+        rank: 50,
+        explanations: ['DHT returned a signed capability pointer; DHT is not an authority source'],
         errors: [],
       }))
     }

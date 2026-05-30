@@ -31,4 +31,10 @@ publishes are accepted only as local mock records and are marked unverified.
 returning them. Expired, tampered, or AgentCard-hash-mismatched pointers are
 reported as rejected pointers and do not become authority.
 
+The package-level `DHTDiscoveryProvider` also rejects invalid pointers before
+returning candidates. Tampered pointer hashes, expired pointers, AgentCard hash
+mismatches, and locally revoked agent IDs are filtered out. A returned DHT
+candidate therefore only means "this signed pointer resolved to this AgentCard";
+it still does not grant trust or authority.
+
 The in-memory DHT simulator is local mock infrastructure. A libp2p/Kademlia adapter should implement the same provider contract later.

@@ -1334,6 +1334,58 @@ describe('CLI Commands', () => {
       );
     });
 
+    it('demo run should call the agentd demo endpoint', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        status: 'executed',
+        authority: { discoveryGrantsAuthority: false },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDemoCommand } = await import('../src/commands/demo.js');
+      const cmd = createDemoCommand();
+
+      await cmd.parseAsync([
+        'run',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/demo/run',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({}),
+        })
+      );
+    });
+
+    it('simulate adversarial should call the agentd simulation endpoint', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        status: 'detected',
+        authority: { discoveryGrantsAuthority: false },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createSimulateCommand } = await import('../src/commands/simulate.js');
+      const cmd = createSimulateCommand();
+
+      await cmd.parseAsync([
+        'adversarial',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/simulate/adversarial',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({}),
+        })
+      );
+    });
+
     it('relay delete should remove messages by relay ID', async () => {
       process.env.SERVICE_API_KEY = 'relay-service-key';
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({

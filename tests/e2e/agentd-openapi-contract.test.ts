@@ -116,6 +116,81 @@ describe('Agentd OpenAPI contract', () => {
     expect(openApi).not.toContain('enum: [public, private, redacted, hash-only]')
   })
 
+  it('documents root v2 local Agent Trust Fabric endpoints', () => {
+    const expectedOperations = [
+      'post /identities',
+      'get /identities',
+      'get /identities/{id}',
+      'post /attestations',
+      'get /attestations/{id}',
+      'post /attestations/{id}/verify',
+      'post /agent-cards',
+      'get /agent-cards/{id}',
+      'post /agent-cards/{id}/sign',
+      'post /agent-cards/{id}/verify',
+      'post /agents/register',
+      'get /agents',
+      'get /agents/{id}',
+      'post /discover',
+      'post /discover/local',
+      'post /discover/well-known',
+      'post /discover/registry',
+      'post /discover/relay',
+      'post /discover/dht',
+      'post /discover/federation',
+      'post /trust/evaluate',
+      'get /trust/{id}',
+      'post /reputation/update',
+      'get /reputation/{id}',
+      'post /policy/evaluate',
+      'post /approvals',
+      'get /approvals',
+      'post /approvals/{id}/approve',
+      'post /approvals/{id}/deny',
+      'post /delegations',
+      'post /sessions',
+      'get /sessions/{id}',
+      'post /sessions/{id}/verify',
+      'post /invoke',
+      'post /evidence',
+      'get /evidence',
+      'get /evidence/{id}',
+      'post /evidence/verify',
+      'post /evidence/export',
+      'post /revocations',
+      'get /revocations',
+      'get /revocations/{id}',
+      'post /incidents',
+      'get /incidents',
+      'get /incidents/{id}',
+      'post /incidents/{id}/resolve',
+      'post /killswitch',
+      'get /killswitch',
+      'delete /killswitch/{id}',
+      'post /dht/start',
+      'post /dht/publish',
+      'get /dht/find',
+      'post /dht/find',
+      'post /registry/start',
+      'post /registry/publish',
+      'post /registry/search',
+      'get /registry/index',
+      'post /relay/start',
+      'post /relay/register',
+      'post /relay/discover',
+      'get /.well-known/fides.json',
+      'get /.well-known/agents.json',
+      'get /.well-known/agents/{id}.json',
+      'post /demo/run',
+      'post /simulate/adversarial',
+    ]
+
+    for (const operation of expectedOperations) {
+      const [method, path] = operation.split(' ')
+      expect(agentdPaths.get(path), operation).toContain(method)
+    }
+  })
+
   it('documents API key auth on mutating v1 operations', () => {
     const mutatingV1Operations = [
       'post /v1/policy/evaluate',

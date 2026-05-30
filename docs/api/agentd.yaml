@@ -50,6 +50,758 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
 
+  /identities:
+    post:
+      operationId: createLocalIdentity
+      tags: [Identity]
+      summary: Create a local FIDES identity
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+    get:
+      operationId: listLocalIdentities
+      tags: [Identity]
+      summary: List local FIDES identities
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /identities/{id}:
+    get:
+      operationId: getLocalIdentity
+      tags: [Identity]
+      summary: Read a local FIDES identity
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /attestations:
+    post:
+      operationId: createRuntimeAttestation
+      tags: [Attestation]
+      summary: Issue a local runtime attestation
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+
+  /attestations/{id}:
+    get:
+      operationId: getRuntimeAttestation
+      tags: [Attestation]
+      summary: Read a local runtime attestation
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /attestations/{id}/verify:
+    post:
+      operationId: verifyRuntimeAttestation
+      tags: [Attestation]
+      summary: Verify a local runtime attestation
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /agent-cards:
+    post:
+      operationId: createLocalAgentCard
+      tags: [Card]
+      summary: Create a local AgentCard
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+
+  /agent-cards/{id}:
+    get:
+      operationId: getLocalAgentCard
+      tags: [Card]
+      summary: Read a local AgentCard
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /agent-cards/{id}/sign:
+    post:
+      operationId: signLocalAgentCard
+      tags: [Card]
+      summary: Sign a local AgentCard
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /agent-cards/{id}/verify:
+    post:
+      operationId: verifyLocalAgentCard
+      tags: [Card]
+      summary: Verify a local signed AgentCard
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /agents/register:
+    post:
+      operationId: registerLocalAgent
+      tags: [Discovery]
+      summary: Register a local AgentCard for discovery
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+
+  /agents:
+    get:
+      operationId: listLocalAgents
+      tags: [Discovery]
+      summary: List locally registered agents
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /agents/{id}:
+    get:
+      operationId: getLocalAgent
+      tags: [Discovery]
+      summary: Inspect a locally registered agent
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /discover:
+    post:
+      operationId: discoverAgents
+      tags: [Discovery]
+      summary: Discover agent candidates across enabled providers
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /discover/local:
+    post:
+      operationId: discoverLocalAgents
+      tags: [Discovery]
+      summary: Discover local agent candidates
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /discover/well-known:
+    post:
+      operationId: discoverWellKnownAgents
+      tags: [Discovery]
+      summary: Discover well-known agent candidates
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /discover/registry:
+    post:
+      operationId: discoverRegistryAgents
+      tags: [Discovery]
+      summary: Discover registry agent candidates
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /discover/relay:
+    post:
+      operationId: discoverRelayAgents
+      tags: [Discovery]
+      summary: Discover relay agent candidates
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /discover/dht:
+    post:
+      operationId: discoverDhtAgents
+      tags: [Discovery]
+      summary: Discover DHT pointer candidates
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /trust/evaluate:
+    post:
+      operationId: evaluateLocalTrust
+      tags: [Trust]
+      summary: Evaluate capability-scoped local trust
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /trust/{id}:
+    get:
+      operationId: getLocalTrust
+      tags: [Trust]
+      summary: Read local trust results for an agent
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /reputation/update:
+    post:
+      operationId: updateLocalReputation
+      tags: [Trust]
+      summary: Update capability-specific local reputation
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /reputation/{id}:
+    get:
+      operationId: getLocalReputation
+      tags: [Trust]
+      summary: Read local reputation for an agent
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /policy/evaluate:
+    post:
+      operationId: evaluateLocalPolicy
+      tags: [Policy]
+      summary: Evaluate policy before execution
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /approvals:
+    post:
+      operationId: createLocalApprovalRequest
+      tags: [Policy]
+      summary: Create an approval request
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+    get:
+      operationId: listLocalApprovals
+      tags: [Policy]
+      summary: List local approval requests
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /approvals/{id}/approve:
+    post:
+      operationId: approveLocalApprovalRequest
+      tags: [Policy]
+      summary: Approve a pending approval request
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /approvals/{id}/deny:
+    post:
+      operationId: denyLocalApprovalRequest
+      tags: [Policy]
+      summary: Deny a pending approval request
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /delegations:
+    post:
+      operationId: createLocalDelegation
+      tags: [Authority]
+      summary: Create a local DelegationToken
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+
+  /sessions:
+    post:
+      operationId: createLocalSession
+      tags: [Authority]
+      summary: Create a scoped SessionGrant
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+
+  /sessions/{id}:
+    get:
+      operationId: getLocalSession
+      tags: [Authority]
+      summary: Read a local SessionGrant
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /sessions/{id}/verify:
+    post:
+      operationId: verifyLocalSession
+      tags: [Authority]
+      summary: Verify a local SessionGrant
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /invoke:
+    post:
+      operationId: invokeLocalCapability
+      tags: [Authority]
+      summary: Invoke a capability through a verified SessionGrant
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /evidence:
+    post:
+      operationId: appendLocalEvidence
+      tags: [Evidence]
+      summary: Append a local evidence event
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+    get:
+      operationId: listLocalEvidence
+      tags: [Evidence]
+      summary: List local evidence events
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /evidence/{id}:
+    get:
+      operationId: getLocalEvidenceEvent
+      tags: [Evidence]
+      summary: Inspect a local evidence event
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /evidence/verify:
+    post:
+      operationId: verifyLocalEvidence
+      tags: [Evidence]
+      summary: Verify the local evidence hash chain
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /evidence/export:
+    post:
+      operationId: exportLocalEvidence
+      tags: [Evidence]
+      summary: Export privacy-aware local evidence
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /revocations:
+    post:
+      operationId: recordLocalRevocation
+      tags: [Authority]
+      summary: Record a local revocation
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+    get:
+      operationId: listLocalRevocations
+      tags: [Authority]
+      summary: List local revocations
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /revocations/{id}:
+    get:
+      operationId: getLocalRevocation
+      tags: [Authority]
+      summary: Inspect a local revocation
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /incidents:
+    post:
+      operationId: recordLocalIncident
+      tags: [Authority]
+      summary: Record a local incident
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+    get:
+      operationId: listLocalIncidents
+      tags: [Authority]
+      summary: List local incidents
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /incidents/{id}:
+    get:
+      operationId: getLocalIncident
+      tags: [Authority]
+      summary: Inspect a local incident
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /incidents/{id}/resolve:
+    post:
+      operationId: resolveLocalIncident
+      tags: [Authority]
+      summary: Resolve a local incident
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /killswitch:
+    post:
+      operationId: createLocalKillSwitchRule
+      tags: [Kill Switch]
+      summary: Enable a local kill switch rule
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+    get:
+      operationId: listLocalKillSwitchRules
+      tags: [Kill Switch]
+      summary: List local kill switch rules
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /killswitch/{id}:
+    delete:
+      operationId: disableLocalKillSwitchRule
+      tags: [Kill Switch]
+      summary: Disable a local kill switch rule
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /dht/start:
+    post:
+      operationId: startLocalDht
+      tags: [Discovery]
+      summary: Start the local DHT simulator
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /dht/publish:
+    post:
+      operationId: publishLocalDhtPointer
+      tags: [Discovery]
+      summary: Publish a signed local DHT capability pointer
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+
+  /dht/find:
+    get:
+      operationId: findLocalDhtPointers
+      tags: [Discovery]
+      summary: Find local DHT pointers by capability
+      parameters:
+        - name: capability
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+    post:
+      operationId: postFindLocalDhtPointers
+      tags: [Discovery]
+      summary: Find local DHT pointers by request body
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /registry/start:
+    post:
+      operationId: startLocalRegistry
+      tags: [Discovery]
+      summary: Start the local registry mode
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /registry/publish:
+    post:
+      operationId: publishLocalRegistryRecord
+      tags: [Discovery]
+      summary: Publish a local registry record
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+
+  /registry/search:
+    post:
+      operationId: searchLocalRegistry
+      tags: [Discovery]
+      summary: Search local registry records
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /registry/index:
+    get:
+      operationId: getLocalRegistryIndex
+      tags: [Discovery]
+      summary: Read the local registry index
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /relay/start:
+    post:
+      operationId: startLocalRelay
+      tags: [Discovery]
+      summary: Start the local relay simulator
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /relay/register:
+    post:
+      operationId: registerLocalRelayPresence
+      tags: [Discovery]
+      summary: Register local relay presence
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        $ref: "#/components/requestBodies/JsonObject"
+      responses:
+        "201":
+          $ref: "#/components/responses/JsonObject"
+
+  /relay/discover:
+    post:
+      operationId: discoverLocalRelayPresence
+      tags: [Discovery]
+      summary: Discover local relay presence
+      requestBody:
+        $ref: "#/components/requestBodies/DiscoveryQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/Discovery"
+
+  /.well-known/fides.json:
+    get:
+      operationId: getWellKnownFides
+      tags: [Discovery]
+      summary: Read the local FIDES well-known document
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /.well-known/agents.json:
+    get:
+      operationId: getWellKnownAgents
+      tags: [Discovery]
+      summary: Read local well-known agent index
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /.well-known/agents/{id}.json:
+    get:
+      operationId: getWellKnownAgent
+      tags: [Discovery]
+      summary: Read a local well-known AgentCard document
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /demo/run:
+    post:
+      operationId: runLocalDemo
+      tags: [Authority]
+      summary: Run the full local Agent Trust Fabric demo
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
+  /simulate/adversarial:
+    post:
+      operationId: runAdversarialSimulation
+      tags: [Authority]
+      summary: Run local adversarial simulation scenarios
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          $ref: "#/components/responses/JsonObject"
+
   /v1/identities/{did}:
     get:
       operationId: resolveIdentity
@@ -633,6 +1385,13 @@ components:
         `agentd:killswitch:write`, or `*`.
 
   parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
     DidParam:
       name: did
       in: path
@@ -641,7 +1400,48 @@ components:
         type: string
       example: "did:fides:agentd-test-01"
 
+  requestBodies:
+    JsonObject:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/JsonObject"
+
+    DiscoveryQuery:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DiscoveryQuery"
+
+  responses:
+    JsonObject:
+      description: JSON response body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/JsonObject"
+
+    Discovery:
+      description: Candidate-only discovery response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DiscoveryResponse"
+
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
   schemas:
+    JsonObject:
+      type: object
+      additionalProperties: true
+
     ErrorResponse:
       type: object
       required: [error]

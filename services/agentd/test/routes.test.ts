@@ -343,6 +343,32 @@ describe('Agentd Service Routes', () => {
         body: JSON.stringify({ type: 'agent', name: 'Invoice Agent' }),
       })
       const { identity } = await identityResponse.json()
+      const publisherResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'publisher', name: 'Invoice Publisher' }),
+      })
+      const { identity: publisher } = await publisherResponse.json()
+      await app.request('/attestations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity: identity.did,
+          type: 'github',
+          handle: 'invoice-agent',
+        }),
+      })
+      const runtimeAttestation = await app.request('/attestations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: identity.did,
+          codeHash: `sha256:${'a'.repeat(64)}`,
+          runtimeHash: `sha256:${'b'.repeat(64)}`,
+          policyHash: `sha256:${'c'.repeat(64)}`,
+        }),
+      })
+      const runtimeAttestationData = await runtimeAttestation.json()
 
       const created = await app.request('/agent-cards', {
         method: 'POST',
@@ -350,19 +376,45 @@ describe('Agentd Service Routes', () => {
         body: JSON.stringify({
           identity,
           name: 'Invoice Agent',
+          publisherId: publisher.did,
           capabilities: [{ id: 'invoice.reconcile', requiredScopes: ['invoice:read'] }],
+          endpoints: [{
+            url: 'https://invoice.example.test/invoke',
+            protocol: 'https',
+            capabilities: ['invoice.reconcile'],
+            auth: 'delegation',
+          }],
+          runtimeAttestationIds: [runtimeAttestationData.attestation.attestation_id],
+          revocationUrl: 'https://invoice.example.test/revocations',
         }),
       })
       expect(created.status).toBe(201)
       const createdData = await created.json()
       expect(createdData.card.id).toBe(identity.did)
       expect(createdData.card.capabilities[0].id).toBe('invoice.reconcile')
+      expect(createdData.card.publisher.did).toBe(publisher.did)
+      expect(createdData.card.publicKeys[0]).toEqual(expect.objectContaining({
+        id: `${identity.did}#ed25519`,
+        type: 'Ed25519',
+      }))
+      expect(createdData.card.transports[0]).toMatchObject({
+        protocol: 'https',
+        url: 'https://invoice.example.test/invoke',
+        auth: 'delegation',
+      })
+      expect(createdData.card.trustAnchors).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'github', value: 'invoice-agent', verified: true }),
+      ]))
+      expect(createdData.card.runtimeAttestations[0].attestation_id).toBe(runtimeAttestationData.attestation.attestation_id)
+      expect(createdData.card.revocationUrl).toBe('https://invoice.example.test/revocations')
       expect(createdData.validation.valid).toBe(true)
 
       const signed = await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
       expect(signed.status).toBe(200)
       const signedData = await signed.json()
       expect(signedData.signed.proof.type).toBe('Ed25519Signature2024')
+      expect(signedData.signed.payload.publicKeys[0].id).toBe(`${identity.did}#ed25519`)
+      expect(signedData.signed.payload.publisher.did).toBe(publisher.did)
 
       const verified = await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/verify`, { method: 'POST' })
       expect(verified.status).toBe(200)

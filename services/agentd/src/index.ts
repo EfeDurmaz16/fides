@@ -54,6 +54,7 @@ import {
   isKillSwitchRuleActive,
   MockTEEProvider as CoreMockTEEProvider,
   negotiateProtocolVersion,
+  normalizeAgentCard,
   resolveIncidentRecordV2,
   signAgentCard,
   signDHTPointerRecord,
@@ -863,7 +864,28 @@ app.post('/agent-cards', async (c) => {
     : []
 
   const now = new Date().toISOString()
-  const card: AgentCard = {
+  const publisherId = typeof body.publisherId === 'string'
+    ? body.publisherId
+    : typeof body.publisher_id === 'string'
+      ? body.publisher_id
+      : undefined
+  const publisher = publisherId ? localIdentities.get(publisherId) : undefined
+  if (publisherId && (!publisher || publisher.type !== 'publisher')) {
+    return c.json({ error: 'publisher identity not found in local daemon', publisherId }, 404)
+  }
+  const runtimeAttestationIds: string[] = Array.isArray(body.runtimeAttestationIds)
+    ? body.runtimeAttestationIds.map(String)
+    : Array.isArray(body.runtime_attestation_ids)
+      ? body.runtime_attestation_ids.map(String)
+      : []
+  const runtimeAttestations = runtimeAttestationIds
+    .map((id: string) => localRuntimeAttestations.get(id))
+    .filter((attestation: RuntimeAttestation | undefined): attestation is RuntimeAttestation => Boolean(attestation))
+  if (runtimeAttestationIds.length !== runtimeAttestations.length) {
+    return c.json({ error: 'one or more runtime attestations were not found', runtimeAttestationIds }, 404)
+  }
+
+  const card = normalizeAgentCard({
     schema_version: 'fides.agent_card.v1',
     id: did,
     agent_id: did,
@@ -874,16 +896,22 @@ app.post('/agent-cards', async (c) => {
         ...(typeof body.name === 'string' && { name: body.name }),
       },
     },
+    ...(publisher?.identity && { publisher: publisher.identity as PublisherIdentity }),
     capabilities,
     endpoints: Array.isArray(body.endpoints) ? body.endpoints : [],
+    ...(Array.isArray(body.transports) && { transports: body.transports }),
     policies: Array.isArray(body.policies)
       ? body.policies
       : [{ requiresRuntimeAttestation: false, requiresApproval: false }],
+    ...(localIdentity.identity.trustAnchors?.length && { trustAnchors: localIdentity.identity.trustAnchors }),
+    ...(runtimeAttestations.length > 0 && { runtimeAttestations }),
+    ...(typeof body.revocationUrl === 'string' && { revocationUrl: body.revocationUrl }),
+    ...(typeof body.revocationRef === 'string' && { revocationRef: body.revocationRef }),
     protocolVersions: Array.isArray(body.protocolVersions) ? body.protocolVersions.map(String) : ['fides.v2.0'],
     createdAt: now,
     updatedAt: now,
     ...(typeof body.expiresAt === 'string' && { expiresAt: body.expiresAt }),
-  }
+  })
 
   const validation = validateAgentCard(card)
   if (!validation.valid) {

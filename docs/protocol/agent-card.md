@@ -33,6 +33,12 @@ signing:
 - `transports` defaults from endpoint transport metadata
 - `protocolVersions` defaults to the current FIDES protocol version
 
+The root local `agentd` AgentCard creation endpoint stores normalized cards,
+not sparse request bodies. When available, it carries local publisher identity,
+agent trust anchors, runtime attestations, revocation metadata, public keys, and
+transport metadata into the stored card before signing. This keeps the unsigned
+inspection endpoint and signed payload aligned.
+
 ## Rule
 
 Discovery may return AgentCards, but invocation requires trust evaluation, policy evaluation, and a scoped session grant.

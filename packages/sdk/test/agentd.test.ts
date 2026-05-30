@@ -234,6 +234,39 @@ describe('AgentdClient', () => {
     } satisfies Partial<AgentdError>)
   })
 
+  it('throws typed agentd errors when responses carry ErrorEnvelope payloads', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      text: async () => JSON.stringify({
+        error: {
+          code: 'POLICY_DENIED',
+          category: 'policy',
+          severity: 'error',
+          retryable: false,
+          message: 'Policy denied the request',
+          details: { reason_codes: ['LOW_TRUST_HIGH_RISK'] },
+        },
+        authorityGranted: false,
+      }),
+    })
+
+    await expect(client.authorize({
+      agentDid: 'did:fides:agent',
+      capabilityId: 'payments.execute',
+    })).rejects.toMatchObject({
+      name: 'AgentdError',
+      status: 409,
+      message: 'Policy denied the request',
+      error: {
+        code: 'POLICY_DENIED',
+        category: 'policy',
+        retryable: false,
+        details: { reason_codes: ['LOW_TRUST_HIGH_RISK'] },
+      },
+    } satisfies Partial<AgentdError>)
+  })
+
   it('creates signed sessions from authority inputs', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

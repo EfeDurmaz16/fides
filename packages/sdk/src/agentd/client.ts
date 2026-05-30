@@ -3,10 +3,12 @@ import {
   createIncidentRecord,
   createRevocationRecord,
   deriveEd25519PublicKeyHex,
+  isErrorEnvelope,
   signDelegationToken,
   signIncidentRecord,
   signRevocationRecord,
   type DelegationToken as CoreDelegationToken,
+  type ErrorEnvelope,
   type IncidentRecord as CoreIncidentRecord,
   type RevocationRecord as CoreRevocationRecord,
 } from '@fides/core'
@@ -239,7 +241,8 @@ export class AgentdError extends Error {
   constructor(
     message: string,
     readonly status?: number,
-    readonly payload?: unknown
+    readonly payload?: unknown,
+    readonly error?: ErrorEnvelope
   ) {
     super(message)
     this.name = 'AgentdError'
@@ -404,7 +407,9 @@ export class AgentdClient {
     const text = await response.text()
     const payload = text ? JSON.parse(text) : {}
     if (!response.ok) {
-      throw new AgentdError(`agentd request failed: ${response.status}`, response.status, payload)
+      const envelope = extractErrorEnvelope(payload)
+      const message = envelope?.message ?? extractStringError(payload) ?? `agentd request failed: ${response.status}`
+      throw new AgentdError(message, response.status, payload, envelope)
     }
     return payload as T
   }
@@ -412,4 +417,17 @@ export class AgentdClient {
   private baseUrl(): string {
     return this.options.baseUrl.replace(/\/$/, '')
   }
+}
+
+function extractErrorEnvelope(payload: unknown): ErrorEnvelope | undefined {
+  if (isErrorEnvelope(payload)) return payload
+  if (!payload || typeof payload !== 'object') return undefined
+  const error = (payload as { error?: unknown }).error
+  return isErrorEnvelope(error) ? error : undefined
+}
+
+function extractStringError(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== 'object') return undefined
+  const error = (payload as { error?: unknown }).error
+  return typeof error === 'string' ? error : undefined
 }

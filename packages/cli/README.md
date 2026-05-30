@@ -23,6 +23,9 @@ From the monorepo checkout:
 pnpm agentd <command>
 ```
 
+Use `pnpm --silent agentd ... --json` when piping JSON output to another tool,
+because pnpm prints script banners by default.
+
 ## Usage
 
 ```bash

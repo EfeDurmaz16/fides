@@ -35,6 +35,9 @@ checkout, you can run the same commands through the root workspace script:
 pnpm agentd <command>
 ```
 
+Use `pnpm --silent agentd ... --json` when piping JSON output to another tool,
+because pnpm prints script banners by default.
+
 ## Start The Local Daemon
 
 The root v2 API is served by `agentd` on `http://localhost:7345`.

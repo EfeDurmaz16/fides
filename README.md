@@ -65,6 +65,8 @@ curl http://localhost:7345/health
 The examples below assume the `agentd` binary is on your `PATH`. From the
 monorepo, use `pnpm agentd <command>`.
 Replace placeholder DIDs with the IDs returned by `identity create`.
+Use `pnpm --silent agentd ... --json` when piping JSON output to another tool,
+because pnpm prints script banners by default.
 
 ```bash
 agentd identity create --type principal --name "Demo Principal" --agentd-url http://localhost:7345

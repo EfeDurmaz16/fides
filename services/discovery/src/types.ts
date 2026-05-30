@@ -91,6 +91,8 @@ export interface AgentResponse {
   heartbeatAt: string
   createdAt: string
   updatedAt: string
+  verified: false
   urlRequired: false
   authorityGranted: false
+  reasons: string[]
 }

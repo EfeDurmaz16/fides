@@ -194,7 +194,10 @@ and reported under `rejectedCandidates`, `rejectedRecords`, or
 The standalone discovery service follows the same URL-less rule for local
 candidate registration: `POST /agents` requires `did` and `name`, but can omit
 `url`. In that case the service stores a `local://agents/<did>` transport hint
-and returns `urlRequired: false` plus `authorityGranted: false`.
+and returns `verified: false`, `urlRequired: false`, `authorityGranted: false`,
+and machine-readable reasons. Signed AgentCard verification happens in the
+root `agentd` local discovery path, not in this legacy standalone metadata
+registry.
 Federation discovery wraps verified local registry records with a signed
 `RegistryPeerRecord`, marks them as provider `federation`, and reports
 incompatible records under `rejectedRecords`. Federation expands discovery

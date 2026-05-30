@@ -25,8 +25,14 @@ function toAgentResponse(agent: typeof agents.$inferSelect, identity: typeof ide
     heartbeatAt: agent.heartbeatAt.toISOString(),
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt.toISOString(),
+    verified: false,
     urlRequired: false,
     authorityGranted: false,
+    reasons: [
+      'standalone_discovery_candidate',
+      'signed_agent_card_not_verified_by_discovery_service',
+      'discovery_does_not_grant_authority',
+    ],
   }
 }
 

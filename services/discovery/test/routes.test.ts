@@ -322,9 +322,12 @@ describe('Discovery Service Routes', () => {
         did: TEST_DID,
         name: 'URL-less Agent',
         url: `local://agents/${encodeURIComponent(TEST_DID)}`,
+        verified: false,
         urlRequired: false,
         authorityGranted: false,
       })
+      expect(data.reasons).toContain('signed_agent_card_not_verified_by_discovery_service')
+      expect(data.reasons).toContain('discovery_does_not_grant_authority')
     })
   })
 

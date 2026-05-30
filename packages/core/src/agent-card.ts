@@ -108,6 +108,10 @@ export async function verifySignedAgentCard(card: SignedAgentCard): Promise<bool
   return verifyObject(card)
 }
 
+export async function verifySignedAgentCardIdentity(card: SignedAgentCard): Promise<boolean> {
+  return card.proof.verificationMethod === card.payload.identity.did && await verifySignedAgentCard(card)
+}
+
 /**
  * Validate that an AgentCard has all required fields and sensible values.
  */

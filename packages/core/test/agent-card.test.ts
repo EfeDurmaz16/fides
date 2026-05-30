@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeAgentCard, signAgentCard, validateAgentCard, verifySignedAgentCard } from '../src/agent-card.js'
+import {
+  normalizeAgentCard,
+  signAgentCard,
+  validateAgentCard,
+  verifySignedAgentCard,
+  verifySignedAgentCardIdentity,
+} from '../src/agent-card.js'
 import type { AgentCard } from '../src/agent-card.js'
 import { createAgentIdentity } from '../src/identity.js'
 
@@ -133,9 +139,26 @@ describe('AgentCard', () => {
         auth: 'delegation',
       })
       expect(await verifySignedAgentCard(signed)).toBe(true)
+      expect(await verifySignedAgentCardIdentity(signed)).toBe(true)
 
       signed.payload.capabilities[0].name = 'Tampered'
       expect(await verifySignedAgentCard(signed)).toBe(false)
+    })
+
+    it('should reject AgentCard proofs whose verification method is not the agent identity', async () => {
+      const issued = await createAgentIdentity()
+      const attacker = await createAgentIdentity()
+      const card: AgentCard = {
+        ...validCard,
+        id: issued.identity.did,
+        identity: issued.identity,
+        expiresAt: '2999-01-01T00:00:00.000Z',
+      }
+
+      const signed = await signAgentCard(card, attacker.privateKey, attacker.identity.did)
+
+      expect(await verifySignedAgentCard(signed)).toBe(true)
+      expect(await verifySignedAgentCardIdentity(signed)).toBe(false)
     })
   })
 })

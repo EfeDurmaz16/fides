@@ -1066,6 +1066,37 @@ describe('CLI Commands', () => {
       );
     });
 
+    it('attest show and verify should inspect root v2 runtime attestations', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        attestation: { attestation_id: 'att_1' },
+        valid: true,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createAttestCommand } = await import('../src/commands/attest.js');
+      const cmd = createAttestCommand();
+
+      await cmd.parseAsync(['show', 'att_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['verify', 'att_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/attestations/att_1',
+        expect.objectContaining({ method: 'GET' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/attestations/att_1/verify',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({}),
+        })
+      );
+    });
+
     it('incident report should call agentd incidents', async () => {
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({ recorded: true }), {
         status: 201,

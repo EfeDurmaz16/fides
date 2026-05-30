@@ -58,6 +58,15 @@ agentd dht find --capability invoice.reconcile
 agentd invoke did:fides:... --capability invoice.reconcile --input invoice.json --requested-scopes invoice:read
 agentd invoke --session-id sess_... --input invoice.json
 agentd invoke --dry-run did:fides:... --capability payments.prepare --input payment.json
+agentd session request did:fides:... --capability invoice.reconcile --requested-scopes invoice:read
+agentd session verify sess_...
+agentd incident report did:fides:... --severity high --category unauthorized_action --description "policy bypass"
+agentd incident list
+agentd incident inspect inc_...
+agentd incident resolve inc_...
+agentd killswitch enable --capability payments.prepare --reason "incident response"
+agentd killswitch list
+agentd killswitch disable ks_...
 agentd evidence verify
 agentd evidence export --privacy-mode hash_only --no-metadata
 agentd daemon status
@@ -90,6 +99,20 @@ policy-checked `SessionGrant` from `POST /sessions`, then invokes that session.
 Input defaults to `{}` and can be supplied with `--input` or `--input-json`.
 Use `--dry-run` to request dry-run execution; discovery is never treated as
 authority by this command.
+
+`session request`, `session show`, and `session verify` use the root v2 local
+agentd session endpoints. The older `session create` and `session revoke`
+commands remain available for the legacy signed `DelegationToken` `/v1`
+authority path.
+
+`incident report/list/inspect/resolve` use the root v2 incident endpoints by
+default. Passing `--private-key-hex` keeps the legacy signed `/v1/incidents`
+path available for compatibility with existing authority records.
+
+`killswitch enable/list/disable` use root v2 kill switch rules. The older
+`engage`, `disengage`, and `status` commands are local-file controls kept for
+legacy demos; use the root v2 commands when testing policy-before-execution in
+agentd.
 
 `evidence export` defaults to the daemon's privacy-aware export behavior. Use
 `--privacy-mode public`, `private`, `redacted`, or `hash_only` to request a

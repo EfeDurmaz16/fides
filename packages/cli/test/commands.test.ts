@@ -56,6 +56,7 @@ vi.mock('node:dns/promises', () => ({
 }));
 
 vi.mock('node:os', () => ({
+  homedir: vi.fn(() => '/tmp/test-home'),
   default: {
     homedir: vi.fn(() => '/tmp/test-home'),
   },
@@ -1384,6 +1385,162 @@ describe('CLI Commands', () => {
           body: JSON.stringify({}),
         })
       );
+    });
+
+    it('session request and verify should use root agentd session endpoints', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        authorized: true,
+        session: { session_id: 'sess_cli' },
+        valid: true,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createSessionCommand } = await import('../src/commands/session.js');
+      const cmd = createSessionCommand();
+
+      await cmd.parseAsync([
+        'request',
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--requested-scopes',
+        'read:invoices,write:evidence',
+        '--principal-id',
+        'did:fides:principal',
+        '--requester-agent-id',
+        'did:fides:requester',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'verify',
+        'sess_cli',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/sessions',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            capability: 'invoice.reconcile',
+            requestedScopes: ['read:invoices', 'write:evidence'],
+            principalId: 'did:fides:principal',
+            requesterAgentId: 'did:fides:requester',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/sessions/sess_cli/verify',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({}),
+        })
+      );
+    });
+
+    it('incident list inspect and resolve should use root agentd incident endpoints', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        record: { id: 'inc_1' },
+        records: [{ id: 'inc_1' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createIncidentCommand } = await import('../src/commands/incident.js');
+      const cmd = createIncidentCommand();
+
+      await cmd.parseAsync([
+        'report',
+        'did:fides:agent',
+        '--severity',
+        'high',
+        '--category',
+        'unauthorized_action',
+        '--description',
+        'policy bypass',
+        '--reporter',
+        'did:fides:principal',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['inspect', 'inc_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['resolve', 'inc_1', '--status', 'resolved', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/incidents',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            targetAgentId: 'did:fides:agent',
+            severity: 'high',
+            category: 'unauthorized_action',
+            description: 'policy bypass',
+            reporter: 'did:fides:principal',
+            evidenceRefs: [],
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://agentd.test/incidents', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(3, 'http://agentd.test/incidents/inc_1', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        4,
+        'http://agentd.test/incidents/inc_1/resolve',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ status: 'resolved' }),
+        })
+      );
+    });
+
+    it('killswitch enable disable and list should use root agentd kill switch endpoints', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        rule: { id: 'ks_1' },
+        rules: [{ id: 'ks_1' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createKillswitchCommand } = await import('../src/commands/killswitch.js');
+      const cmd = createKillswitchCommand();
+
+      await cmd.parseAsync([
+        'enable',
+        '--capability',
+        'payments.prepare',
+        '--reason',
+        'incident response',
+        '--issuer',
+        'did:fides:operator',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['disable', 'ks_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/killswitch',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            targetType: 'capability',
+            target: 'payments.prepare',
+            reason: 'incident response',
+            issuer: 'did:fides:operator',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://agentd.test/killswitch', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(3, 'http://agentd.test/killswitch/ks_1', expect.objectContaining({ method: 'DELETE' }));
     });
 
     it('relay delete should remove messages by relay ID', async () => {

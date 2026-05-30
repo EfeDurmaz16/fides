@@ -11,6 +11,8 @@ import { signObject, verifyObject, type SignedObject } from './canonical-signer.
 import type { CapabilityDescriptor } from './capability.js'
 import type { RuntimeAttestation } from './runtime-attestation.js'
 import type { IdentityTrustAnchor } from './identity.js'
+import { FIDES_PROTOCOL_VERSION } from './protocol.js'
+import bs58 from 'bs58'
 
 export interface EndpointDescriptor {
   /** Endpoint URL */
@@ -21,6 +23,19 @@ export interface EndpointDescriptor {
   capabilities?: string[]
   /** Authentication method required */
   auth?: 'none' | 'signature' | 'bearer' | 'delegation'
+}
+
+export interface TransportDescriptor {
+  /** Transport protocol advertised by the card. */
+  protocol: EndpointDescriptor['protocol'] | 'stdio' | 'mcp' | 'a2a'
+  /** Human-readable transport label. */
+  name?: string
+  /** Endpoint URL when the transport is network-addressable. */
+  url?: string
+  /** Capability IDs supported over this transport. */
+  capabilities?: string[]
+  /** Authentication method required for this transport. */
+  auth?: EndpointDescriptor['auth']
 }
 
 export interface PolicyRequirement {
@@ -49,6 +64,8 @@ export interface AgentCard {
   capabilities: CapabilityDescriptor[]
   /** Service endpoints */
   endpoints: EndpointDescriptor[]
+  /** Transport metadata, derived from endpoints when omitted. */
+  transports?: TransportDescriptor[]
   /** Policy requirements for invokers */
   policies: PolicyRequirement[]
   /** Public keys advertised for verification and invocation. */
@@ -104,6 +121,9 @@ export function validateAgentCard(card: AgentCard): { valid: boolean; errors: st
   }
   if (!Array.isArray(card.capabilities)) errors.push('AgentCard.capabilities must be an array')
   if (!Array.isArray(card.endpoints)) errors.push('AgentCard.endpoints must be an array')
+  if (card.transports !== undefined && !Array.isArray(card.transports)) {
+    errors.push('AgentCard.transports must be an array')
+  }
   if (!Array.isArray(card.policies)) errors.push('AgentCard.policies must be an array')
   if (!card.createdAt) errors.push('AgentCard.createdAt is required')
   if (!card.updatedAt) errors.push('AgentCard.updatedAt is required')
@@ -119,14 +139,38 @@ export function validateAgentCard(card: AgentCard): { valid: boolean; errors: st
       errors.push(`CapabilityDescriptor ${capability.id} namespace does not match id`)
     }
   }
+  for (const key of card.publicKeys ?? []) {
+    if (key.type !== 'Ed25519') errors.push(`AgentCard.publicKeys ${key.id} must use Ed25519`)
+    if (!key.publicKey) errors.push(`AgentCard.publicKeys ${key.id} publicKey is required`)
+  }
 
   return { valid: errors.length === 0, errors }
 }
 
 export function normalizeAgentCard(card: AgentCard): AgentCard {
+  const publicKeys = card.publicKeys?.length
+    ? card.publicKeys
+    : [{
+        id: `${card.identity.did}#ed25519`,
+        type: 'Ed25519' as const,
+        publicKey: bs58.encode(card.identity.publicKey),
+      }]
+  const transports = card.transports?.length
+    ? card.transports
+    : card.endpoints.map(endpoint => ({
+        protocol: endpoint.protocol,
+        name: endpoint.protocol,
+        url: endpoint.url,
+        capabilities: endpoint.capabilities,
+        auth: endpoint.auth,
+      }))
+
   return {
     ...card,
     schema_version: card.schema_version ?? 'fides.agent_card.v1',
     agent_id: card.agent_id ?? card.identity.did,
+    publicKeys,
+    transports,
+    protocolVersions: card.protocolVersions?.length ? card.protocolVersions : [FIDES_PROTOCOL_VERSION],
   }
 }

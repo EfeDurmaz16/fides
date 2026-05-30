@@ -54,6 +54,13 @@ describe('AgentCard', () => {
       expect(result.errors).toContain('AgentCard.capabilities must be an array')
     })
 
+    it('should reject invalid transports metadata', () => {
+      const card = { ...validCard, transports: 'stdio' as any }
+      const result = validateAgentCard(card)
+      expect(result.valid).toBe(false)
+      expect(result.errors).toContain('AgentCard.transports must be an array')
+    })
+
     it('should reject mismatched agent_id', () => {
       const result = validateAgentCard({
         ...validCard,
@@ -65,10 +72,18 @@ describe('AgentCard', () => {
     })
 
     it('should normalize v2 schema and agent id fields', () => {
-      expect(normalizeAgentCard(validCard)).toMatchObject({
+      const normalized = normalizeAgentCard(validCard)
+
+      expect(normalized).toMatchObject({
         schema_version: 'fides.agent_card.v1',
         agent_id: validCard.identity.did,
+        protocolVersions: ['fides.v2.0'],
       })
+      expect(normalized.publicKeys?.[0]).toMatchObject({
+        id: `${validCard.identity.did}#ed25519`,
+        type: 'Ed25519',
+      })
+      expect(normalized.transports).toEqual([])
     })
 
     it('should sign and verify AgentCards with the canonical signing model', async () => {
@@ -95,6 +110,14 @@ describe('AgentCard', () => {
             supportsDryRun: true,
           },
         ],
+        endpoints: [
+          {
+            url: 'https://calendar.example.test/invoke',
+            protocol: 'https',
+            capabilities: ['calendar.schedule'],
+            auth: 'delegation',
+          },
+        ],
         protocolVersions: ['fides.v2.0'],
         expiresAt: '2999-01-01T00:00:00.000Z',
       }
@@ -103,6 +126,12 @@ describe('AgentCard', () => {
 
       expect(signed.payload.schema_version).toBe('fides.agent_card.v1')
       expect(signed.payload.agent_id).toBe(issued.identity.did)
+      expect(signed.payload.publicKeys?.[0].publicKey).toBeTruthy()
+      expect(signed.payload.transports?.[0]).toMatchObject({
+        protocol: 'https',
+        url: 'https://calendar.example.test/invoke',
+        auth: 'delegation',
+      })
       expect(await verifySignedAgentCard(signed)).toBe(true)
 
       signed.payload.capabilities[0].name = 'Tampered'

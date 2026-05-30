@@ -48,7 +48,7 @@ Local evidence:
 | Trust anchors | Present | `packages/core/src/trust-anchor.ts`. |
 | Canonical object signing | Present | `packages/core/src/canonical-signer.ts`. |
 | HTTP message signatures | Present in SDK | `packages/sdk/src/signing/`. |
-| Signed AgentCards | Partial | `packages/core/src/agent-card.ts` defines `SignedAgentCard`, discovery providers accept signed cards, but AgentCard lacks all requested v2 fields. |
+| Signed AgentCards | Present, evolving | `packages/core/src/agent-card.ts` defines `SignedAgentCard`, canonical signing, schema/agent id normalization, public key defaults, endpoint-derived transports, protocol versions, trust anchors, runtime attestations, revocation references, and validation. |
 | Capability descriptors | Present, evolving | `packages/core/src/capability.ts` has id, namespace, action, resource, schemas, risk, scopes, supported controls, dry-run, approval, runtime attestation, and policy-proof metadata. |
 | Capability ontology | Present, seed taxonomy | `packages/core/src/capability.ts` defines `DEFAULT_CAPABILITY_ONTOLOGY`, lookup helpers, and ontology-backed descriptor defaults before heuristic risk classification. |
 | Local discovery | Present | `packages/discovery/src/local-provider.ts`. |

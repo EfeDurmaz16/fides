@@ -407,6 +407,10 @@ architecture invariants, security review checklist, and verification gates.
 At minimum, keep `pnpm verify` green and run `pnpm smoke:agentd` for CLI,
 API, daemon, session, invocation, discovery, demo, or simulation changes.
 
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the current v2 release snapshot,
+verified gates, local mock surfaces, adapter-ready surfaces, and release
+checklist.
+
 ---
 
 ## License

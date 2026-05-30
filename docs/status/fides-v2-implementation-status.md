@@ -104,6 +104,9 @@ Last verified locally: 2026-05-30.
 - Root `CONTRIBUTING.md` documents protocol invariants, security-sensitive
   review areas, docs expectations, and local verification gates for external
   contributors.
+- Root `RELEASE_NOTES.md` records the current v2 snapshot, production-like
+  surfaces, working prototypes, local mocks, adapter-ready surfaces, verified
+  gates, known limits, and release checklist.
 - OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
 - Core tests for issuer-bound `DelegationTokenV2` canonical signatures and
   payload-hash tamper detection.
@@ -418,7 +421,6 @@ Observed manual smoke results:
 - Add real DHT, relay, registry, and federation adapters.
 - Add production TEE/build/container attestation providers.
 - Harden local key storage beyond prototype snapshot material.
-- Add full release notes for external OSS users.
 
 ## Commit History Summary
 

@@ -154,7 +154,7 @@ DHT records are signed pointers only. They are not trust sources.
 Trust is capability-specific.
 
 ```bash
-agentd trust did:fides:invoice-agent --capability invoice.reconcile --agentd-url http://localhost:7345
+agentd trust did:fides:invoice-agent --capability invoice.reconcile
 agentd graph inspect did:fides:invoice-agent --agentd-url http://localhost:7345
 ```
 

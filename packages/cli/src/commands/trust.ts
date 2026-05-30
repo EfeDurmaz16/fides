@@ -16,15 +16,16 @@ export function createTrustCommand(): Command {
     .option('--json', 'Print JSON only')
     .action(async (agentDid, options) => {
       try {
+        if (options.capability) {
+          const agentdUrl = options.agentdUrl ?? process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345'
+          const result = await postJson(`${baseUrl(agentdUrl)}/trust/evaluate`, {
+            agentId: agentDid,
+            capability: options.capability,
+          })
+          printResult('Trust result:', result, options)
+          return
+        }
         if (options.agentdUrl) {
-          if (options.capability) {
-            const result = await postJson(`${baseUrl(options.agentdUrl)}/trust/evaluate`, {
-              agentId: agentDid,
-              capability: options.capability,
-            })
-            printResult('Trust result:', result, options)
-            return
-          }
           const result = await getJson(`${baseUrl(options.agentdUrl)}/trust/${encodeURIComponent(agentDid)}`)
           printResult('Trust results:', result, options)
           return

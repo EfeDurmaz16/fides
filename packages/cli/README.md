@@ -44,7 +44,7 @@ agentd discover --capability invoice.reconcile --provider local --agentd-url htt
 agentd dht publish --capability invoice.reconcile --agent-id did:fides:invoice-agent --agentd-url http://localhost:7345
 agentd dht find --capability invoice.reconcile --agentd-url http://localhost:7345
 
-agentd trust did:fides:invoice-agent --capability invoice.reconcile --agentd-url http://localhost:7345
+agentd trust did:fides:invoice-agent --capability invoice.reconcile
 agentd graph inspect did:fides:invoice-agent --agentd-url http://localhost:7345
 agentd reputation did:fides:invoice-agent --capability invoice.reconcile --agentd-url http://localhost:7345
 agentd policy evaluate --agent did:fides:invoice-agent --capability invoice.reconcile --requested-scopes invoice:read --agentd-url http://localhost:7345

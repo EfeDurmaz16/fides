@@ -1636,6 +1636,40 @@ describe('CLI Commands', () => {
       expect(shortcutOutput.reputations[0].capability).toBe('invoice.reconcile');
     });
 
+    it('trust command defaults capability evaluation to the local agentd root API', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        trust: { agent_id: 'did:fides:agent', capability: 'invoice.reconcile' },
+        authorityGranted: false,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createTrustCommand } = await import('../src/commands/trust.js');
+      const trustEvaluate = createTrustCommand();
+
+      await trustEvaluate.parseAsync([
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:7345/trust/evaluate',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            capability: 'invoice.reconcile',
+          }),
+        })
+      );
+      const output = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0] as string);
+      expect(output.authorityGranted).toBe(false);
+    });
+
     it('policy evaluate can use the root v2 policy API', async () => {
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({
         policy: { decision: 'allow' },

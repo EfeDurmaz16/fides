@@ -80,7 +80,7 @@ agentd card sign did:fides:invoice-agent --agentd-url http://localhost:7345
 agentd register did:fides:invoice-agent --agentd-url http://localhost:7345
 
 agentd discover --capability invoice.reconcile --provider local --agentd-url http://localhost:7345
-agentd trust did:fides:invoice-agent --capability invoice.reconcile --agentd-url http://localhost:7345
+agentd trust did:fides:invoice-agent --capability invoice.reconcile
 agentd graph inspect did:fides:invoice-agent --agentd-url http://localhost:7345
 agentd policy evaluate --agent did:fides:invoice-agent --capability invoice.reconcile --requested-scopes invoice:read --agentd-url http://localhost:7345
 agentd session request did:fides:invoice-agent --capability invoice.reconcile --requested-scopes invoice:read --agentd-url http://localhost:7345

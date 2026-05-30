@@ -218,6 +218,67 @@ describe('FidesClient', () => {
     expect(status.record?.target_id).toBe('did:fides:agent')
   })
 
+  it('types root incident responses as policy review inputs', async () => {
+    const record = {
+      schema_version: 'fides.incident.record.v1',
+      id: 'inc_1',
+      issuer: 'did:fides:reporter',
+      subject: 'did:fides:agent',
+      reporter: 'did:fides:reporter',
+      target_agent_id: 'did:fides:agent',
+      severity: 'high',
+      category: 'unauthorized_action',
+      description: 'attempted invocation outside delegated authority',
+      evidence_refs: [],
+      resolution_status: 'open',
+      trust_penalty: 0.3,
+      reputation_penalty: 0.2,
+      created_at: '2026-05-30T00:00:00.000Z',
+      payload_hash: 'sha256:incident',
+    }
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).endsWith('/incidents/inc_1/resolve')) {
+        return new Response(JSON.stringify({
+          record: { ...record, resolution_status: 'resolved', resolved_at: '2026-05-30T00:05:00.000Z' },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/incidents/inc_1')) {
+        return new Response(JSON.stringify({ record }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/incidents') && init?.method === 'GET') {
+        return new Response(JSON.stringify({
+          records: [record],
+          open: [record],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({
+        record,
+        evidenceRefs: ['evt_incident'],
+        explanation: 'Open incident records require policy review for matching target agents until resolved.',
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const reported = await client.incidents.report({
+      targetAgentId: 'did:fides:agent',
+      severity: 'high',
+      category: 'unauthorized_action',
+      description: 'attempted invocation outside delegated authority',
+    })
+    expect(reported.record.resolution_status).toBe('open')
+    expect(reported.record.trust_penalty).toBe(0.3)
+
+    const listed = await client.incidents.list()
+    expect(listed.open[0]?.target_agent_id).toBe('did:fides:agent')
+
+    const fetched = await client.incidents.get('inc_1')
+    expect(fetched.record.category).toBe('unauthorized_action')
+
+    const resolved = await client.incidents.resolve('inc_1', { status: 'resolved' })
+    expect(resolved.record.resolution_status).toBe('resolved')
+  })
+
   it('exposes promise-based identity, card, discovery, trust, session, and invocation namespaces', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {

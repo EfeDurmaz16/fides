@@ -224,7 +224,9 @@ responses, and active revocations are authority overrides that deny matching
 trust and policy paths rather than grant new authority. Attestation helpers
 include local mock identity trust anchors for GitHub, email, domain, package
 registry, and wallet claims, plus runtime MockTEE attestations that can satisfy
-high-risk session policy when passed as an `attestationId`. Registry, relay,
+high-risk session policy when passed as an `attestationId`. Incident helpers
+return typed `IncidentRecordV2` responses; open incidents are policy-review
+inputs that affect trust and session policy until resolved. Registry, relay,
 DHT, federation, and well-known
 helpers expose the local mock discovery surfaces. They return candidate records
 or pointers only; they do not convert discovery into authority. Discovery,

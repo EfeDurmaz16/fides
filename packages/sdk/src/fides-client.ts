@@ -3,6 +3,7 @@ import {
   type ApprovalDecision,
   type ApprovalRequest,
   type CapabilityControl,
+  type IncidentRecordV2,
   type KillSwitchRule,
   type PrincipalIdentity,
   type PublisherIdentity,
@@ -322,6 +323,19 @@ export interface FidesRevocationStatusResponse {
   [key: string]: unknown
 }
 
+export interface FidesIncidentRecordResponse {
+  record: IncidentRecordV2
+  evidenceRefs?: string[]
+  explanation?: string
+  [key: string]: unknown
+}
+
+export interface FidesIncidentListResponse {
+  records: IncidentRecordV2[]
+  open: IncidentRecordV2[]
+  [key: string]: unknown
+}
+
 export interface FidesSessionResponse {
   authorized: boolean
   authorityGranted: boolean
@@ -460,10 +474,16 @@ export class FidesClient {
   }
 
   readonly incidents = {
-    report: (body: Record<string, unknown>) => this.post('/incidents', body),
-    list: () => this.get('/incidents'),
-    get: (recordId: string) => this.get(`/incidents/${encodeURIComponent(recordId)}`),
-    resolve: (recordId: string, body: Record<string, unknown> = {}) => this.post(`/incidents/${encodeURIComponent(recordId)}/resolve`, body),
+    report: (body: Record<string, unknown>): Promise<FidesIncidentRecordResponse> => (
+      this.post('/incidents', body) as Promise<FidesIncidentRecordResponse>
+    ),
+    list: (): Promise<FidesIncidentListResponse> => this.get('/incidents') as Promise<FidesIncidentListResponse>,
+    get: (recordId: string): Promise<FidesIncidentRecordResponse> => (
+      this.get(`/incidents/${encodeURIComponent(recordId)}`) as Promise<FidesIncidentRecordResponse>
+    ),
+    resolve: (recordId: string, body: Record<string, unknown> = {}): Promise<FidesIncidentRecordResponse> => (
+      this.post(`/incidents/${encodeURIComponent(recordId)}/resolve`, body) as Promise<FidesIncidentRecordResponse>
+    ),
   }
 
   readonly attestations = {

@@ -30,3 +30,15 @@ verified against an anchored root without disclosing the entire log.
 
 Export should preserve enough metadata to audit without leaking sensitive
 inputs or outputs.
+
+## Privacy-Aware Export
+
+`packages/evidence/src/index.ts` provides V2 export helpers:
+
+- `redactEvidenceEventV2(event, options)`
+- `exportEvidenceEventsV2(events, options)`
+
+Default export behavior honors each event's `privacy_mode`. Hash-only events
+retain input/output/policy hashes but omit metadata by default. Private exports
+remove hashes, decisions, risk level, and metadata. Public exports can include
+metadata when explicitly requested or when the export mode is public.

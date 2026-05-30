@@ -6,7 +6,9 @@ import {
   buildMerkleProof,
   createEvidenceChain,
   createEvidenceEventV2,
+  exportEvidenceEventsV2,
   hashEvidenceValue,
+  redactEvidenceEventV2,
   redactEvent,
   signEvidenceEventV2,
   verifyEvidenceChain,
@@ -188,5 +190,36 @@ describe('Evidence Ledger', () => {
 
     expect(verifyEvidenceEventsV2(events)).toBe(true)
     expect(verifyEvidenceEventsV2([{ ...second, prev_event_hash: 'wrong' }])).toBe(false)
+  })
+
+  it('exports v2 events according to privacy mode without exposing metadata by default', () => {
+    const event = createEvidenceEventV2({
+      type: 'capability.completed',
+      actor: 'did:fides:agent',
+      subject: 'did:fides:target',
+      input: { invoiceId: 'inv_123', secret: 'hidden-input' },
+      output: { status: 'ok', secret: 'hidden-output' },
+      policy: { decision: 'allow' },
+      decision: 'allow',
+      risk_level: 'medium',
+      metadata: { rawPrompt: 'do not export this' },
+      timestamp: '2026-05-29T00:00:00.000Z',
+    })
+
+    const hashOnly = redactEvidenceEventV2(event)
+    expect(hashOnly.input_hash).toMatch(/^sha256:/)
+    expect(hashOnly.output_hash).toMatch(/^sha256:/)
+    expect(hashOnly.metadata).toBeUndefined()
+    expect(JSON.stringify(hashOnly)).not.toContain('hidden-input')
+    expect(JSON.stringify(hashOnly)).not.toContain('rawPrompt')
+
+    const privateExport = redactEvidenceEventV2(event, { privacy_mode: 'private' })
+    expect(privateExport.input_hash).toBeUndefined()
+    expect(privateExport.output_hash).toBeUndefined()
+    expect(privateExport.policy_hash).toBeUndefined()
+    expect(privateExport.decision).toBeUndefined()
+
+    const publicExport = exportEvidenceEventsV2([event], { privacy_mode: 'public' })
+    expect(publicExport[0].metadata).toEqual({ rawPrompt: 'do not export this' })
   })
 })

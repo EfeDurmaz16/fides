@@ -90,6 +90,11 @@ export interface EvidenceEventV2 {
   metadata?: Record<string, unknown>
 }
 
+export interface EvidenceEventV2ExportOptions {
+  privacy_mode?: EvidencePrivacyMode
+  include_metadata?: boolean
+}
+
 export interface EvidenceEventV2Input {
   event_id?: string
   type: EvidenceEventType
@@ -211,6 +216,52 @@ export function verifyEvidenceEventsV2(events: EvidenceEventV2[]): boolean {
     if (hashEvidenceValue(withoutHashAndSignature) !== event_hash) return false
   }
   return true
+}
+
+export function redactEvidenceEventV2(
+  event: EvidenceEventV2,
+  options: EvidenceEventV2ExportOptions = {}
+): EvidenceEventV2 {
+  const privacyMode = options.privacy_mode ?? event.privacy_mode
+  const includeMetadata = options.include_metadata ?? privacyMode === 'public'
+  const exported: EvidenceEventV2 = {
+    ...event,
+    privacy_mode: privacyMode,
+    ...(includeMetadata ? {} : { metadata: undefined }),
+  }
+
+  if (privacyMode === 'public') return exported
+
+  if (privacyMode === 'private') {
+    return {
+      ...exported,
+      input_hash: undefined,
+      output_hash: undefined,
+      policy_hash: undefined,
+      decision: undefined,
+      risk_level: undefined,
+      metadata: undefined,
+    }
+  }
+
+  if (privacyMode === 'redacted') {
+    return {
+      ...exported,
+      metadata: includeMetadata ? exported.metadata : undefined,
+    }
+  }
+
+  return {
+    ...exported,
+    metadata: undefined,
+  }
+}
+
+export function exportEvidenceEventsV2(
+  events: EvidenceEventV2[],
+  options: EvidenceEventV2ExportOptions = {}
+): EvidenceEventV2[] {
+  return events.map(event => redactEvidenceEventV2(event, options))
 }
 
 /**

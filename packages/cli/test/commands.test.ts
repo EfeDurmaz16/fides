@@ -656,6 +656,12 @@ describe('CLI Commands', () => {
         'http://agentd.test/discover/dht',
         expect.objectContaining({ method: 'POST' })
       );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        6,
+        'http://agentd.test/discover/federation',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenCalledTimes(6);
     });
   });
 

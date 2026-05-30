@@ -24,6 +24,9 @@ Last verified locally: 2026-05-30.
   federation-ready surfaces.
 - Signed registry index records, signed relay AgentCard references, and signed
   DHT pointer records.
+- Discovery publish and presence writes explicitly return `authorityGranted:
+  false`; publishing to registry, relay, or DHT never grants invocation
+  authority.
 - Capability-specific trust and reputation scoring with explainability.
 - Policy-before-execution with approval, dry-run, revocation, incident, runtime
   attestation, and kill switch inputs.
@@ -49,7 +52,8 @@ Last verified locally: 2026-05-30.
 - Revocation, incident, kill switch, session, and evidence policy hooks.
 - SDK type coverage for the main root v2 API responses.
 - OpenAPI route audit and response-shape contract coverage for root `agentd`
-  demo and adversarial simulation responses.
+  demo, adversarial simulation, and non-authoritative discovery write
+  responses.
 
 ## Working Prototype
 
@@ -254,6 +258,8 @@ pnpm verify
 pnpm examples:typecheck
 pnpm --filter @fides/sdk build
 pnpm --filter @fides/sdk test
+pnpm --filter @fides/sdk test -- fides-client.test.ts
+pnpm --filter @fides/sdk lint
 pnpm --filter @fides/cli lint
 pnpm --filter @fides/agentd test
 pnpm --filter @fides/e2e-tests test -- agentd-openapi-contract.test.ts
@@ -284,6 +290,8 @@ Observed manual smoke results:
 - demo returned `payments: "dry_run_only"`.
 - all-provider discovery queried local, well-known, registry, relay, DHT, and federation providers.
 - all-provider discovery returned `authorityGranted: false`.
+- registry publish, relay register, and DHT publish responses return top-level
+  `authorityGranted: false`.
 - adversarial simulation returned `status: "detected"`.
 - adversarial simulation detected 10 scenarios.
 - adversarial simulation returned `rootChainValid: true`.
@@ -320,6 +328,8 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `ffd0874 test(sdk): expose non-authoritative discovery writes`
+- `fd17264 feat(agentd): mark discovery writes non-authoritative`
 - `6c09690 test(api): lock demo response contracts`
 - `1b2276c docs: document sqlite local state mirrors`
 - `29df5d6 test(agentd): cover sqlite local state mirrors`

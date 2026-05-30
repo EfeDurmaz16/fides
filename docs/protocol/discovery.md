@@ -32,8 +32,9 @@ The package-level `DiscoveryOrchestrator` supports capability-query providers,
 candidate explanations, provider scoping, ranking, and protocol version
 negotiation. Incompatible provider or legacy DID-resolution candidates are
 filtered before ranking and compatible candidates carry a
-`versionNegotiation` record. Trust/policy/evidence integration remains an
-incremental hardening area.
+`versionNegotiation` record. Every returned `DiscoveryCandidate` is explicitly
+marked `authority: candidate_only` and carries `evidence_refs` for audit links.
+Trust/policy/evidence integration remains an incremental hardening area.
 
 Root `agentd` local, well-known, registry, relay, locally resolvable DHT, and
 local mock federation discovery now apply protocol version negotiation before

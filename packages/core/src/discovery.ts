@@ -22,9 +22,11 @@ export interface DiscoveryCandidate {
   agentId: string
   card: AgentCard
   capability?: string
+  authority: 'candidate_only'
   verified: boolean
   rank: number
   explanations: string[]
+  evidence_refs: string[]
   errors: ErrorEnvelope[]
   versionNegotiation?: VersionNegotiationRecord
 }
@@ -56,6 +58,7 @@ export function createDiscoveryCandidate(input: {
   verified?: boolean
   rank?: number
   explanations?: string[]
+  evidenceRefs?: string[]
   errors?: ErrorEnvelope[]
   versionNegotiation?: VersionNegotiationRecord
 }): DiscoveryCandidate {
@@ -65,9 +68,11 @@ export function createDiscoveryCandidate(input: {
     agentId: input.card.agent_id ?? input.card.identity.did,
     card: input.card,
     ...(input.capability !== undefined && { capability: input.capability }),
+    authority: 'candidate_only',
     verified: input.verified ?? false,
     rank: input.rank ?? 0,
     explanations: input.explanations ?? [],
+    evidence_refs: input.evidenceRefs ?? [],
     errors: input.errors ?? [],
     ...(input.versionNegotiation !== undefined && { versionNegotiation: input.versionNegotiation }),
   }

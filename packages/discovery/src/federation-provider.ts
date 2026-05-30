@@ -65,11 +65,13 @@ export class LocalFederationDiscoveryProvider implements DiscoveryProvider {
         candidates.push({
           ...candidate,
           provider: this.name,
+          authority: 'candidate_only',
           verified: false,
           rank: candidate.rank - 1,
+          evidence_refs: candidate.evidence_refs ?? [],
           explanations: [
             `Federated peer ${peer.record.payload.peer_id} returned candidate via ${candidate.provider}; federation is not authority`,
-            ...candidate.explanations,
+            ...(candidate.explanations ?? []),
           ],
         })
       }

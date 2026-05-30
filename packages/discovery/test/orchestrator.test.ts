@@ -104,6 +104,8 @@ describe('DiscoveryOrchestrator', () => {
       compatible: true,
       negotiated_version: 'fides.v2.0',
     })
+    expect(candidates[0].authority).toBe('candidate_only')
+    expect(candidates[0].evidence_refs).toEqual([])
     expect(candidates[0].explanations).toContain('Protocol version fides.v2.0 is compatible')
   })
 
@@ -157,7 +159,9 @@ describe('DiscoveryOrchestrator', () => {
       provider: 'legacy-provider',
       agentId: card.id,
       capability: 'calendar.schedule',
+      authority: 'candidate_only',
       verified: false,
+      evidence_refs: [],
     })
     expect(candidates[0].versionNegotiation?.compatible).toBe(true)
   })
@@ -198,6 +202,8 @@ describe('DiscoveryOrchestrator', () => {
 
     expect(candidates).toHaveLength(1)
     expect(candidates[0].provider).toBe('local')
+    expect(candidates[0].authority).toBe('candidate_only')
+    expect(candidates[0].evidence_refs).toEqual([])
     expect(candidates[0].explanations[0]).toContain('invoice.reconcile')
   })
 })

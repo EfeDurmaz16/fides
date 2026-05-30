@@ -99,10 +99,12 @@ function filterVersionCompatibleCandidates(
     if (!versionNegotiation.compatible) return []
     return [{
       ...candidate,
+      authority: 'candidate_only' as const,
       versionNegotiation,
-      errors: candidate.errors.filter(error => error.code !== 'VERSION_INCOMPATIBLE'),
+      evidence_refs: candidate.evidence_refs ?? [],
+      errors: (candidate.errors ?? []).filter(error => error.code !== 'VERSION_INCOMPATIBLE'),
       explanations: [
-        ...candidate.explanations,
+        ...(candidate.explanations ?? []),
         `Protocol version ${versionNegotiation.negotiated_version} is compatible`,
       ],
     }]

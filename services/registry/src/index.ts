@@ -10,6 +10,7 @@ import { serve } from '@hono/node-server'
 import { cors } from 'hono/cors'
 import { bodyLimit } from 'hono/body-limit'
 import { rateLimitMiddleware, MetricsCollector, metricsMiddleware } from '@fides/sdk'
+import { verifySignedAgentCardIdentity, type SignedAgentCard } from '@fides/core'
 import { logger } from './middleware/logger.js'
 import { securityHeaders } from './middleware/security.js'
 import { errorHandler } from './middleware/error-handler.js'
@@ -43,6 +44,48 @@ type DiscoveryIdentityResponse = {
   organizationDomain?: unknown
   organizationDomainVerified?: unknown
   organizationVerificationMethod?: unknown
+}
+
+function isSignedAgentCard(value: unknown): value is SignedAgentCard {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const candidate = value as Partial<SignedAgentCard>
+  return Boolean(candidate.payload && candidate.proof)
+}
+
+function reviveByteArray(value: unknown): Uint8Array | unknown {
+  if (value instanceof Uint8Array) return value
+  if (Array.isArray(value) && value.length === 32 && value.every(isByte)) {
+    return Uint8Array.from(value)
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const entries = Object.entries(value as Record<string, unknown>)
+    if (
+      entries.length === 32 &&
+      entries.every(([key, entry]) => /^\d+$/.test(key) && isByte(entry))
+    ) {
+      return Uint8Array.from(entries
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([, entry]) => entry as number))
+    }
+  }
+  return value
+}
+
+function signedAgentCardForVerification(card: SignedAgentCard): SignedAgentCard {
+  return {
+    ...card,
+    payload: {
+      ...card.payload,
+      identity: {
+        ...card.payload.identity,
+        publicKey: reviveByteArray(card.payload.identity.publicKey) as Uint8Array,
+      },
+    },
+  }
+}
+
+function isByte(value: unknown): value is number {
+  return Number.isInteger(value) && typeof value === 'number' && value >= 0 && value <= 255
 }
 
 function getCorsOrigin(): string {
@@ -203,6 +246,10 @@ app.post('/v1/cards', async (c) => {
   const did = body.id || body.payload?.id
   if (!did) {
     return c.json({ error: 'id is required' }, 400)
+  }
+
+  if (isSignedAgentCard(body) && !await verifySignedAgentCardIdentity(signedAgentCardForVerification(body))) {
+    return c.json({ error: 'signed AgentCard proof must verify and match payload.identity.did' }, 422)
   }
 
   const publisherVerification = await verifyPublisherClaim(body)

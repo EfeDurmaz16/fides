@@ -165,7 +165,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Local AgentCard created and validated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentCardCreateResponse"
 
   /agent-cards/{id}:
     get:
@@ -176,7 +180,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local AgentCard and optional signed canonical object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentCardResponse"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -193,7 +201,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Identity-bound signed AgentCard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentCardSignResponse"
 
   /agent-cards/{id}/verify:
     post:
@@ -206,7 +218,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local AgentCard verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentCardVerifyResponse"
 
   /agents/register:
     post:
@@ -1673,6 +1689,142 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LocalIdentitySummary"
+
+    AgentCardValidation:
+      type: object
+      required: [valid, errors]
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+
+    AgentCard:
+      type: object
+      required: [id, identity, capabilities, endpoints, policies, createdAt, updatedAt]
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.agent_card.v1]
+        id:
+          type: string
+        agent_id:
+          type: string
+        identity:
+          type: object
+          additionalProperties: true
+        publisher:
+          type: object
+          additionalProperties: true
+        capabilities:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        endpoints:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        transports:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        policies:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        publicKeys:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        trustAnchors:
+          type: array
+          items:
+            $ref: "#/components/schemas/IdentityTrustAnchor"
+        runtimeAttestations:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuntimeAttestationV2"
+        protocolVersions:
+          type: array
+          items:
+            type: string
+        revocationUrl:
+          type: string
+        revocationRef:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SignedAgentCard:
+      type: object
+      required: [payload, proof]
+      properties:
+        payload:
+          $ref: "#/components/schemas/AgentCard"
+        proof:
+          type: object
+          additionalProperties: true
+
+    LocalAgentCardCreateResponse:
+      type: object
+      required: [card, validation]
+      properties:
+        card:
+          $ref: "#/components/schemas/AgentCard"
+        validation:
+          $ref: "#/components/schemas/AgentCardValidation"
+
+    LocalAgentCardResponse:
+      type: object
+      required: [card, signed]
+      properties:
+        card:
+          $ref: "#/components/schemas/AgentCard"
+        signed:
+          nullable: true
+          oneOf:
+            - $ref: "#/components/schemas/SignedAgentCard"
+            - type: "null"
+
+    LocalAgentCardSignResponse:
+      type: object
+      required: [signed]
+      properties:
+        signed:
+          $ref: "#/components/schemas/SignedAgentCard"
+
+    LocalAgentCardVerifyResponse:
+      type: object
+      required: [valid, signed]
+      properties:
+        valid:
+          type: boolean
+        signed:
+          type: boolean
+        canonicalValid:
+          type: boolean
+        identityBound:
+          type: boolean
+        validation:
+          $ref: "#/components/schemas/AgentCardValidation"
+        error:
+          type: string
+        id:
+          type: string
 
     IdentityTrustAnchor:
       type: object

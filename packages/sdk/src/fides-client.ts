@@ -30,10 +30,12 @@ export interface FidesDiscoveryQuery {
 export interface FidesProviderRecord {
   agentId?: string
   agent_id?: string
+  authority?: 'candidate_only'
   cardId?: string
   capability?: string
   capabilities?: string[]
   authorityGranted?: false
+  evidence_refs?: string[]
   agentCardUrl?: string
   agent_card_url?: string
   agentCardHash?: string

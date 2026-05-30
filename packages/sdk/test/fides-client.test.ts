@@ -425,7 +425,14 @@ describe('FidesClient', () => {
       if (String(url).endsWith('/agents')) {
         return new Response(JSON.stringify({ agents: [{ agentId: 'did:fides:agent' }] }), { status: 200 })
       }
-      return new Response(JSON.stringify({ authorityGranted: false, candidates: [{ agentId: 'did:fides:agent' }] }), { status: 200 })
+      return new Response(JSON.stringify({
+        authorityGranted: false,
+        candidates: [{
+          agentId: 'did:fides:agent',
+          authority: 'candidate_only',
+          evidence_refs: ['evt_discovery'],
+        }],
+      }), { status: 200 })
     }))
 
     const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
@@ -438,7 +445,11 @@ describe('FidesClient', () => {
     await expect(client.agents.inspect('did:fides:agent')).resolves.toMatchObject({ agentId: 'did:fides:agent' })
     await expect(client.discovery.find({ capability: 'invoice.reconcile' })).resolves.toMatchObject({
       authorityGranted: false,
-      candidates: [{ agentId: 'did:fides:agent' }],
+      candidates: [{
+        agentId: 'did:fides:agent',
+        authority: 'candidate_only',
+        evidence_refs: ['evt_discovery'],
+      }],
     })
 
     expect(calls.map(call => call.url)).toEqual([

@@ -29,6 +29,11 @@ await client.agents.register({ agentCardId: identity.identity.did })
 await client.agents.list()
 await client.agents.inspect(identity.identity.did)
 const results = await client.discovery.find({ capability: 'invoice.reconcile' })
+// Discovery returns candidates only. It does not grant authority.
+const candidate = results.candidates?.[0]
+if (candidate?.authority !== 'candidate_only') {
+  throw new Error('Unexpected authoritative discovery result')
+}
 await client.discovery.local({ capability: 'invoice.reconcile' })
 await client.discovery.registry({
   capability: 'invoice.reconcile',

@@ -352,6 +352,7 @@ pnpm --filter @fides/agentd test
 
 ## Next Steps
 
+- Read `docs/status/fides-v2-implementation-status.md`.
 - Read `docs/architecture/fides-v2-agent-trust-fabric.md`.
 - Read `docs/protocol/canonical-object-signing.md`.
 - Read `docs/protocol/discovery.md`.

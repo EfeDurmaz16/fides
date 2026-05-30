@@ -42,6 +42,8 @@ FIDES solves these problems with a layered trust protocol built specifically for
 - **Ed25519 Identity** — DID-based identities with canonical JSON signing
 - **Trust Graph** — Weighted, capability-specific reputation with transitive trust scoring
 
+**Current implementation status:** [docs/status/fides-v2-implementation-status.md](docs/status/fides-v2-implementation-status.md)
+
 ---
 
 ## Quick Start

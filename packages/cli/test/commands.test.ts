@@ -1409,6 +1409,55 @@ describe('CLI Commands', () => {
       expect(mockFetch).toHaveBeenNthCalledWith(4, 'http://agentd.test/reputation/did%3Afides%3Aagent', expect.objectContaining({ method: 'GET' }));
     });
 
+    it('policy evaluate can use the root v2 policy API', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        policy: { decision: 'allow' },
+        requiresSessionGrant: true,
+        authorityGranted: false,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createPolicyCommand } = await import('../src/commands/policy.js');
+      const cmd = createPolicyCommand();
+
+      await cmd.parseAsync([
+        'evaluate',
+        '--agent',
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--principal',
+        'did:fides:principal',
+        '--requester-agent',
+        'did:fides:requester',
+        '--requested-scopes',
+        'read:invoices,write:evidence',
+        '--approval-granted',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/policy/evaluate',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            capability: 'invoice.reconcile',
+            principalId: 'did:fides:principal',
+            requesterAgentId: 'did:fides:requester',
+            requestedScopes: ['read:invoices', 'write:evidence'],
+            approvalGranted: true,
+            evidenceRefs: [],
+          }),
+        })
+      );
+    });
+
     it('incident report should call agentd incidents', async () => {
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({ recorded: true }), {
         status: 201,

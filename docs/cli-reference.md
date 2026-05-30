@@ -72,6 +72,7 @@ agentd invoke --dry-run did:fides:... --capability payments.prepare --input paym
 agentd trust did:fides:... --capability invoice.reconcile --agentd-url http://localhost:7345
 agentd reputation update --agent did:fides:... --capability invoice.reconcile --successful-invocations 5
 agentd reputation get did:fides:...
+agentd policy evaluate --agent did:fides:... --capability invoice.reconcile --requested-scopes read:invoices --agentd-url http://localhost:7345
 agentd approval request --agent did:fides:... --capability payments.prepare --requested-scopes payments:prepare --risk-level high
 agentd approval list
 agentd approval approve appr_... --reason "human approved"
@@ -143,6 +144,11 @@ capability-specific trust. Without `--agentd-url`, `trust` keeps the legacy
 trust-attestation behavior. `reputation update/get` manages root v2
 capability-specific reputation records. Trust and reputation remain signals;
 policy is the authority.
+
+`policy evaluate --agentd-url` evaluates root v2 policy-before-execution through
+local agentd and returns a structured decision, trust context, required controls,
+and whether a `SessionGrant` is still required. Without `--agentd-url`,
+`policy evaluate` keeps its legacy local bundle evaluator behavior.
 
 `approval request/list/approve/deny` use root v2 approval endpoints. Approval
 records human authorization intent and evidence, but does not grant authority

@@ -172,6 +172,9 @@ registered locally; callers may omit `agentCardUrl`, in which case the daemon
 uses a `local://agent-cards/<card-id>` pointer and signs it with the local
 identity. Unresolved external DHT publishes remain local mock pointers and are
 returned as unverified records.
+`POST /registry/publish` and `POST /relay/register` also require the referenced
+local registration to still have an identity-bound signed AgentCard before they
+emit registry or relay records.
 Discovery responses always include `authorityGranted: false`; discovery is
 candidate resolution only, and invocation authority still requires policy
 evaluation and scoped session grants. Local discovery does not require an

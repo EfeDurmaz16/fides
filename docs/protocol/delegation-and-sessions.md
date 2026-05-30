@@ -25,12 +25,22 @@ Current implementation anchors:
 - `expires_at`
 - `nonce`
 - `audience`
+- `supported_versions`
+- `required_versions` when applicable
+- `negotiated_version`
 - `issuer`
 - canonical signature
 
 `id` and `session_id` are the same value for compatibility with older call
 sites. `subject` is the target agent id, so the shared protocol object envelope
 binds to the same target as the session authority.
+
+`SessionGrantV2` is protocol-version-bound. The grant records the local
+supported versions, any required versions, and the negotiated protocol version
+used for the session. The negotiated version must be included in
+`supported_versions`; any `required_versions` must also be included. `agentd`
+refuses to issue a SessionGrant when the requester and target AgentCard cannot
+negotiate a compatible protocol version.
 
 Replay protection is required through nonce tracking.
 

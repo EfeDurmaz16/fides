@@ -33,6 +33,8 @@ Last verified locally: 2026-05-30.
 - Policy-before-execution with approval, dry-run, revocation, incident, runtime
   attestation, and kill switch inputs.
 - Scoped SessionGrants and invocation preflight.
+- SessionGrants now carry supported protocol versions, optional required
+  versions, and the negotiated protocol version used for authority.
 - Hash-chained EvidenceEvents with verification and export.
 - Runtime attestation schema and local MockTEE provider.
 - Local SQLite daemon snapshot store for v2 local state, with mirror tables for
@@ -57,6 +59,7 @@ Last verified locally: 2026-05-30.
   demo, adversarial simulation, and non-authoritative discovery write
   responses.
 - OpenAPI contract coverage for evidence-producing discovery responses.
+- OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
 
 ## Working Prototype
 
@@ -333,6 +336,7 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `2d4eb41 feat(delegation): bind session grants to protocol versions`
 - `2ccaa52 test(agentd): cover provider discovery evidence refs`
 - `7c60719 docs: document discovery evidence events`
 - `22cd792 feat(agentd): emit discovery evidence events`

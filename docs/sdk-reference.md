@@ -226,8 +226,9 @@ include local mock identity trust anchors for GitHub, email, domain, package
 registry, and wallet claims, plus runtime MockTEE attestations that can satisfy
 high-risk session policy when passed as an `attestationId`. Incident helpers
 return typed `IncidentRecordV2` responses; open incidents are policy-review
-inputs that affect trust and session policy until resolved. Registry, relay,
-DHT, federation, and well-known
+inputs that affect trust and session policy until resolved. Attestation helpers
+return typed local identity trust-anchor responses or `RuntimeAttestation`
+responses. Registry, relay, DHT, federation, and well-known
 helpers expose the local mock discovery surfaces. They return candidate records
 or pointers only; they do not convert discovery into authority. Discovery,
 registry, relay, and federation helpers accept `supported_versions` and

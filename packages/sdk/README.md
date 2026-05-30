@@ -190,9 +190,10 @@ helpers return typed `RevocationRecordV2` responses, and active revocations are
 authority overrides that deny matching trust and policy paths rather than grant
 new authority. Incident helpers return typed `IncidentRecordV2` responses; open
 incidents are policy-review inputs that affect trust and session policy until
-resolved. Runtime attestation helpers issue and verify local MockTEE
-attestations that can satisfy high-risk session policy when passed as an
-`attestationId`. Evidence helpers append hash-only events by default, inspect
+resolved. Attestation helpers return typed local identity trust-anchor responses
+or `RuntimeAttestation` responses. Runtime attestation helpers issue and verify
+local MockTEE attestations that can satisfy high-risk session policy when passed
+as an `attestationId`. Evidence helpers append hash-only events by default, inspect
 individual events, verify the root hash chain, and export the current local
 ledger.
 

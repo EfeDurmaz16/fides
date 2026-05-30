@@ -3,6 +3,7 @@ import {
   type ApprovalDecision,
   type ApprovalRequest,
   type CapabilityControl,
+  type IdentityTrustAnchor,
   type IncidentRecordV2,
   type KillSwitchRule,
   type PrincipalIdentity,
@@ -15,6 +16,7 @@ import {
   type ErrorEnvelope,
   type InvocationRequest,
   type InvocationResult,
+  type RuntimeAttestation,
   type SessionGrantV2,
   type SignedSessionGrantV2,
   type SignedInvocationRequest,
@@ -214,6 +216,39 @@ export interface FidesPackageAttestationRequest extends FidesIdentityAttestation
 export interface FidesWalletAttestationRequest extends FidesIdentityAttestationRequest {
   address: string
 }
+
+export interface FidesIdentityAttestation {
+  id: string
+  schema_version: 'fides.identity_attestation.v1'
+  identity: string
+  trust_anchor: IdentityTrustAnchor
+  issued_at: string
+  mode: 'local_mock'
+  [key: string]: unknown
+}
+
+export interface FidesIdentityAttestationResponse {
+  attestation: FidesIdentityAttestation
+  identity: FidesIdentityResponse
+  evidenceRefs?: string[]
+  authorityGranted: false
+  [key: string]: unknown
+}
+
+export interface FidesRuntimeAttestationResponse {
+  attestation: RuntimeAttestation
+  evidenceRefs?: string[]
+  authorityGranted?: false
+  [key: string]: unknown
+}
+
+export interface FidesRuntimeAttestationVerificationResponse extends FidesRuntimeAttestationResponse {
+  id: string
+  valid: boolean
+  error?: string
+}
+
+export type FidesAttestationResponse = FidesIdentityAttestationResponse | FidesRuntimeAttestationResponse
 
 export interface FidesInvocationResponse {
   authorityGranted: boolean
@@ -487,14 +522,30 @@ export class FidesClient {
   }
 
   readonly attestations = {
-    create: (body: Record<string, unknown>) => this.post('/attestations', body),
-    github: (body: FidesGithubAttestationRequest) => this.post('/attestations', { type: 'github', ...body }),
-    email: (body: FidesEmailAttestationRequest) => this.post('/attestations', { type: 'email', ...body }),
-    domain: (body: FidesDomainAttestationRequest) => this.post('/attestations', { type: 'domain', ...body }),
-    package: (body: FidesPackageAttestationRequest) => this.post('/attestations', { type: 'package', ...body }),
-    wallet: (body: FidesWalletAttestationRequest) => this.post('/attestations', { type: 'wallet', ...body }),
-    get: (attestationId: string) => this.get(`/attestations/${encodeURIComponent(attestationId)}`),
-    verify: (attestationId: string) => this.post(`/attestations/${encodeURIComponent(attestationId)}/verify`, {}),
+    create: (body: Record<string, unknown>): Promise<FidesAttestationResponse> => (
+      this.post('/attestations', body) as Promise<FidesAttestationResponse>
+    ),
+    github: (body: FidesGithubAttestationRequest): Promise<FidesIdentityAttestationResponse> => (
+      this.post('/attestations', { type: 'github', ...body }) as Promise<FidesIdentityAttestationResponse>
+    ),
+    email: (body: FidesEmailAttestationRequest): Promise<FidesIdentityAttestationResponse> => (
+      this.post('/attestations', { type: 'email', ...body }) as Promise<FidesIdentityAttestationResponse>
+    ),
+    domain: (body: FidesDomainAttestationRequest): Promise<FidesIdentityAttestationResponse> => (
+      this.post('/attestations', { type: 'domain', ...body }) as Promise<FidesIdentityAttestationResponse>
+    ),
+    package: (body: FidesPackageAttestationRequest): Promise<FidesIdentityAttestationResponse> => (
+      this.post('/attestations', { type: 'package', ...body }) as Promise<FidesIdentityAttestationResponse>
+    ),
+    wallet: (body: FidesWalletAttestationRequest): Promise<FidesIdentityAttestationResponse> => (
+      this.post('/attestations', { type: 'wallet', ...body }) as Promise<FidesIdentityAttestationResponse>
+    ),
+    get: (attestationId: string): Promise<FidesRuntimeAttestationResponse> => (
+      this.get(`/attestations/${encodeURIComponent(attestationId)}`) as Promise<FidesRuntimeAttestationResponse>
+    ),
+    verify: (attestationId: string): Promise<FidesRuntimeAttestationVerificationResponse> => (
+      this.post(`/attestations/${encodeURIComponent(attestationId)}/verify`, {}) as Promise<FidesRuntimeAttestationVerificationResponse>
+    ),
   }
 
   readonly sessions = {

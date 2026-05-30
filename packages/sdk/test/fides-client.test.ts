@@ -660,7 +660,26 @@ describe('FidesClient', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       calls.push({ url: String(url), init })
       return new Response(JSON.stringify({
-        attestation: { id: 'att_identity_1' },
+        attestation: {
+          id: 'att_identity_1',
+          schema_version: 'fides.identity_attestation.v1',
+          identity: 'did:fides:publisher',
+          trust_anchor: {
+            type: 'github',
+            value: 'fides-dev',
+            verified: true,
+            verifiedAt: '2026-05-30T00:00:00.000Z',
+          },
+          issued_at: '2026-05-30T00:00:00.000Z',
+          mode: 'local_mock',
+        },
+        identity: {
+          type: 'publisher',
+          did: 'did:fides:publisher',
+          publicKeyHex: '00'.repeat(32),
+          createdAt: '2026-05-30T00:00:00.000Z',
+          identity: { did: 'did:fides:publisher', type: 'publisher' },
+        },
         evidenceRefs: ['evt_1'],
         authorityGranted: false,
       }), {
@@ -671,7 +690,7 @@ describe('FidesClient', () => {
 
     const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
 
-    await client.attestations.github({ identity: 'did:fides:publisher', handle: 'fides-dev' })
+    const github = await client.attestations.github({ identity: 'did:fides:publisher', handle: 'fides-dev' })
     await client.attestations.email({ identity: 'did:fides:publisher', email: 'dev@example.com' })
     await client.attestations.domain({ identity: 'did:fides:publisher', domain: 'example.com' })
     await client.attestations.package({
@@ -681,6 +700,8 @@ describe('FidesClient', () => {
     })
     await client.attestations.wallet({ identity: 'did:fides:publisher', address: '0xabc' })
 
+    expect(github.attestation.trust_anchor.type).toBe('github')
+    expect(github.authorityGranted).toBe(false)
     expect(calls.map(call => call.url)).toEqual([
       'http://localhost:7345/attestations',
       'http://localhost:7345/attestations',
@@ -700,6 +721,65 @@ describe('FidesClient', () => {
       },
       { type: 'wallet', identity: 'did:fides:publisher', address: '0xabc' },
     ])
+  })
+
+  it('types runtime attestation issue and verification responses', async () => {
+    const attestation = {
+      schema_version: 'fides.runtime_attestation.v1',
+      id: 'att_runtime_1',
+      issuer: 'mock-tee',
+      subject: 'did:fides:agent',
+      attestation_id: 'att_runtime_1',
+      agent_id: 'did:fides:agent',
+      provider: 'mock-tee',
+      code_hash: 'sha256:code',
+      runtime_hash: 'sha256:runtime',
+      policy_hash: 'sha256:policy',
+      enclave_measurement: 'sha256:measurement',
+      issued_at: '2026-05-30T00:00:00.000Z',
+      expires_at: '2026-05-30T01:00:00.000Z',
+      payload_hash: 'sha256:payload',
+      signature: 'local-mock-signature',
+    }
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).endsWith('/attestations/att_runtime_1/verify')) {
+        return new Response(JSON.stringify({
+          id: 'att_runtime_1',
+          valid: true,
+          attestation,
+          evidenceRefs: ['evt_attestation_verified'],
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/attestations/att_runtime_1') && init?.method === 'GET') {
+        return new Response(JSON.stringify({ attestation }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response(JSON.stringify({
+        attestation,
+        evidenceRefs: ['evt_attestation_issued'],
+        authorityGranted: false,
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const issued = await client.attestations.create({
+      agentId: 'did:fides:agent',
+      codeHash: 'sha256:code',
+      runtimeHash: 'sha256:runtime',
+      policyHash: 'sha256:policy',
+    })
+    expect(issued.attestation.schema_version).toBe('fides.runtime_attestation.v1')
+
+    const fetched = await client.attestations.get('att_runtime_1')
+    expect(fetched.attestation.provider).toBe('mock-tee')
+
+    const verified = await client.attestations.verify('att_runtime_1')
+    expect(verified.valid).toBe(true)
+    expect(verified.authorityGranted).toBe(false)
   })
 
   it('creates and submits signed invocation requests from a session grant', async () => {

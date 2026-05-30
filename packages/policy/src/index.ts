@@ -49,6 +49,30 @@ export type FidesPolicyDecisionAction =
   | 'scope_limit'
   | 'risk_limit'
 
+export interface NormalizedPolicyResult extends Omit<PolicyResult, 'decision'> {
+  decision: Exclude<FidesPolicyDecisionAction, 'scope_limit' | 'risk_limit'>
+  legacyDecision: PolicyResult['decision']
+}
+
+export function normalizePolicyDecisionAction(decision: PolicyResult['decision']): NormalizedPolicyResult['decision'] {
+  switch (decision) {
+    case 'approve-required':
+      return 'require_approval'
+    case 'dry-run':
+      return 'dry_run_only'
+    default:
+      return decision
+  }
+}
+
+export function normalizePolicyResult(result: PolicyResult): NormalizedPolicyResult {
+  return {
+    ...result,
+    decision: normalizePolicyDecisionAction(result.decision),
+    legacyDecision: result.decision,
+  }
+}
+
 export interface PolicyReason {
   code: string
   severity: 'info' | 'warning' | 'error'

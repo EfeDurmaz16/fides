@@ -41,6 +41,11 @@ authority-safe check for session acceptance paths. A valid signature from a
 different DID over an otherwise valid grant payload is not enough to establish
 session authority.
 
+The root local daemon issues `SessionGrantV2` records through a local authority
+DID and returns the canonical signed grant as `signedSession`. Stored sessions
+without a signed grant are not hydrated from local state, and invocation rejects
+sessions whose signed grant no longer verifies against the grant issuer.
+
 ## Invocation Binding
 
 An invocation must bind to a scoped `SessionGrant`. The root local daemon can

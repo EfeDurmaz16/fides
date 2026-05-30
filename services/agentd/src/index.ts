@@ -60,6 +60,7 @@ import {
   signDHTPointerRecord,
   signRegistryIndexRecord,
   signRegistryPeerRecord,
+  signSessionGrantV2,
   verifySignedInvocationRequestIssuer,
   signInvocationResult,
   validateAgentCard,
@@ -69,6 +70,7 @@ import {
   verifySignedRegistryPeerRecord,
   verifySignedAgentCard,
   verifySignedAgentCardIdentity,
+  verifySignedSessionGrantV2Issuer,
   verifyDelegationTokenSignature,
   verifyDomainDid,
   evaluateInvocationPreflight,
@@ -94,6 +96,7 @@ import {
   type RevocationRecordV2,
   type RuntimeAttestation,
   type SessionGrantV2,
+  type SignedSessionGrantV2,
   type SignedInvocationRequest,
   type SignedRegistryIndexRecord,
   type SignedRegistryPeerRecord,
@@ -161,6 +164,7 @@ const localRuntimeAttestations = new Map<string, RuntimeAttestation>()
 let localEvidenceEvents: EvidenceEventV2[] = []
 interface LocalSessionRecord {
   session: SessionGrantV2
+  signedSession: SignedSessionGrantV2
   policy: FidesPolicyDecision
   trust: TrustResult
 }
@@ -285,7 +289,7 @@ function hydrateLocalState(snapshot: LocalDaemonStateSnapshot): void {
   localEvidenceEvents = normalizeEvidenceEventsV2(snapshot.evidenceEvents as Array<Record<string, unknown>>)
   localSessionGrants.clear()
   for (const record of snapshot.sessionGrants as LocalSessionRecord[]) {
-    if (record?.session?.session_id) localSessionGrants.set(record.session.session_id, record)
+    if (record?.session?.session_id && record.signedSession) localSessionGrants.set(record.session.session_id, record)
   }
 }
 
@@ -405,6 +409,25 @@ async function createLocalIdentity(
     privateKeyHex: bytesToHex(issued.privateKey),
     createdAt: new Date().toISOString(),
   }
+}
+
+async function getLocalAuthorityIdentity(): Promise<LocalIdentityRecord> {
+  const existing = Array.from(localIdentities.values()).find(record => (
+    record.type === 'agent' &&
+    (record.identity as AgentIdentity).metadata?.role === 'agentd_local_authority'
+  ))
+  if (existing) return existing
+
+  const authority = await createLocalIdentity('agent', { name: 'agentd Local Authority' })
+  authority.identity = {
+    ...(authority.identity as AgentIdentity),
+    metadata: {
+      ...((authority.identity as AgentIdentity).metadata ?? {}),
+      role: 'agentd_local_authority',
+    },
+  }
+  localIdentities.set(authority.identity.did, authority)
+  return authority
 }
 
 function safeIdentitySummary(record: LocalIdentityRecord): Record<string, unknown> {
@@ -1526,6 +1549,7 @@ app.post('/sessions', async (c) => {
   const expiresAt = typeof body.expiresAt === 'string'
     ? body.expiresAt
     : new Date(Date.now() + 60 * 60 * 1000).toISOString()
+  const authority = await getLocalAuthorityIdentity()
   const session = createSessionGrantV2({
     requesterAgentId,
     targetAgentId,
@@ -1536,10 +1560,11 @@ app.post('/sessions', async (c) => {
     policyHash: hashProtocolPayload(policy),
     trustResultHash: hashProtocolPayload(trust),
     audience: Array.isArray(body.audience) ? body.audience.map(String) : [targetAgentId],
-    issuer: 'did:fides:agentd:local',
+    issuer: authority.identity.did,
     expiresAt,
   })
-  localSessionGrants.set(session.session_id, { session, policy, trust })
+  const signedSession = await signSessionGrantV2(session, Buffer.from(authority.privateKeyHex, 'hex'), authority.identity.did)
+  localSessionGrants.set(session.session_id, { session, signedSession, policy, trust })
   const sessionEvidence = appendRootEvidence({
     type: 'session.granted',
     actor: requesterAgentId,
@@ -1560,13 +1585,15 @@ app.post('/sessions', async (c) => {
     authorized: true,
     authorityGranted: policy.decision === 'allow',
     session,
+    signedSession,
+    signedSessionVerified: await verifySignedSessionGrantV2Issuer(signedSession),
     policy,
     trust,
     evidenceRefs: [sessionEvidence.event_id],
   }, 201)
 })
 
-app.get('/sessions/:id', (c) => {
+app.get('/sessions/:id', async (c) => {
   const record = localSessionGrants.get(c.req.param('id'))
   if (!record) {
     return c.json({ error: createErrorEnvelope('SESSION_NOT_FOUND', {
@@ -1574,10 +1601,16 @@ app.get('/sessions/:id', (c) => {
       details: { sessionId: c.req.param('id') },
     }) }, 404)
   }
-  return c.json({ session: record.session, policy: record.policy, trust: record.trust })
+  return c.json({
+    session: record.session,
+    signedSession: record.signedSession,
+    signedSessionVerified: await verifySignedSessionGrantV2Issuer(record.signedSession),
+    policy: record.policy,
+    trust: record.trust,
+  })
 })
 
-app.post('/sessions/:id/verify', (c) => {
+app.post('/sessions/:id/verify', async (c) => {
   const record = localSessionGrants.get(c.req.param('id'))
   if (!record) {
     return c.json({
@@ -1589,9 +1622,14 @@ app.post('/sessions/:id/verify', (c) => {
     }, 404)
   }
 
+  const signatureValid = await verifySignedSessionGrantV2Issuer(record.signedSession)
+  const notExpired = new Date(record.session.expires_at).getTime() > Date.now()
   return c.json({
-    valid: new Date(record.session.expires_at).getTime() > Date.now(),
+    valid: signatureValid && notExpired,
+    signatureValid,
+    notExpired,
     session: record.session,
+    signedSession: record.signedSession,
   })
 })
 
@@ -1614,6 +1652,14 @@ app.post('/invoke', async (c) => {
       message: 'Session was not found or is no longer available',
       details: { sessionId },
     }), sessionId }, 404)
+  }
+
+  const signedSessionVerified = await verifySignedSessionGrantV2Issuer(record.signedSession)
+  if (!signedSessionVerified) {
+    return c.json({ error: createErrorEnvelope('IDENTITY_INVALID_SIGNATURE', {
+      message: 'SessionGrant signature is invalid or not bound to its issuer',
+      details: { sessionId },
+    }), sessionId, authorityGranted: false }, 401)
   }
 
   if (new Date(record.session.expires_at).getTime() <= Date.now()) {
@@ -1803,6 +1849,8 @@ app.post('/invoke', async (c) => {
   return c.json({
     authorityGranted: preflight.can_execute,
     session: record.session,
+    signedSession: record.signedSession,
+    signedSessionVerified,
     request,
     signedRequest,
     signedRequestVerified,
@@ -3104,6 +3152,7 @@ async function runLocalFullDemo() {
   localIdentities.set(principal.identity.did, principal)
   localIdentities.set(publisher.identity.did, publisher)
   localIdentities.set(requester.identity.did, requester)
+  const authority = await getLocalAuthorityIdentity()
 
   const calendarCapability = createCapabilityDescriptor({
     id: 'calendar.schedule',
@@ -3199,10 +3248,11 @@ async function runLocalFullDemo() {
     policyHash: hashProtocolPayload(invoicePolicy),
     trustResultHash: hashProtocolPayload(invoiceSessionTrust),
     audience: [invoice.card.identity.did],
-    issuer: 'did:fides:agentd:local',
+    issuer: authority.identity.did,
     expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
   })
-  localSessionGrants.set(invoiceSession.session_id, { session: invoiceSession, policy: invoicePolicy, trust: invoiceSessionTrust! })
+  const signedInvoiceSession = await signSessionGrantV2(invoiceSession, Buffer.from(authority.privateKeyHex, 'hex'), authority.identity.did)
+  localSessionGrants.set(invoiceSession.session_id, { session: invoiceSession, signedSession: signedInvoiceSession, policy: invoicePolicy, trust: invoiceSessionTrust! })
   const invoiceSessionEvidence = appendRootEvidence({
     type: 'session.granted',
     actor: requester.identity.did,
@@ -3306,10 +3356,11 @@ async function runLocalFullDemo() {
     policyHash: hashProtocolPayload(paymentPolicy),
     trustResultHash: hashProtocolPayload(paymentTrust),
     audience: [payment.card.identity.did],
-    issuer: 'did:fides:agentd:local',
+    issuer: authority.identity.did,
     expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
   })
-  localSessionGrants.set(paymentSession.session_id, { session: paymentSession, policy: paymentPolicy, trust: paymentTrust })
+  const signedPaymentSession = await signSessionGrantV2(paymentSession, Buffer.from(authority.privateKeyHex, 'hex'), authority.identity.did)
+  localSessionGrants.set(paymentSession.session_id, { session: paymentSession, signedSession: signedPaymentSession, policy: paymentPolicy, trust: paymentTrust })
   const paymentDryRunRequest = createInvocationRequest({
     issuer: requester.identity.did,
     sessionGrant: paymentSession,

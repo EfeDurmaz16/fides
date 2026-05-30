@@ -205,8 +205,11 @@ invocation.
 `POST /delegations` creates a local unsigned `DelegationToken` intent and
 returns `authorityGranted: false`; it must still be signed and converted into a
 policy-checked SessionGrant before invocation. `POST /sessions` issues a local
-`SessionGrant` only after policy allows or limits the action to dry-run.
-`POST /invoke` verifies the session, verifies an optional caller-supplied
+`SessionGrant` only after policy allows or limits the action to dry-run, signs
+it with the daemon's local authority DID, and returns `signedSession` plus
+`signedSessionVerified`. `POST /sessions/:id/verify` and `POST /invoke` require
+the stored signed grant to verify against the grant issuer before treating the
+session as usable. `POST /invoke` verifies the session, verifies an optional caller-supplied
 canonical `signedRequest`, runs the policy preflight path, validates the
 capability context, validates input/output schemas for the advertised
 capability, and returns an `InvocationResult` plus a canonical `signedResult`

@@ -895,10 +895,24 @@ describe('Agentd Service Routes', () => {
       const sessionData = await session.json()
       expect(sessionData.authorityGranted).toBe(true)
       expect(sessionData.session.capability).toBe('invoice.reconcile')
+      expect(sessionData.signedSession.payload).toEqual(sessionData.session)
+      expect(sessionData.signedSession.proof.proofPurpose).toBe('delegation')
+      expect(sessionData.signedSession.proof.verificationMethod).toBe(sessionData.session.issuer)
+      expect(sessionData.signedSessionVerified).toBe(true)
 
       const fetched = await app.request(`/sessions/${sessionData.session.session_id}`)
       expect(fetched.status).toBe(200)
-      expect((await fetched.json()).session.session_id).toBe(sessionData.session.session_id)
+      const fetchedData = await fetched.json()
+      expect(fetchedData.session.session_id).toBe(sessionData.session.session_id)
+      expect(fetchedData.signedSessionVerified).toBe(true)
+
+      const verified = await app.request(`/sessions/${sessionData.session.session_id}/verify`, { method: 'POST' })
+      expect(verified.status).toBe(200)
+      expect(await verified.json()).toMatchObject({
+        valid: true,
+        signatureValid: true,
+        notExpired: true,
+      })
 
       const invocation = await app.request('/invoke', {
         method: 'POST',
@@ -913,6 +927,8 @@ describe('Agentd Service Routes', () => {
       expect(invocationData.preflight.can_execute).toBe(true)
       expect(invocationData.result.status).toBe('completed')
       expect(invocationData.authorityGranted).toBe(true)
+      expect(invocationData.signedSessionVerified).toBe(true)
+      expect(invocationData.signedSession.payload.session_id).toBe(sessionData.session.session_id)
       expect(invocationData.result.evidence_refs).toHaveLength(2)
       expect(invocationData.signedResult.payload).toEqual(invocationData.result)
       expect(invocationData.signedResult.proof.proofPurpose).toBe('capabilityInvocation')

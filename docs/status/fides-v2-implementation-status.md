@@ -379,6 +379,7 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `33a6de8 feat(packages): add daemon and runtime effect boundaries`
 - `99d40b2 test(examples): enforce v2 capability names`
 - `7b7511f test(examples): audit canonical agent catalog`
 - `44bad51 docs: refresh fides v2 status gates`

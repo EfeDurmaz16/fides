@@ -36,6 +36,8 @@ Last verified locally: 2026-05-30.
 - Capability-specific trust and reputation scoring with explainability.
 - Policy-before-execution with approval, dry-run, revocation, incident, runtime
   attestation, and kill switch inputs.
+- Canonically signed `DelegationTokenV2` records with issuer-bound verification,
+  scoped capabilities, audience restriction, expiry, nonce, and payload hash.
 - Scoped SessionGrants and invocation preflight.
 - SessionGrants now carry supported protocol versions, optional required
   versions, and the negotiated protocol version used for authority.
@@ -91,6 +93,8 @@ Last verified locally: 2026-05-30.
 - Publishable package gate for all non-private package manifests, including
   README/LICENSE/package metadata and dry-run package contents.
 - OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
+- Core tests for issuer-bound `DelegationTokenV2` canonical signatures and
+  payload-hash tamper detection.
 - Canonical example catalog audit for the requested demo agents and
   capability/risk contracts.
 - Example audit coverage rejects legacy standalone example capability names so
@@ -392,6 +396,7 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `ad606ec feat(delegation): add canonical delegation tokens`
 - `061d14e test(adapters): audit rust adapter readiness`
 - `cb14b16 test(examples): enforce target agent layout`
 - `86c719e feat(packages): publish guard and adapters surfaces`

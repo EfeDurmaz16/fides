@@ -85,11 +85,14 @@ agentd graph inspect did:fides:invoice-agent --agentd-url http://localhost:7345
 agentd policy evaluate --agent did:fides:invoice-agent --capability invoice.reconcile --requested-scopes invoice:read --agentd-url http://localhost:7345
 agentd session request did:fides:invoice-agent --capability invoice.reconcile --requested-scopes invoice:read --agentd-url http://localhost:7345
 agentd invoke --session-id sess_... --input invoice.json --agentd-url http://localhost:7345
+agentd invoke --session-id sess_... --input invoice.json --sign --requester-private-key-file requester.key --agentd-url http://localhost:7345
 agentd evidence verify --agentd-url http://localhost:7345
 ```
 
 Discovery returns candidates only. Policy and scoped SessionGrants are the
-authority path.
+authority path. `invoke --sign` fetches the SessionGrant, creates a canonical
+`InvocationRequest`, verifies that the requester private key resolves to the
+grant's `requester_agent_id`, and submits the request as `signedRequest`.
 
 ### TypeScript SDK
 
@@ -259,6 +262,8 @@ For production agentd mutations through the CLI, export the same API key used by
 ```bash
 export FIDES_API_KEY="$SERVICE_API_KEY"
 pnpm --filter @fides/cli fides session create --agentd-url https://agentd.example.com --capability payments.execute --token-file token.json --delegator-public-key "$DELEGATOR_PUBLIC_KEY_HEX"
+pnpm --filter @fides/cli fides session create --agentd-url https://agentd.example.com --capability payments.execute --token-file signed-delegation-token-v2.json
+pnpm --filter @fides/cli fides invoke --agentd-url https://agentd.example.com --session-id "$SESSION_ID" --input payment-dry-run.json --sign --requester-private-key-file requester.key
 pnpm --filter @fides/cli fides revoke agent did:fides:agent --agentd-url https://agentd.example.com --revoked-by did:fides:principal --reason "disabled" --private-key-hex "$REVOCATION_PRIVATE_KEY_HEX"
 pnpm --filter @fides/cli fides incident report --agentd-url https://agentd.example.com --actor did:fides:agent --type policy_violation --severity high --description "merchant policy bypass" --reporter did:fides:principal --private-key-hex "$REPORTER_PRIVATE_KEY_HEX"
 pnpm --filter @fides/cli fides propagation pending --agentd-url https://agentd.example.com --limit 25
@@ -267,7 +272,10 @@ pnpm --filter @fides/cli fides authorize check --agentd-url https://agentd.examp
 pnpm --filter @fides/cli fides card proxy did:fides:agent --agentd-url https://agentd.example.com
 ```
 
-When `--delegator-public-key` is provided, `agentd` verifies the DelegationToken signature before creating the session.
+When `--delegator-public-key` is provided, `agentd` verifies the legacy
+DelegationToken signature before creating the session. Canonical
+`SignedDelegationTokenV2` input is detected from `{ payload, proof }` JSON and
+sent as `signedToken`, so the daemon verifies the issuer-bound proof directly.
 For revocation and incident writes, the CLI derives the signer public key from `--private-key-hex` and sends it as `revokerPublicKey` or `reporterPublicKey`.
 Use `fides propagation pending` and `fides propagation retry` to inspect and replay failed authority propagation outbox records.
 Use `fides authorize check` to smoke-test the same local guard decision path used before agent execution.

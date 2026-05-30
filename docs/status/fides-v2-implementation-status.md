@@ -44,6 +44,9 @@ Last verified locally: 2026-05-30.
   discovery records, DHT records, registry records, relay records, trust
   results, reputation records, policy decisions, approvals, delegations,
   sessions, evidence events, revocations, incidents, and kill switch rules.
+- Public target-structure facade packages for crypto, identity, attestations,
+  cards, trust, reputation, delegation, invocation, DHT, relay, registry,
+  revocation, and incidents.
 - Full local demo and adversarial simulation endpoints.
 - Public docs refreshed around `agentd`, `FidesClient`, candidate-only
   discovery, and authority-via-policy/session.
@@ -117,19 +120,32 @@ Last verified locally: 2026-05-30.
 | Area | Current location |
 |------|------------------|
 | Protocol objects and signing | `packages/core` |
+| Canonical JSON, hashing, signing facade | `packages/crypto` |
+| Identity and trust anchors | `packages/identity` |
+| Runtime attestations | `packages/attestations` |
+| AgentCards and capabilities | `packages/cards` |
 | Evidence ledger | `packages/evidence` |
+| Trust scoring | `packages/trust` |
+| Reputation scoring | `packages/reputation` |
 | Policy evaluator | `packages/policy` |
+| Delegation and sessions | `packages/delegation` |
+| Invocation | `packages/invocation` |
 | Guard decision pipeline | `packages/guard` |
 | Runtime attestation and kill switch | `packages/runtime` |
 | Discovery providers | `packages/discovery` |
+| DHT pointer records | `packages/dht` |
+| Relay discovery facade | `packages/relay` |
+| Registry and federation records | `packages/registry` |
+| Revocation records | `packages/revocation` |
+| Incident records | `packages/incidents` |
 | SDK | `packages/sdk` |
 | CLI | `packages/cli` |
 | Local daemon/API | `services/agentd` |
 | Adapters | `packages/adapters` |
 
-Some target package boundaries from the v2 architecture remain consolidated in
-existing packages. See `docs/architecture/implementation-plan.md` for the target
-package structure.
+Some target packages are currently domain facades over the TS-first core
+implementation. This keeps public imports aligned with the v2 architecture
+while preserving a single canonical protocol-object implementation.
 
 ## CLI Command Overview
 
@@ -313,7 +329,8 @@ Observed manual smoke results:
 ## Known Limitations
 
 - The full pivot is not complete.
-- The target package structure is not fully split into every final package.
+- Several target package boundaries are public facades over `packages/core`
+  rather than independent implementations.
 - DHT, relay, registry, and federation are local mock/simulator surfaces rather
   than production networks.
 - Real TEE providers are adapter-ready but not implemented.
@@ -329,8 +346,8 @@ Observed manual smoke results:
 
 - Keep full `pnpm verify` green before release.
 - Push `fides-v2-agent-trust-fabric` and open/update a PR.
-- Normalize target package boundaries where the current monorepo is still
-  consolidated.
+- Move facade internals into separate packages only when the split removes real
+  complexity or enables independent adapters.
 - Add real DHT, relay, registry, and federation adapters.
 - Add production TEE/build/container attestation providers.
 - Harden local key storage beyond prototype snapshot material.

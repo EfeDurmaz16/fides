@@ -1,0 +1,15 @@
+export {
+  createRevocationRecord,
+  createRevocationRecordV2,
+  isRevocationValid,
+  markPropagated,
+  signRevocationRecord,
+  signRevocationRecordV2,
+  verifyRevocationRecord,
+  verifySignedRevocationRecordV2,
+  verifySignedRevocationRecordV2Issuer,
+  type RevocationRecord,
+  type RevocationRecordV2,
+  type RevocationTargetType,
+  type SignedRevocationRecordV2,
+} from '@fides/core'

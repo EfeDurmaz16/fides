@@ -171,7 +171,7 @@ const incident = await client.incidents.report({
   description: 'Attempted invocation outside delegated authority.',
 })
 await client.incidents.resolve(incident.record.id, { status: 'resolved' })
-const attestation = await client.attestations.create({
+const attestation = await client.attestations.runtime({
   agentId: identity.identity.did,
   codeHash: `sha256:${'a'.repeat(64)}`,
   runtimeHash: `sha256:${'b'.repeat(64)}`,

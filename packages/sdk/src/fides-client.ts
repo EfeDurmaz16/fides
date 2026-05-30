@@ -478,6 +478,15 @@ export interface FidesWalletAttestationRequest extends FidesIdentityAttestationR
   address: string
 }
 
+export interface FidesRuntimeAttestationRequest {
+  agentId: string
+  codeHash: string
+  runtimeHash: string
+  policyHash: string
+  enclaveMeasurement?: string
+  expiresAt?: string
+}
+
 export interface FidesIdentityAttestation {
   id: string
   schema_version: 'fides.identity_attestation.v1'
@@ -886,6 +895,9 @@ export class FidesClient {
     ),
     wallet: (body: FidesWalletAttestationRequest): Promise<FidesIdentityAttestationResponse> => (
       this.post('/attestations', { type: 'wallet', ...body }) as Promise<FidesIdentityAttestationResponse>
+    ),
+    runtime: (body: FidesRuntimeAttestationRequest): Promise<FidesRuntimeAttestationResponse> => (
+      this.post('/attestations', body) as Promise<FidesRuntimeAttestationResponse>
     ),
     get: (attestationId: string): Promise<FidesRuntimeAttestationResponse> => (
       this.get(`/attestations/${encodeURIComponent(attestationId)}`) as Promise<FidesRuntimeAttestationResponse>

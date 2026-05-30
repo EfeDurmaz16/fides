@@ -823,6 +823,16 @@ describe('FidesClient', () => {
     })
     expect(issued.attestation.schema_version).toBe('fides.runtime_attestation.v1')
 
+    const runtime = await client.attestations.runtime({
+      agentId: 'did:fides:agent',
+      codeHash: 'sha256:code',
+      runtimeHash: 'sha256:runtime',
+      policyHash: 'sha256:policy',
+      enclaveMeasurement: 'sha256:measurement',
+    })
+    expect(runtime.attestation.provider).toBe('mock-tee')
+    expect(runtime.authorityGranted).toBe(false)
+
     const fetched = await client.attestations.get('att_runtime_1')
     expect(fetched.attestation.provider).toBe('mock-tee')
 

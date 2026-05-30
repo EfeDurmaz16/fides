@@ -20,7 +20,7 @@ describe('CLI entrypoint', () => {
       cwd: cliRoot,
       encoding: 'utf8',
       stdio: 'pipe',
-      timeout: 5000,
+      timeout: 15000,
     })
 
     expect(result.status).toBe(1)

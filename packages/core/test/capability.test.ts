@@ -3,6 +3,7 @@ import {
   DEFAULT_CAPABILITY_ONTOLOGY,
   classifyCapabilityRisk,
   createCapabilityDescriptor,
+  findCapabilityOntologyEntry,
   parseCapabilityId,
 } from '../src/capability.js'
 
@@ -42,7 +43,7 @@ describe('CapabilityDescriptor', () => {
       })
     })
 
-    it('creates v2 capability descriptors with controls and scopes', () => {
+    it('creates v2 capability descriptors with explicit controls and scopes', () => {
       const capability = createCapabilityDescriptor({
         id: 'payments.prepare',
         requiredScopes: ['payments:prepare'],
@@ -53,7 +54,7 @@ describe('CapabilityDescriptor', () => {
         id: 'payments.prepare',
         namespace: 'payments',
         action: 'prepare',
-        riskLevel: 'critical',
+        riskLevel: 'high',
         requiredScopes: ['payments:prepare'],
         requiresApproval: true,
         requiresRuntimeAttestation: true,
@@ -61,6 +62,37 @@ describe('CapabilityDescriptor', () => {
         supportsHumanApproval: true,
         supportsPolicyProof: true,
       })
+    })
+
+    it('applies seed ontology defaults before heuristic risk classification', () => {
+      const capability = createCapabilityDescriptor({ id: 'payments.prepare' })
+
+      expect(capability).toMatchObject({
+        id: 'payments.prepare',
+        namespace: 'payments',
+        action: 'prepare',
+        resource: 'payment',
+        riskLevel: 'high',
+        requiredScopes: ['payments:prepare'],
+        supportedControls: expect.arrayContaining([
+          'dry_run',
+          'human_approval',
+          'policy_proof',
+          'runtime_attestation',
+        ]),
+        requiresApproval: true,
+        requiresRuntimeAttestation: true,
+      })
+      expect(classifyCapabilityRisk('payments.prepare')).toBe('critical')
+    })
+
+    it('looks up ontology entries by capability id', () => {
+      expect(findCapabilityOntologyEntry('deploy.production')).toMatchObject({
+        id: 'deploy.production',
+        riskClass: 'critical',
+        resource: 'deployment',
+      })
+      expect(findCapabilityOntologyEntry('unknown.capability')).toBeUndefined()
     })
 
     it('ships the requested seed ontology entries', () => {

@@ -26,6 +26,12 @@ checks, not just descriptive metadata. The local daemon rejects inputs that do
 not satisfy the advertised `inputSchema`, and fails the invocation if generated
 output does not satisfy `outputSchema`.
 
+`createCapabilityDescriptor()` applies seed ontology defaults before falling
+back to heuristic risk classification. This matters for capabilities like
+`payments.prepare`: the generic FIDES ontology classifies preparation as
+`high`, while `payments.execute` remains `critical` and Sardis-specific for real
+payment execution authority.
+
 ## Seed Capabilities
 
 The seed ontology includes calendar, invoice, payments, code, file, and deploy capabilities.

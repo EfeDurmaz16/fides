@@ -31,7 +31,7 @@ This map reflects the current local inspection of:
 | Trust graph | `services/trust-graph` | causal graph only | not found | not found | FIDES adapter/trust infra | FIDES | extend existing |
 | Reputation | capability scoring partial | not found | registry reputation metadata | not found | KYA/payment reputation | FIDES | extend existing |
 | Capability descriptor | `packages/core/src/capability.ts` | not found | service/capability manifest | CapabilityCard | agent auth/A2A/payment capabilities | OAPS + FIDES | extend existing |
-| Capability ontology | heuristic only | blast radius/risk | service taxonomy | capability schemas/constants | risk/action patterns | OAPS | create new |
+| Capability ontology | seed taxonomy + lookup helpers | blast radius/risk | service taxonomy | capability schemas/constants | risk/action patterns | FIDES + OAPS | extend existing |
 | AgentCard / ActorCard | `packages/core/src/agent-card.ts`, shared AgentCard | not found | service manifest | ActorCard | A2A AgentCard | FIDES + OAPS | extend existing |
 | Discovery | provider package/services | adapter only | service discovery | actor discovery | A2A/agent auth | FIDES | extend existing |
 | Well-known discovery | discovery service/provider | not found | manifest fetch | `.well-known/oaps.json` | agent auth/A2A well-known | FIDES | extend existing |

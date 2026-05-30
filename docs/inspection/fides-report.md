@@ -49,8 +49,8 @@ Local evidence:
 | Canonical object signing | Present | `packages/core/src/canonical-signer.ts`. |
 | HTTP message signatures | Present in SDK | `packages/sdk/src/signing/`. |
 | Signed AgentCards | Partial | `packages/core/src/agent-card.ts` defines `SignedAgentCard`, discovery providers accept signed cards, but AgentCard lacks all requested v2 fields. |
-| Capability descriptors | Partial | `packages/core/src/capability.ts` has id/name/schema/risk/approval/attestation; missing namespace/action/resource/control metadata. |
-| Capability ontology | Missing | I could not find ontology entries beyond heuristic risk classification in `packages/core/src/capability.ts`. |
+| Capability descriptors | Present, evolving | `packages/core/src/capability.ts` has id, namespace, action, resource, schemas, risk, scopes, supported controls, dry-run, approval, runtime attestation, and policy-proof metadata. |
+| Capability ontology | Present, seed taxonomy | `packages/core/src/capability.ts` defines `DEFAULT_CAPABILITY_ONTOLOGY`, lookup helpers, and ontology-backed descriptor defaults before heuristic risk classification. |
 | Local discovery | Present | `packages/discovery/src/local-provider.ts`. |
 | Well-known discovery | Present | `packages/discovery/src/well-known-provider.ts`, `services/discovery/src/routes/well-known.ts`. |
 | Registry discovery | Present | `packages/discovery/src/registry-provider.ts`, `services/registry/src/`. |

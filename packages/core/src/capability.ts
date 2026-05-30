@@ -94,8 +94,15 @@ export function parseCapabilityId(id: string): Pick<CapabilityDescriptor, 'names
   }
 }
 
+export function findCapabilityOntologyEntry(id: string): CapabilityOntologyEntry | undefined {
+  return DEFAULT_CAPABILITY_ONTOLOGY.find(entry => entry.id === id)
+}
+
 export function createCapabilityDescriptor(input: {
   id: string
+  namespace?: string
+  action?: string
+  resource?: string
   name?: string
   description?: string
   inputSchema?: JSONSchema
@@ -107,28 +114,33 @@ export function createCapabilityDescriptor(input: {
   supportsHumanApproval?: boolean
   supportsPolicyProof?: boolean
 }): CapabilityDescriptor {
+  const ontologyEntry = findCapabilityOntologyEntry(input.id)
   const parsed = parseCapabilityId(input.id)
   const supportedControls = input.supportedControls ?? [
     ...(input.supportsDryRun ? ['dry_run' as const] : []),
     ...(input.supportsHumanApproval ? ['human_approval' as const] : []),
     ...(input.supportsPolicyProof ? ['policy_proof' as const] : []),
+    ...(ontologyEntry?.supportedControls ?? []),
   ]
+  const uniqueControls = Array.from(new Set(supportedControls))
 
   return {
     id: input.id,
-    ...parsed,
+    namespace: input.namespace ?? parsed.namespace ?? ontologyEntry?.namespace,
+    action: input.action ?? parsed.action ?? ontologyEntry?.action,
+    resource: input.resource ?? parsed.resource ?? ontologyEntry?.resource,
     name: input.name ?? input.id,
-    description: input.description ?? input.id,
+    description: input.description ?? ontologyEntry?.description ?? input.id,
     inputSchema: input.inputSchema ?? { type: 'object' },
     outputSchema: input.outputSchema ?? { type: 'object' },
-    riskLevel: input.riskLevel ?? classifyCapabilityRisk(input.id),
-    requiresApproval: input.supportsHumanApproval ?? supportedControls.includes('human_approval'),
-    requiresRuntimeAttestation: supportedControls.includes('runtime_attestation'),
-    requiredScopes: input.requiredScopes ?? [],
-    supportedControls,
-    supportsDryRun: input.supportsDryRun ?? supportedControls.includes('dry_run'),
-    supportsHumanApproval: input.supportsHumanApproval ?? supportedControls.includes('human_approval'),
-    supportsPolicyProof: input.supportsPolicyProof ?? supportedControls.includes('policy_proof'),
+    riskLevel: input.riskLevel ?? ontologyEntry?.riskClass ?? classifyCapabilityRisk(input.id),
+    requiresApproval: input.supportsHumanApproval ?? uniqueControls.includes('human_approval'),
+    requiresRuntimeAttestation: uniqueControls.includes('runtime_attestation'),
+    requiredScopes: input.requiredScopes ?? ontologyEntry?.defaultRequiredScopes ?? [],
+    supportedControls: uniqueControls,
+    supportsDryRun: input.supportsDryRun ?? uniqueControls.includes('dry_run'),
+    supportsHumanApproval: input.supportsHumanApproval ?? uniqueControls.includes('human_approval'),
+    supportsPolicyProof: input.supportsPolicyProof ?? uniqueControls.includes('policy_proof'),
   }
 }
 

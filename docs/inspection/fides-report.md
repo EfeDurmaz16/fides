@@ -76,9 +76,9 @@ Local evidence:
 | Version negotiation | Present | `packages/core/src/versioning.ts`, `packages/core/src/discovery.ts`, and `packages/discovery/src/orchestrator.ts` negotiate and filter discovery candidates by protocol compatibility. |
 | Typed errors | Present, evolving | `packages/core/src/errors.ts` defines stable `ErrorEnvelope` objects with code, category, severity, retryable, message, and details across identity, AgentCard, capability, trust, policy, approval, session, attestation, DHT, evidence, revocation, incident, kill switch, and version errors. |
 | Explainability | Partial | Guard and policy return factors/explanations in `packages/guard/src/index.ts` and `packages/policy/src/index.ts`. |
-| Adversarial simulation | Present as test, incomplete harness | `tests/adversarial/adversarial.test.ts`; no `agentd simulate adversarial` command found. |
-| Interop adapters | Partial | SDK and CLI have A2A/FIDES-era surfaces; explicit MCP/A2A/OAPS/OSP/AP2/x402/Sardis adapter package not found. |
-| CLI | Present, command name is `fides` | `packages/cli/src/index.ts`. Requested `agentd` CLI naming is not present. |
+| Adversarial simulation | Present, local API-backed | `packages/cli/src/commands/simulate.ts` exposes `agentd simulate adversarial`; `services/agentd/src/index.ts` handles `/simulate/adversarial`. The harness remains prototype-level. |
+| Interop adapters | Present, adapter-ready | `packages/adapters/src/index.ts` defines MCP, A2A, OAPS, OSP, AP2, x402, and Sardis adapter manifests and mapping contracts; production protocol integrations remain adapter-ready. |
+| CLI | Present | `packages/cli/package.json` exposes both `fides` and `agentd` bins; `packages/cli/src/cli-name.ts` switches help text based on the invoked binary. |
 | Local HTTP API | Present at `/v1/*`, not requested exact endpoint set | `services/agentd/src/index.ts`, `docs/api/agentd.yaml`. |
 | SDK | Present | `packages/sdk/src/index.ts`, `packages/sdk/src/fides.ts`. |
 | Examples/demo | Present, not full requested v2 demo | `examples/`. |
@@ -126,7 +126,7 @@ I could not find these in the repo as complete v2 implementations:
 - Full version negotiation.
 - Stable ErrorEnvelope vocabulary with code/category/severity/retryable/details.
 - MCP/A2A/OAPS/OSP/AP2/x402/Sardis adapter package.
-- `agentd demo run` and `agentd simulate adversarial` CLI commands.
+- Production-grade `agentd demo run` and `agentd simulate adversarial` scenarios beyond the current local API-backed prototype commands.
 - Requested local SQLite daemon storage layout.
 
 ## 7. Conflicts With FIDES v2 Architecture
@@ -135,7 +135,7 @@ I could not find these in the repo as complete v2 implementations:
 - There are two AgentCard shapes: `packages/core/src/agent-card.ts` and `packages/shared/src/types.ts`. They need consolidation.
 - DHT provider currently stores AgentCards directly; v2 requires DHT to provide signed pointers only and never act as a trust source.
 - Policy actions use `approve-required` and `dry-run`; the user-facing spec uses `require_approval`, `dry_run_only`, `scope_limit`, and `risk_limit`. This needs vocabulary normalization or compatibility mapping.
-- CLI binary is `fides`, while requested commands are under `agentd`. Decide whether `agentd` becomes an alias/binary or a subcommand.
+- CLI exposes both `fides` and `agentd` binaries; the remaining gap is production-grade coverage of the requested command behavior, not the binary name.
 - Service APIs use `/v1/*` and differ from the requested local HTTP API paths. Add compatibility routes or document versioned API mapping.
 - FIDES currently contains payment examples such as `payments.execute`; generic FIDES must keep execution payment-specific behavior in Sardis and support only generic dry-run/payment-prep patterns.
 

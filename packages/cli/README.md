@@ -19,12 +19,12 @@ fides identity list
 fides identity show did:fides:...
 fides sign https://api.example.com/data --method GET
 fides card publish agent-card.json --registry-url http://localhost:7346
-fides demo run --agentd-url http://localhost:7345
-fides simulate adversarial --agentd-url http://localhost:7345
-fides daemon status --agentd-url http://localhost:7345
+agentd demo run --agentd-url http://localhost:7345
+agentd simulate adversarial --agentd-url http://localhost:7345
+agentd daemon status --agentd-url http://localhost:7345
 ```
 
-Use `fides --help` and command-specific `--help` output for the full command surface.
+Use `fides --help`, `agentd --help`, and command-specific `--help` output for the full command surface. Both binaries point to the same CLI; `agentd` is the preferred name for local authority, daemon, demo, and simulation workflows.
 
 ## License
 

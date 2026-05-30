@@ -17,6 +17,7 @@ Current implementation anchors:
 - `discover`
 - `trust`
 - `policy`
+- `approval`
 - `session`
 - `invoke`
 - `authorize`
@@ -68,6 +69,10 @@ agentd dht find --capability invoice.reconcile
 agentd invoke did:fides:... --capability invoice.reconcile --input invoice.json --requested-scopes invoice:read
 agentd invoke --session-id sess_... --input invoice.json
 agentd invoke --dry-run did:fides:... --capability payments.prepare --input payment.json
+agentd approval request --agent did:fides:... --capability payments.prepare --requested-scopes payments:prepare --risk-level high
+agentd approval list
+agentd approval approve appr_... --reason "human approved"
+agentd approval deny appr_... --reason "too risky"
 agentd session request did:fides:... --capability invoice.reconcile --requested-scopes invoice:read
 agentd session verify sess_...
 agentd attest runtime --agent did:fides:... --code-hash sha256:... --runtime-hash sha256:... --policy-hash sha256:...
@@ -128,6 +133,10 @@ policy-checked `SessionGrant` from `POST /sessions`, then invokes that session.
 Input defaults to `{}` and can be supplied with `--input` or `--input-json`.
 Use `--dry-run` to request dry-run execution; discovery is never treated as
 authority by this command.
+
+`approval request/list/approve/deny` use root v2 approval endpoints. Approval
+records human authorization intent and evidence, but does not grant authority
+without a policy evaluation and scoped `SessionGrant`.
 
 `session request`, `session show`, and `session verify` use the root v2 local
 agentd session endpoints. The older `session create` and `session revoke`

@@ -163,9 +163,10 @@ describe('CLI Commands', () => {
   });
 
   describe('v2 command surface', () => {
-    it('exposes registry, agents, dht, evidence, attest, demo, simulate, and invoke commands', async () => {
+    it('exposes registry, agents, approval, dht, evidence, attest, demo, simulate, and invoke commands', async () => {
       const { createRegistryCommand } = await import('../src/commands/registry.js');
       const { createAgentsCommand, createRegisterCommand } = await import('../src/commands/agents.js');
+      const { createApprovalCommand } = await import('../src/commands/approval.js');
       const { createDhtCommand } = await import('../src/commands/dht.js');
       const { createEvidenceCommand } = await import('../src/commands/evidence.js');
       const { createAttestCommand } = await import('../src/commands/attest.js');
@@ -176,6 +177,7 @@ describe('CLI Commands', () => {
       expect(createRegistryCommand().name()).toBe('registry');
       expect(createRegisterCommand().name()).toBe('register');
       expect(createAgentsCommand().name()).toBe('agents');
+      expect(createApprovalCommand().name()).toBe('approval');
       expect(createDhtCommand().name()).toBe('dht');
       expect(createEvidenceCommand().name()).toBe('evidence');
       expect(createAttestCommand().name()).toBe('attest');
@@ -1191,6 +1193,98 @@ describe('CLI Commands', () => {
         3,
         'http://agentd.test/agents/did%3Afides%3Aagent',
         expect.objectContaining({ method: 'GET' })
+      );
+    });
+
+    it('approval commands should create and decide root v2 approvals', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        approval: { id: 'appr_1' },
+        decisions: [],
+        authorityGranted: false,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createApprovalCommand } = await import('../src/commands/approval.js');
+      const cmd = createApprovalCommand();
+
+      await cmd.parseAsync([
+        'request',
+        '--agent',
+        'did:fides:target',
+        '--capability',
+        'payments.prepare',
+        '--requester-agent',
+        'did:fides:requester',
+        '--principal',
+        'did:fides:principal',
+        '--requested-scopes',
+        'payments:prepare,evidence:write',
+        '--risk-level',
+        'high',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync([
+        'approve',
+        'appr_1',
+        '--approver',
+        'did:fides:approver',
+        '--reason',
+        'human approved',
+        '--constraints',
+        '{"dryRunOnly":true}',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['deny', 'appr_2', '--reason', 'too risky', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/approvals',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            targetAgentId: 'did:fides:target',
+            capability: 'payments.prepare',
+            requesterAgentId: 'did:fides:requester',
+            principalId: 'did:fides:principal',
+            requestedScopes: ['payments:prepare', 'evidence:write'],
+            riskLevel: 'high',
+            evidenceRefs: [],
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://agentd.test/approvals', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/approvals/appr_1/approve',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            approverId: 'did:fides:approver',
+            reason: 'human approved',
+            constraints: { dryRunOnly: true },
+            evidenceRefs: [],
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        4,
+        'http://agentd.test/approvals/appr_2/deny',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            reason: 'too risky',
+            constraints: {},
+            evidenceRefs: [],
+          }),
+        })
       );
     });
 

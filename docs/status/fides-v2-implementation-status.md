@@ -341,8 +341,9 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
-- `2d4eb41 feat(delegation): bind session grants to protocol versions`
+- `292055d fix(cli): catch async entrypoint failures`
 - `8b472a0 feat(cli): surface typed agentd errors`
+- `2d4eb41 feat(delegation): bind session grants to protocol versions`
 - `2ccaa52 test(agentd): cover provider discovery evidence refs`
 - `7c60719 docs: document discovery evidence events`
 - `22cd792 feat(agentd): emit discovery evidence events`

@@ -38,23 +38,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check package hygiene
-        run: pnpm package:hygiene
-
-      - name: Build
-        run: pnpm build
-
-      - name: Check public package packs
-        run: pnpm package:packcheck
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
+      - name: Verify
+        run: pnpm verify
         env:
           DATABASE_URL: postgresql://fides:fides@localhost:5432/fides
           AGENTD_POSTGRES_TEST_REQUIRED: 'true'

@@ -1,43 +1,81 @@
 # @fides/sdk
 
-Decentralized trust and authentication protocol for autonomous AI agents.
+Promise-based TypeScript SDK for the FIDES v2 Agent Trust Fabric.
+
+FIDES v2 resolves capabilities to verified agent candidates, then runs trust,
+policy, delegation, session, invocation, and evidence workflows through the
+local `agentd` authority path. Discovery is candidate discovery only; it never
+grants invocation authority by itself.
 
 ## Installation
 
 ```bash
 npm install @fides/sdk
+# or
+pnpm add @fides/sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { Fides, TrustLevel } from '@fides/sdk'
+import { FidesClient } from '@fides/sdk'
 
-const fides = new Fides({
-  discoveryUrl: 'http://localhost:3100',
-  trustUrl: 'http://localhost:3200',
-  apiKey: process.env.FIDES_API_KEY,
+const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+
+const principal = await client.identity.createPrincipal({ name: 'Demo Principal' })
+const requester = await client.identity.createAgent({ name: 'Requester Agent' })
+const target = await client.identity.createAgent({ name: 'Invoice Agent' })
+
+const card = await client.cards.create({
+  agentId: target.did,
+  name: 'Invoice Agent',
+  capabilities: [
+    {
+      id: 'invoice.reconcile',
+      riskLevel: 'medium',
+      requiredScopes: ['invoice:read'],
+      supportedControls: ['dry_run', 'policy_proof'],
+      supportsDryRun: true,
+      supportsPolicyProof: true,
+    },
+  ],
 })
 
-// Create identity
-const { did } = await fides.createIdentity({ name: 'My Agent' })
+await client.cards.sign({ id: card.card.id })
+await client.agents.register({ agentCardId: card.card.id })
 
-// Sign HTTP requests (with automatic Content-Digest for body integrity)
-const signed = await fides.signRequest({
-  method: 'POST',
-  url: 'https://example.com/api',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ data: 'hello' }),
+const discovery = await client.discovery.local({ capability: 'invoice.reconcile' })
+console.log(discovery.authorityGranted) // false
+
+const trust = await client.trust.evaluate({
+  agentId: target.did,
+  capability: 'invoice.reconcile',
 })
 
-// Verify requests
-const result = await fides.verifyRequest(incomingRequest)
+const policy = await client.policy.evaluate({
+  principalId: principal.did,
+  requesterAgentId: requester.did,
+  agentId: target.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
+})
 
-// Trust attestations
-await fides.trust('did:fides:...', TrustLevel.HIGH)
+const session = await client.sessions.request({
+  principalId: principal.did,
+  requesterAgentId: requester.did,
+  agentId: target.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
+})
 
-// Reputation scores
-const score = await fides.getReputation('did:fides:...')
+const result = await client.invoke({
+  sessionId: session.session.session_id,
+  input: { invoiceId: 'inv_123' },
+})
+
+await client.evidence.verify()
+
+console.log({ trust: trust.trust.band, policy: policy.policy.decision, result })
 ```
 
 ## agentd Client
@@ -267,41 +305,13 @@ const pending = await agentd.listPendingPropagations(25)
 const retry = await agentd.retryPropagations(25)
 ```
 
-## Discovery Clients
+## Legacy Discovery Clients
 
-```typescript
-import { AgentDiscoveryClient, DiscoveryClient } from '@fides/sdk'
-
-const identities = new DiscoveryClient({
-  baseUrl: 'http://localhost:3100',
-  apiKey: process.env.FIDES_API_KEY,
-})
-
-await identities.register({
-  did: 'did:fides:agent',
-  name: 'Payment Agent',
-  publicKey: '00'.repeat(32),
-})
-
-await identities.verifyDomain('did:fides:agent', 'agent.example.com')
-
-const agents = new AgentDiscoveryClient({
-  baseUrl: 'http://localhost:3100',
-  apiKey: process.env.FIDES_API_KEY,
-})
-
-await agents.registerAgent({
-  did: 'did:fides:agent',
-  name: 'Payment Agent',
-  description: 'Executes approved payment workflows',
-  skills: [{ id: 'payments.prepare', name: 'Prepare payment dry-runs' }],
-})
-
-// URL-less registration is supported. The discovery service stores a
-// local://agents/<did> transport hint and returns authorityGranted: false.
-
-await agents.heartbeat('did:fides:agent')
-```
+`DiscoveryClient` and `AgentDiscoveryClient` remain exported for compatibility
+with the older standalone discovery service. New FIDES v2 code should prefer
+`FidesClient.discovery.*` through local `agentd`, because that path preserves
+AgentCard verification, protocol negotiation, trust/policy explainability,
+candidate-only discovery, and evidence recording.
 
 ## Registry Client
 

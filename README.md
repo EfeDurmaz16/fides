@@ -56,27 +56,37 @@ pnpm build
 ### Basic Usage
 
 ```typescript
-import { createIdentity, classifyCapabilityRisk, createDelegationToken } from '@fides/core'
+import {
+  createAgentIdentity,
+  createPrincipalIdentity,
+  classifyCapabilityRisk,
+  createDelegationToken,
+  signDelegationToken,
+} from '@fides/core'
 import { evaluatePolicy } from '@fides/policy'
 import { evaluateGuard, createTrustContext } from '@fides/guard'
-import { createEvidenceChain, appendEvidenceEvent } from '@fides/evidence'
+import { createEvidenceChain, appendEvidenceEvent, hashEvidenceValue } from '@fides/evidence'
 import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
 
 // Create agent identities
-const alice = createIdentity('did:fides:alice', 'agent', { name: 'Alice Assistant' })
-const charlie = createIdentity('did:fides:charlie', 'principal', { name: 'Charlie User' })
+const { identity: alice } = await createAgentIdentity()
+alice.metadata = { name: 'Alice Assistant' }
+const { identity: charlie, privateKey: charliePrivateKey } = await createPrincipalIdentity({
+  type: 'individual',
+  displayName: 'Charlie User',
+})
 
 // Classify capability risk
 const risk = classifyCapabilityRisk('email:send')  // 'high'
 
 // Delegate capabilities with constraints
-const token = createDelegationToken({
+const token = await signDelegationToken(createDelegationToken({
   delegator: charlie.did,
   delegatee: alice.did,
   capabilities: ['email:send', 'calendar:create'],
   constraints: { maxActions: 10, maxSpend: '10.00', allowedContexts: ['work'] },
   expiresAt: new Date(Date.now() + 3600000).toISOString(),
-})
+}), charliePrivateKey)
 
 // Evaluate policy
 const policy = {
@@ -90,11 +100,12 @@ const result = evaluatePolicy(policy, { reputationScore: 0.9 })
 
 // Build evidence chain
 let chain = createEvidenceChain()
-chain = appendEvidenceEvent(chain, {
+const event = {
   id: 'e1', type: 'invoke', timestamp: new Date().toISOString(),
   actor: alice.did, action: 'email:send', payload: {},
   privacy: { level: 'redacted' },
-}, 'signature-hex')
+}
+chain = appendEvidenceEvent(chain, event, `local-evidence:${hashEvidenceValue(event).slice('sha256:'.length)}`)
 
 // Run guard decision
 const trust = createTrustContext({

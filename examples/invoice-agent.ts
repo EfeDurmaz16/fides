@@ -11,7 +11,7 @@
  * Run: npx tsx examples/invoice-agent.ts
  */
 
-import { createIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
+import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { classifyCapabilityRisk } from '@fides/core'
 import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
@@ -30,17 +30,15 @@ async function main() {
   console.log('📝 Step 1: Creating Identities')
   console.log('─'.repeat(40))
 
-  const invoiceAgent = createIdentity('did:fides:invoice-agent', 'agent', {
-    name: 'Invoice Processor',
-    version: '1.0.0',
-  })
-  const financeManager = createIdentity('did:fides:finance-mgr', 'principal', {
-    name: 'Finance Manager',
+  const { identity: invoiceAgent } = await createAgentIdentity()
+  invoiceAgent.metadata = { name: 'Invoice Processor', version: '1.0.0' }
+  const { identity: financeManager } = await createPrincipalIdentity({
     type: 'individual',
+    displayName: 'Finance Manager',
   })
-  const cfo = createIdentity('did:fides:cfo', 'principal', {
-    name: 'CFO',
+  const { identity: cfo } = await createPrincipalIdentity({
     type: 'individual',
+    displayName: 'CFO',
   })
 
   console.log(`  Invoice Agent:  ${invoiceAgent.did}`)
@@ -269,7 +267,7 @@ async function main() {
       action: 'invoice:create',
       target: invoiceAgent.did,
       payload: { maxSpend: '50000.00', maxActions: 100 },
-      privacy: { level: 'hash-only' as const },
+      privacy: { level: 'hash_only' as const },
     },
     {
       id: 'audit-002',

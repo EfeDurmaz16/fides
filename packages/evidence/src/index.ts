@@ -9,7 +9,7 @@ import { bytesToHex } from '@noble/hashes/utils'
 import { canonicalJson, signObject, verifyObject } from '@fides/core'
 
 export interface EvidencePrivacy {
-  level: 'public' | 'private' | 'redacted' | 'hash-only'
+  level: 'public' | 'private' | 'redacted' | 'hash_only' | 'hash-only'
   redactionKey?: string
 }
 
@@ -408,6 +408,7 @@ export function redactEvent(event: EvidenceEvent, level?: EvidencePrivacy['level
       return { ...event, payload: null }
     case 'redacted':
       return { ...event, payload: '[REDACTED]' }
+    case 'hash_only':
     case 'hash-only':
       return { ...event, payload: null, hash: event.hash }
     default:

@@ -11,7 +11,7 @@
  * Run: npx tsx examples/requester-agent.ts
  */
 
-import { createIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
+import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { classifyCapabilityRisk } from '@fides/core'
 import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
@@ -30,13 +30,11 @@ async function main() {
   console.log('📝 Step 1: Creating Identities')
   console.log('─'.repeat(40))
 
-  const requesterAgent = createIdentity('did:fides:requester', 'agent', {
-    name: 'Task Orchestrator',
-    version: '1.0.0',
-  })
-  const user = createIdentity('did:fides:user-alice', 'principal', {
-    name: 'Alice',
+  const { identity: requesterAgent } = await createAgentIdentity()
+  requesterAgent.metadata = { name: 'Task Orchestrator', version: '1.0.0' }
+  const { identity: user } = await createPrincipalIdentity({
     type: 'individual',
+    displayName: 'Alice',
   })
 
   console.log(`  Requester: ${requesterAgent.did}`)
@@ -48,9 +46,8 @@ async function main() {
   console.log('─'.repeat(40))
 
   // Calendar service provider
-  const calendarAgent = createIdentity('did:fides:calendar-svc', 'agent', {
-    name: 'Calendar Service',
-  })
+  const { identity: calendarAgent } = await createAgentIdentity()
+  calendarAgent.metadata = { name: 'Calendar Service' }
   const calendarCapabilities: CapabilityDescriptor[] = [
     {
       id: 'calendar:create',
@@ -86,9 +83,8 @@ async function main() {
   }
 
   // Payment service provider
-  const paymentAgent = createIdentity('did:fides:payment-svc', 'agent', {
-    name: 'Payment Service',
-  })
+  const { identity: paymentAgent } = await createAgentIdentity()
+  paymentAgent.metadata = { name: 'Payment Service' }
   const paymentCapabilities: CapabilityDescriptor[] = [
     {
       id: 'payment:charge',
@@ -124,9 +120,8 @@ async function main() {
   }
 
   // Invoice service provider
-  const invoiceAgent = createIdentity('did:fides:invoice-svc', 'agent', {
-    name: 'Invoice Service',
-  })
+  const { identity: invoiceAgent } = await createAgentIdentity()
+  invoiceAgent.metadata = { name: 'Invoice Service' }
   const invoiceCapabilities: CapabilityDescriptor[] = [
     {
       id: 'invoice:create',

@@ -355,7 +355,7 @@ interface EvidenceEvent {
 }
 
 interface EvidencePrivacy {
-  level: 'public' | 'private' | 'redacted' | 'hash-only'
+  level: 'public' | 'private' | 'redacted' | 'hash_only'
   redactionKey?: string
 }
 ```
@@ -378,7 +378,7 @@ The Merkle root is computed over all event hashes in the chain using SHA-256:
 | `public` | Full payload visible |
 | `private` | Payload nullified on export |
 | `redacted` | Payload replaced with `[REDACTED]` |
-| `hash-only` | Only hash verifiable, payload nullified |
+| `hash_only` | Only hash verifiable, payload nullified |
 
 ---
 

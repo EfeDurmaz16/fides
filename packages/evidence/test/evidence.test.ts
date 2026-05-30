@@ -62,7 +62,7 @@ describe('Evidence Ledger', () => {
       actor: 'did:fides:alice',
       action: 'read',
       payload: { file: 'doc1' },
-      privacy: { level: 'hash-only' },
+      privacy: { level: 'hash_only' },
     }, 'sig1')
     chain = appendEvidenceEvent(chain, {
       id: 'evt_2',
@@ -71,7 +71,7 @@ describe('Evidence Ledger', () => {
       actor: 'did:fides:policy',
       action: 'evaluate',
       payload: { decision: 'allow' },
-      privacy: { level: 'hash-only' },
+      privacy: { level: 'hash_only' },
     }, 'sig2')
     chain = appendEvidenceEvent(chain, {
       id: 'evt_3',
@@ -80,7 +80,7 @@ describe('Evidence Ledger', () => {
       actor: 'did:fides:bob',
       action: 'write',
       payload: { file: 'doc2' },
-      privacy: { level: 'hash-only' },
+      privacy: { level: 'hash_only' },
     }, 'sig3')
 
     const proof = buildEvidenceMerkleProof(chain, 'evt_2')
@@ -134,6 +134,7 @@ describe('Evidence Ledger', () => {
     expect(redactEvent(event, 'public').payload).toEqual({ secret: 'data' })
     expect(redactEvent(event, 'private').payload).toBeNull()
     expect(redactEvent(event, 'redacted').payload).toBe('[REDACTED]')
+    expect(redactEvent(event, 'hash_only').payload).toBeNull()
     expect(redactEvent(event, 'hash-only').payload).toBeNull()
   })
 

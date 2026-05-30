@@ -10,7 +10,7 @@
  * Run: npx tsx examples/calendar-agent.ts
  */
 
-import { createIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
+import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { classifyCapabilityRisk } from '@fides/core'
 import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
@@ -29,13 +29,11 @@ async function main() {
   console.log('📝 Step 1: Creating Agent Identity')
   console.log('─'.repeat(40))
 
-  const calendarAgent = createIdentity('did:fides:calendar-agent', 'agent', {
-    name: 'Calendar Assistant',
-    version: '1.0.0',
-  })
-  const user = createIdentity('did:fides:user-alice', 'principal', {
-    name: 'Alice',
+  const { identity: calendarAgent } = await createAgentIdentity()
+  calendarAgent.metadata = { name: 'Calendar Assistant', version: '1.0.0' }
+  const { identity: user } = await createPrincipalIdentity({
     type: 'individual',
+    displayName: 'Alice',
   })
 
   console.log(`  Agent:  ${calendarAgent.did}`)
@@ -233,7 +231,7 @@ async function main() {
       action: 'calendar:list',
       target: 'week-view',
       payload: { start: '2026-05-05', end: '2026-05-12' },
-      privacy: { level: 'hash-only' as const },
+      privacy: { level: 'hash_only' as const },
     },
     {
       id: 'evt-003',

@@ -11,7 +11,7 @@
  * Run: npx tsx examples/payment-agent.ts
  */
 
-import { createIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
+import { createAgentIdentity, createPrincipalIdentity, validateAgentCard, createDelegationToken, validateDelegationToken } from '@fides/core'
 import type { AgentCard, CapabilityDescriptor } from '@fides/core'
 import { classifyCapabilityRisk } from '@fides/core'
 import { evaluatePolicy, type PolicyBundle } from '@fides/policy'
@@ -30,17 +30,15 @@ async function main() {
   console.log('📝 Step 1: Creating Identities')
   console.log('─'.repeat(40))
 
-  const paymentAgent = createIdentity('did:fides:payment-agent', 'agent', {
-    name: 'Payment Processor',
-    version: '1.0.0',
-  })
-  const merchant = createIdentity('did:fides:merchant-acme', 'principal', {
-    name: 'ACME Corp',
+  const { identity: paymentAgent } = await createAgentIdentity()
+  paymentAgent.metadata = { name: 'Payment Processor', version: '1.0.0' }
+  const { identity: merchant } = await createPrincipalIdentity({
     type: 'organization',
+    displayName: 'ACME Corp',
   })
-  const customer = createIdentity('did:fides:customer-bob', 'principal', {
-    name: 'Bob Customer',
+  const { identity: customer } = await createPrincipalIdentity({
     type: 'individual',
+    displayName: 'Bob Customer',
   })
 
   console.log(`  Payment Agent: ${paymentAgent.did}`)
@@ -258,7 +256,7 @@ async function main() {
       action: 'payment:charge',
       target: paymentAgent.did,
       payload: { maxSpend: '100000.00', maxActions: 1000 },
-      privacy: { level: 'hash-only' as const },
+      privacy: { level: 'hash_only' as const },
     },
     {
       id: 'pay-002',

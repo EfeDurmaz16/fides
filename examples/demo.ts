@@ -9,7 +9,8 @@
  */
 
 import {
-  createIdentity,
+  createAgentIdentity,
+  createPrincipalIdentity,
   classifyCapabilityRisk,
   validateAgentCard,
   createDelegationToken,
@@ -28,9 +29,12 @@ async function demo() {
   console.log('='.repeat(60))
 
   console.log('\nStep 1: Creating identities')
-  const alice = createIdentity('did:fides:alice', 'agent', { name: 'Alice Assistant' })
-  const bob = createIdentity('did:fides:bob', 'agent', { name: 'Bob Scheduler' })
-  const charlie = createIdentity('did:fides:charlie', 'principal', { name: 'Charlie User' })
+  const { identity: alice } = await createAgentIdentity()
+  const { identity: bob } = await createAgentIdentity()
+  const { identity: charlie } = await createPrincipalIdentity({
+    type: 'individual',
+    displayName: 'Charlie User',
+  })
   console.log(`  Alice: ${alice.did}`)
   console.log(`  Bob: ${bob.did}`)
   console.log(`  Charlie: ${charlie.did}`)
@@ -124,7 +128,7 @@ async function demo() {
   let chain = createEvidenceChain()
   for (const event of [
     { id: 'e1', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'email:send', payload: {}, privacy: { level: 'redacted' as const } },
-    { id: 'e2', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'calendar:create', payload: {}, privacy: { level: 'hash-only' as const } },
+    { id: 'e2', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'calendar:create', payload: {}, privacy: { level: 'hash_only' as const } },
     { id: 'e3', type: 'policy', timestamp: new Date().toISOString(), actor: alice.did, action: 'evaluate', payload: {}, privacy: { level: 'public' as const } },
   ]) {
     chain = appendEvidenceEvent(chain, event, 'demo-signature')

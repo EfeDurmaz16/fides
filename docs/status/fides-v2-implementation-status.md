@@ -107,6 +107,9 @@ Last verified locally: 2026-05-30.
 - Root `RELEASE_NOTES.md` records the current v2 snapshot, production-like
   surfaces, working prototypes, local mocks, adapter-ready surfaces, verified
   gates, known limits, and release checklist.
+- Public package README quality is now enforced by `pnpm package:hygiene` so
+  publishable facade packages include installation, usage, status, and boundary
+  guidance instead of placeholder package pages.
 - OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
 - Core tests for issuer-bound `DelegationTokenV2` canonical signatures and
   payload-hash tamper detection.

@@ -6,6 +6,7 @@ import { publicPackageDirs, publicPackageJsonPaths } from './public-packages.mjs
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 
 const requiredFileEntries = new Set(['README.md', 'LICENSE'])
+const minimumReadmeBytes = 500
 const errors = []
 const configuredPublicPackageDirs = new Set(publicPackageDirs)
 const discoveredPublicPackageDirs = readdirSync(join(root, 'packages'), { withFileTypes: true })
@@ -58,6 +59,14 @@ for (const packagePath of publicPackageJsonPaths) {
 
     if (!existsSync(join(packageDir, entry))) {
       errors.push(`${label} references missing ${relative(root, join(packageDir, entry))}`)
+    }
+  }
+
+  const readmePath = join(packageDir, 'README.md')
+  if (existsSync(readmePath)) {
+    const readme = readFileSync(readmePath, 'utf8')
+    if (Buffer.byteLength(readme, 'utf8') < minimumReadmeBytes) {
+      errors.push(`${label} README.md must be at least ${minimumReadmeBytes} bytes`)
     }
   }
 }

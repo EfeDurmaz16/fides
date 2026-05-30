@@ -89,6 +89,8 @@ simulation.
 
 The CI workflow runs both `pnpm verify` and `pnpm smoke:agentd`, so the same
 local gates are enforced on pull requests before the Docker smoke job runs.
+`pnpm package:hygiene` also enforces non-placeholder README coverage for every
+publishable package boundary.
 
 ## Known Limitations
 

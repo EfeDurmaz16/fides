@@ -162,18 +162,73 @@ describe('CLI Commands', () => {
   });
 
   describe('v2 command surface', () => {
-    it('exposes registry, dht, evidence, demo, and simulate commands', async () => {
+    it('exposes registry, dht, evidence, demo, simulate, and invoke commands', async () => {
       const { createRegistryCommand } = await import('../src/commands/registry.js');
       const { createDhtCommand } = await import('../src/commands/dht.js');
       const { createEvidenceCommand } = await import('../src/commands/evidence.js');
       const { createDemoCommand } = await import('../src/commands/demo.js');
       const { createSimulateCommand } = await import('../src/commands/simulate.js');
+      const { createInvokeCommand } = await import('../src/commands/invoke.js');
 
       expect(createRegistryCommand().name()).toBe('registry');
       expect(createDhtCommand().name()).toBe('dht');
       expect(createEvidenceCommand().name()).toBe('evidence');
       expect(createDemoCommand().name()).toBe('demo');
       expect(createSimulateCommand().name()).toBe('simulate');
+      expect(createInvokeCommand().name()).toBe('invoke');
+    });
+  });
+
+  describe('invoke command', () => {
+    it('creates a session from agent and capability before invoking', async () => {
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(url), init });
+        if (String(url).endsWith('/sessions')) {
+          return new Response(JSON.stringify({
+            authorityGranted: true,
+            session: { session_id: 'sess_cli' },
+          }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(JSON.stringify({
+          authorityGranted: true,
+          result: { status: 'completed' },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }));
+
+      const { createInvokeCommand } = await import('../src/commands/invoke.js');
+      const cmd = createInvokeCommand();
+
+      await cmd.parseAsync([
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--input-json',
+        '{"invoiceId":"inv_123"}',
+        '--requested-scopes',
+        'read:invoices,write:evidence',
+        '--principal-id',
+        'did:fides:principal',
+        '--requester-agent-id',
+        'did:fides:requester',
+        '--json',
+      ], { from: 'user' });
+
+      expect(calls.map(call => call.url)).toEqual([
+        'http://localhost:7345/sessions',
+        'http://localhost:7345/invoke',
+      ]);
+      expect(JSON.parse(calls[0].init?.body as string)).toEqual({
+        agentId: 'did:fides:agent',
+        capability: 'invoice.reconcile',
+        requestedScopes: ['read:invoices', 'write:evidence'],
+        principalId: 'did:fides:principal',
+        requesterAgentId: 'did:fides:requester',
+      });
+      expect(JSON.parse(calls[1].init?.body as string)).toEqual({
+        sessionId: 'sess_cli',
+        input: { invoiceId: 'inv_123' },
+      });
     });
   });
 

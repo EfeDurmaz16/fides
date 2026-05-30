@@ -16,6 +16,7 @@ Current implementation anchors:
 - `trust`
 - `policy`
 - `session`
+- `invoke`
 - `authorize`
 - `runtime`
 - `revoke`
@@ -53,6 +54,9 @@ agentd relay register did:fides:...
 agentd relay discover --capability invoice.reconcile --supported-versions fides.v2.0
 agentd dht publish --capability invoice.reconcile --agent-id did:fides:...
 agentd dht find --capability invoice.reconcile
+agentd invoke did:fides:... --capability invoice.reconcile --input invoice.json --requested-scopes invoice:read
+agentd invoke --session-id sess_... --input invoice.json
+agentd invoke --dry-run did:fides:... --capability payments.prepare --input payment.json
 agentd evidence verify
 agentd daemon status
 ```
@@ -77,6 +81,13 @@ operations and keep authority separate from discovery. `registry search` and
 publish an external pointer from an AgentCard path/URL, or publish a signed
 local pointer without a URL by passing `--agent-id` or `--agent-card-id` with
 `--capability`.
+
+`invoke` always goes through the authority path. With `--session-id`, it calls
+`POST /invoke` directly. With `<agent-id> --capability`, it first requests a
+policy-checked `SessionGrant` from `POST /sessions`, then invokes that session.
+Input defaults to `{}` and can be supplied with `--input` or `--input-json`.
+Use `--dry-run` to request dry-run execution; discovery is never treated as
+authority by this command.
 
 `daemon status` calls `GET /health` and prints upstream checks, the authority
 store, and the root v2 local state store. When SQLite local state is enabled,

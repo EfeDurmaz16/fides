@@ -25,6 +25,7 @@ import { createDhtCommand } from './commands/dht.js';
 import { createEvidenceCommand } from './commands/evidence.js';
 import { createDemoCommand } from './commands/demo.js';
 import { createSimulateCommand } from './commands/simulate.js';
+import { createInvokeCommand } from './commands/invoke.js';
 import { inferCliName } from './cli-name.js';
 import packageJson from '../package.json' with { type: 'json' };
 
@@ -60,5 +61,6 @@ program.addCommand(createDhtCommand());
 program.addCommand(createEvidenceCommand());
 program.addCommand(createDemoCommand());
 program.addCommand(createSimulateCommand());
+program.addCommand(createInvokeCommand());
 
 program.parse();

@@ -221,6 +221,7 @@ export interface FidesDiscoveryInfrastructurePublishResponse {
   accepted: boolean
   record?: FidesProviderRecord
   pointer?: FidesProviderRecord
+  authorityGranted: false
   [key: string]: unknown
 }
 

@@ -1253,7 +1253,7 @@ describe('FidesClient', () => {
         }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
       if (target.endsWith('/registry/publish')) {
-        return new Response(JSON.stringify({ accepted: true, record }), {
+        return new Response(JSON.stringify({ accepted: true, record, authorityGranted: false }), {
           status: 201,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -1275,7 +1275,7 @@ describe('FidesClient', () => {
         }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
       if (target.endsWith('/relay/register')) {
-        return new Response(JSON.stringify({ accepted: true, record }), {
+        return new Response(JSON.stringify({ accepted: true, record, authorityGranted: false }), {
           status: 201,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -1288,7 +1288,7 @@ describe('FidesClient', () => {
         }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
       if (target.endsWith('/dht/publish')) {
-        return new Response(JSON.stringify({ accepted: true, pointer }), {
+        return new Response(JSON.stringify({ accepted: true, pointer, authorityGranted: false }), {
           status: 201,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -1335,6 +1335,7 @@ describe('FidesClient', () => {
 
     const registryPublished = await client.registry.publish({ agentCardId: 'card_1' })
     expect(registryPublished.accepted).toBe(true)
+    expect(registryPublished.authorityGranted).toBe(false)
     expect(registryPublished.record?.authorityGranted).toBe(false)
 
     const registryIndex = await client.registry.index()
@@ -1346,12 +1347,14 @@ describe('FidesClient', () => {
     expect(relayStarted.authorityGranted).toBe(false)
 
     const relayRegistered = await client.relay.register({ agentId: 'did:fides:agent' })
+    expect(relayRegistered.authorityGranted).toBe(false)
     expect(relayRegistered.record?.authorityGranted).toBe(false)
 
     const dhtStarted = await client.dht.start()
     expect(dhtStarted.mode).toBe('in_memory_simulator')
 
     const dhtPublished = await client.dht.publish({ capability: 'invoice.reconcile', agentId: 'did:fides:agent' })
+    expect(dhtPublished.authorityGranted).toBe(false)
     expect(dhtPublished.pointer?.authorityGranted).toBe(false)
 
     const dhtFind = await client.dht.find({ capability: 'invoice.reconcile' })

@@ -720,6 +720,10 @@ describe('Agentd Service Routes', () => {
           }),
         ]))
         expect(data.authorityGranted).toBe(false)
+        if (path.startsWith('/discover/')) {
+          expect(data.evidenceRefs).toEqual([expect.any(String)])
+          expect(data.evidence_refs).toEqual(data.evidenceRefs)
+        }
       }
 
       const dht = await app.request('/discover/dht', {
@@ -746,6 +750,8 @@ describe('Agentd Service Routes', () => {
         }),
       ]))
       expect(dhtData.authorityGranted).toBe(false)
+      expect(dhtData.evidenceRefs).toEqual([expect.any(String)])
+      expect(dhtData.evidence_refs).toEqual(dhtData.evidenceRefs)
     })
 
     it('returns federated registry candidates without granting authority', async () => {
@@ -788,8 +794,10 @@ describe('Agentd Service Routes', () => {
         provider: 'federation',
         mode: 'local_mock_federation',
         authorityGranted: false,
+        evidenceRefs: [expect.any(String)],
         federationPeerVerified: true,
       })
+      expect(data.evidence_refs).toEqual(data.evidenceRefs)
       expect(data.records).toEqual(expect.arrayContaining([
         expect.objectContaining({
           provider: 'federation',
@@ -2002,6 +2010,8 @@ describe('Agentd Service Routes', () => {
       ]))
       expect(discovery.rejectedPointers).toEqual([])
       expect(discovery.authorityGranted).toBe(false)
+      expect(discovery.evidenceRefs).toEqual([expect.any(String)])
+      expect(discovery.evidence_refs).toEqual(discovery.evidenceRefs)
     })
 
     it('rejects expired signed local DHT pointer records during discovery', async () => {
@@ -2058,6 +2068,8 @@ describe('Agentd Service Routes', () => {
         }),
       ]))
       expect(discovery.authorityGranted).toBe(false)
+      expect(discovery.evidenceRefs).toEqual([expect.any(String)])
+      expect(discovery.evidence_refs).toEqual(discovery.evidenceRefs)
     })
 
     it('serves local registry, relay, and well-known discovery aliases without authority', async () => {
@@ -2137,6 +2149,7 @@ describe('Agentd Service Routes', () => {
       expect(discoverRegistryData).toMatchObject({
         provider: 'registry',
         authorityGranted: false,
+        evidenceRefs: [expect.any(String)],
         rejectedRecords: [],
         records: expect.arrayContaining([
           expect.objectContaining({
@@ -2146,6 +2159,7 @@ describe('Agentd Service Routes', () => {
           }),
         ]),
       })
+      expect(discoverRegistryData.evidence_refs).toEqual(discoverRegistryData.evidenceRefs)
 
       const index = await app.request('/registry/index')
       expect(index.status).toBe(200)
@@ -2208,9 +2222,11 @@ describe('Agentd Service Routes', () => {
         body: JSON.stringify({ capability: 'calendar.schedule' }),
       })
       expect(discoverRelay.status).toBe(200)
-      expect(await discoverRelay.json()).toMatchObject({
+      const discoverRelayData = await discoverRelay.json()
+      expect(discoverRelayData).toMatchObject({
         provider: 'relay',
         authorityGranted: false,
+        evidenceRefs: [expect.any(String)],
         records: expect.arrayContaining([
           expect.objectContaining({
             agentId: identity.did,
@@ -2220,6 +2236,7 @@ describe('Agentd Service Routes', () => {
           }),
         ]),
       })
+      expect(discoverRelayData.evidence_refs).toEqual(discoverRelayData.evidenceRefs)
 
       const wellKnown = await app.request('/.well-known/fides.json')
       expect(wellKnown.status).toBe(200)

@@ -112,7 +112,13 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Local identity trust-anchor attestation or runtime attestation issued
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LocalIdentityAttestationResponse"
+                  - $ref: "#/components/schemas/LocalRuntimeAttestationResponse"
 
   /attestations/{id}:
     get:
@@ -123,7 +129,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local runtime attestation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRuntimeAttestationResponse"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -138,7 +148,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local runtime attestation verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRuntimeAttestationVerificationResponse"
 
   /agent-cards:
     post:
@@ -1619,6 +1633,149 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LocalIdentitySummary"
+
+    IdentityTrustAnchor:
+      type: object
+      required: [type, value, verified]
+      properties:
+        type:
+          type: string
+          enum:
+            - domain
+            - github
+            - email
+            - npm
+            - pypi
+            - wallet
+            - passkey
+            - organization_invitation
+            - runtime_attestation
+            - build_attestation
+            - peer_attestation
+        value:
+          type: string
+        verified:
+          type: boolean
+        verifiedAt:
+          type: string
+          format: date-time
+        evidenceRef:
+          type: string
+
+    LocalIdentityAttestation:
+      type: object
+      required: [id, schema_version, identity, trust_anchor, issued_at, mode]
+      properties:
+        id:
+          type: string
+        schema_version:
+          type: string
+          enum: [fides.identity_attestation.v1]
+        identity:
+          type: string
+        trust_anchor:
+          $ref: "#/components/schemas/IdentityTrustAnchor"
+        issued_at:
+          type: string
+          format: date-time
+        mode:
+          type: string
+          enum: [local_mock]
+
+    LocalIdentityAttestationResponse:
+      type: object
+      required: [attestation, identity, authorityGranted]
+      properties:
+        attestation:
+          $ref: "#/components/schemas/LocalIdentityAttestation"
+        identity:
+          $ref: "#/components/schemas/LocalIdentityResponse"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    RuntimeAttestationV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - attestation_id
+        - agent_id
+        - provider
+        - code_hash
+        - runtime_hash
+        - policy_hash
+        - issued_at
+        - expires_at
+        - payload_hash
+        - signature
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.runtime_attestation.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        attestation_id:
+          type: string
+        agent_id:
+          type: string
+        provider:
+          type: string
+        code_hash:
+          type: string
+        runtime_hash:
+          type: string
+        policy_hash:
+          type: string
+        enclave_measurement:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+        signature:
+          type: string
+
+    LocalRuntimeAttestationResponse:
+      type: object
+      required: [attestation]
+      properties:
+        attestation:
+          $ref: "#/components/schemas/RuntimeAttestationV2"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalRuntimeAttestationVerificationResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalRuntimeAttestationResponse"
+        - type: object
+          required: [id, valid, authorityGranted]
+          properties:
+            id:
+              type: string
+            valid:
+              type: boolean
+            error:
+              type: string
 
     IdentityResolutionResponse:
       type: object

@@ -63,7 +63,7 @@ curl http://localhost:7345/health
 ### CLI authority path
 
 The examples below assume the `agentd` binary is on your `PATH`. From the
-monorepo, use `pnpm --filter @fides/cli agentd -- <command>`.
+monorepo, use `pnpm --filter @fides/cli agentd <command>`.
 Replace placeholder DIDs with the IDs returned by `identity create`.
 
 ```bash

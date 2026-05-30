@@ -32,7 +32,7 @@ The examples below assume the `agentd` binary is on your `PATH`. From a fresh
 checkout, you can run the same commands through the workspace package:
 
 ```bash
-pnpm --filter @fides/cli agentd -- <command>
+pnpm --filter @fides/cli agentd <command>
 ```
 
 ## Start The Local Daemon

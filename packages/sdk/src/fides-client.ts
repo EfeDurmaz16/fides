@@ -574,6 +574,12 @@ export interface FidesTrustListResponse {
   [key: string]: unknown
 }
 
+export interface FidesGraphInspectionResponse {
+  agentId: string
+  authorityGranted: false
+  graphView: FidesTrustListResponse
+}
+
 export interface FidesReputationUpdateResponse {
   reputation: ReputationRecord
   authorityGranted: false
@@ -766,6 +772,14 @@ export class FidesClient {
     get: (agentId: string): Promise<FidesTrustListResponse> => (
       this.get(`/trust/${encodeURIComponent(agentId)}`) as Promise<FidesTrustListResponse>
     ),
+  }
+
+  readonly graph = {
+    inspect: async (agentId: string): Promise<FidesGraphInspectionResponse> => ({
+      agentId,
+      authorityGranted: false,
+      graphView: await this.get(`/trust/${encodeURIComponent(agentId)}`) as FidesTrustListResponse,
+    }),
   }
 
   readonly reputation = {

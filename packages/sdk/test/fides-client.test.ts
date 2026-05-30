@@ -392,6 +392,7 @@ describe('FidesClient', () => {
     await client.demo.run()
     await client.simulate.adversarial()
     await client.invoke({ sessionId: 'sess_1', input: { invoiceId: 'inv_123' } })
+    await client.graph.inspect('did:fides:agent')
 
     expect(calls.map(call => call.url)).toEqual([
       'http://localhost:4817/identities',
@@ -458,6 +459,7 @@ describe('FidesClient', () => {
       'http://localhost:4817/demo/run',
       'http://localhost:4817/simulate/adversarial',
       'http://localhost:4817/invoke',
+      'http://localhost:4817/trust/did%3Afides%3Aagent',
     ])
     expect(calls.map(call => call.init?.method)).toEqual([
       'POST',
@@ -524,6 +526,7 @@ describe('FidesClient', () => {
       'POST',
       'POST',
       'POST',
+      'GET',
     ])
     expect(JSON.parse(calls[7].init?.body as string)).toEqual({
       capability: 'invoice.reconcile',
@@ -542,6 +545,28 @@ describe('FidesClient', () => {
     expect(JSON.parse(calls[60].init?.body as string)).toEqual({
       privacy_mode: 'hash_only',
       include_metadata: false,
+    })
+  })
+
+  it('inspects the local trust graph view without granting authority', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      agentId: 'did:fides:agent',
+      trust: [{ capability: 'invoice.reconcile', score: 0.73, band: 'medium' }],
+      authorityGranted: false,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const graph = await client.graph.inspect('did:fides:agent')
+
+    expect(graph.agentId).toBe('did:fides:agent')
+    expect(graph.authorityGranted).toBe(false)
+    expect(graph.graphView.trust[0]?.capability).toBe('invoice.reconcile')
+    expect(fetch).toHaveBeenCalledWith('http://localhost:7345/trust/did%3Afides%3Aagent', {
+      method: 'GET',
+      headers: new Headers(),
     })
   })
 

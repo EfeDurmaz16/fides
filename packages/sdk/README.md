@@ -55,6 +55,8 @@ const trust = await client.trust.evaluate({
   agentId: target.did,
   capability: 'invoice.reconcile',
 })
+const graph = await client.graph.inspect(target.did)
+console.log(graph.authorityGranted) // false
 
 const policy = await client.policy.evaluate({
   principalId: principal.did,
@@ -119,6 +121,7 @@ const trust = await client.trust.evaluate({
   agentId: identity.identity.did,
   capability: 'invoice.reconcile',
 })
+const graph = await client.graph.inspect(identity.identity.did)
 const reputation = await client.reputation.update({
   agentId: identity.identity.did,
   capability: 'invoice.reconcile',

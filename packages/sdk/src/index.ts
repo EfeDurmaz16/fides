@@ -149,6 +149,7 @@ export {
   type FidesDhtPublishRequest,
   type FidesInvocationRequest,
   type FidesInvocationResponse,
+  type FidesGraphInspectionResponse,
   type FidesPolicyDecision,
   type FidesPolicyDecisionAction,
   type FidesPolicyEvaluationResponse,

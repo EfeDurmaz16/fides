@@ -58,6 +58,10 @@ const trust = await client.trust.evaluate({
   agentId: identity.identity.did,
   capability: 'invoice.reconcile',
 })
+const graph = await client.graph.inspect(identity.identity.did)
+if (graph.authorityGranted !== false) {
+  throw new Error('Graph inspection must not grant authority')
+}
 const reputation = await client.reputation.update({
   agentId: identity.identity.did,
   capability: 'invoice.reconcile',
@@ -208,9 +212,12 @@ successful provider responses remain available. The aggregate response keeps
 `authorityGranted: false`; provider orchestration is still discovery, not
 authority. Trust and reputation APIs return capability-scoped signals, and policy
 evaluation explains the decision but still requires session grant issuance
-before invocation. Delegation helpers create local DelegationToken intents; the
-daemon signs them when the delegator identity is locally managed, but they still
-do not grant invocation authority without policy and a scoped SessionGrant.
+before invocation. `client.graph.inspect(agentId)` reads the local trust graph
+view through `GET /trust/:agentId` and wraps it as an inspection-only response
+with `authorityGranted: false`; it is not an authorization surface. Delegation
+helpers create local DelegationToken intents; the daemon signs them when the
+delegator identity is locally managed, but they still do not grant invocation
+authority without policy and a scoped SessionGrant.
 Session request and invocation helpers use the same root
 local daemon API. Session responses preserve `authorityMode` and
 `allowedActions`; full sessions return `authorityGranted: true`, while

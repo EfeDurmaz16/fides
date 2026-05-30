@@ -59,6 +59,7 @@ agentd invoke did:fides:... --capability invoice.reconcile --input invoice.json 
 agentd invoke --session-id sess_... --input invoice.json
 agentd invoke --dry-run did:fides:... --capability payments.prepare --input payment.json
 agentd evidence verify
+agentd evidence export --privacy-mode hash_only --no-metadata
 agentd daemon status
 ```
 
@@ -89,6 +90,11 @@ policy-checked `SessionGrant` from `POST /sessions`, then invokes that session.
 Input defaults to `{}` and can be supplied with `--input` or `--input-json`.
 Use `--dry-run` to request dry-run execution; discovery is never treated as
 authority by this command.
+
+`evidence export` defaults to the daemon's privacy-aware export behavior. Use
+`--privacy-mode public`, `private`, `redacted`, or `hash_only` to request a
+specific export view, and `--no-metadata` when exported evidence should omit
+metadata fields. `hash-only` is accepted as a CLI alias for `hash_only`.
 
 `daemon status` calls `GET /health` and prints upstream checks, the authority
 store, and the root v2 local state store. When SQLite local state is enabled,

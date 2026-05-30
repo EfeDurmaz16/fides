@@ -1362,5 +1362,38 @@ describe('CLI Commands', () => {
         })
       );
     });
+
+    it('evidence export should pass privacy and metadata options to agentd', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        format: 'json',
+        valid: true,
+        events: [],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createEvidenceCommand } = await import('../src/commands/evidence.js');
+      const cmd = createEvidenceCommand();
+
+      await cmd.parseAsync([
+        'export',
+        '--privacy-mode',
+        'hash-only',
+        '--no-metadata',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/evidence/export',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            privacy_mode: 'hash_only',
+            include_metadata: false,
+          }),
+        })
+      );
+    });
   });
 });

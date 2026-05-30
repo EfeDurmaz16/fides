@@ -2,6 +2,7 @@ import {
   cardSupportsCapability,
   createDiscoveryCandidate,
   hashCapability,
+  verifySignedAgentCardIdentity,
   verifyDHTPointerRecord,
   type AgentCard,
   type DHTPointerRecord,
@@ -91,6 +92,9 @@ export class DHTDiscoveryProvider implements DiscoveryProvider {
   }
 
   async register(card: SignedAgentCard): Promise<void> {
+    if (!await verifySignedAgentCardIdentity(card)) {
+      throw new Error('DHT registration requires an identity-bound signed AgentCard')
+    }
     const did = card.payload.id
     const agentCard = card.payload as AgentCard
 

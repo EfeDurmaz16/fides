@@ -43,4 +43,8 @@ mismatches, and locally revoked agent IDs are filtered out. A returned DHT
 candidate therefore only means "this signed pointer resolved to this AgentCard";
 it still does not grant trust or authority.
 
+`DHTDiscoveryProvider.register` accepts only identity-bound signed AgentCards.
+The AgentCard proof verification method must match the advertised
+`identity.did`, otherwise the card is not stored in the DHT simulator.
+
 The in-memory DHT simulator is local mock infrastructure. A libp2p/Kademlia adapter should implement the same provider contract later.

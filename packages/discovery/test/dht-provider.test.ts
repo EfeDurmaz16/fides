@@ -88,6 +88,17 @@ describe('DHTDiscoveryProvider', () => {
     expect(candidates).toEqual([])
   })
 
+  it('rejects AgentCards not signed by the advertised agent identity', async () => {
+    const { card } = await fixture()
+    const attacker = await createAgentIdentity()
+    const signedCard = await signAgentCard(card, attacker.privateKey, attacker.identity.did)
+    const provider = new DHTDiscoveryProvider()
+
+    await expect(provider.register(signedCard)).rejects.toThrow(
+      'DHT registration requires an identity-bound signed AgentCard',
+    )
+  })
+
   it('rejects expired DHT pointers', async () => {
     const { signedCard, pointer } = await fixture()
     const provider = new DHTDiscoveryProvider()

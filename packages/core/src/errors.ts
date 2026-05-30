@@ -32,6 +32,12 @@ export const FIDES_ERROR_CODES = {
     retryable: false,
     message: 'Identity DID is not bound to the advertised public key',
   },
+  IDENTITY_NOT_FOUND: {
+    category: 'identity',
+    severity: 'error',
+    retryable: false,
+    message: 'Identity was not found',
+  },
   AGENT_CARD_INVALID_SIGNATURE: {
     category: 'agent_card',
     severity: 'error',
@@ -49,6 +55,18 @@ export const FIDES_ERROR_CODES = {
     severity: 'critical',
     retryable: false,
     message: 'AgentCard is revoked',
+  },
+  AGENT_CARD_NOT_FOUND: {
+    category: 'agent_card',
+    severity: 'error',
+    retryable: false,
+    message: 'AgentCard was not found',
+  },
+  AGENT_NOT_REGISTERED: {
+    category: 'discovery',
+    severity: 'error',
+    retryable: false,
+    message: 'Agent is not registered',
   },
   CAPABILITY_NOT_FOUND: {
     category: 'capability',
@@ -115,6 +133,12 @@ export const FIDES_ERROR_CODES = {
     severity: 'error',
     retryable: true,
     message: 'Runtime attestation is expired',
+  },
+  ATTESTATION_NOT_FOUND: {
+    category: 'attestation',
+    severity: 'error',
+    retryable: false,
+    message: 'Attestation was not found',
   },
   DHT_POINTER_TAMPERED: {
     category: 'dht',

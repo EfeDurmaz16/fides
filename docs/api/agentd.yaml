@@ -1688,9 +1688,12 @@ components:
           enum:
             - IDENTITY_INVALID_SIGNATURE
             - IDENTITY_KEY_UNBOUND
+            - IDENTITY_NOT_FOUND
             - AGENT_CARD_INVALID_SIGNATURE
             - AGENT_CARD_EXPIRED
             - AGENT_CARD_REVOKED
+            - AGENT_CARD_NOT_FOUND
+            - AGENT_NOT_REGISTERED
             - CAPABILITY_NOT_FOUND
             - CAPABILITY_SCHEMA_INVALID
             - TRUST_BELOW_THRESHOLD
@@ -1702,6 +1705,7 @@ components:
             - SESSION_SCOPE_INVALID
             - ATTESTATION_INVALID
             - ATTESTATION_EXPIRED
+            - ATTESTATION_NOT_FOUND
             - DHT_POINTER_TAMPERED
             - DHT_POINTER_EXPIRED
             - EVIDENCE_CHAIN_BROKEN

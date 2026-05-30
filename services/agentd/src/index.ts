@@ -862,7 +862,7 @@ app.post('/identities', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const type = body.type
   if (type !== 'agent' && type !== 'publisher' && type !== 'principal') {
-    return c.json({ error: 'type must be agent, publisher, or principal' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'type must be agent, publisher, or principal', { field: 'type' }), 400)
   }
 
   const record = await createLocalIdentity(type, {
@@ -883,7 +883,7 @@ app.get('/identities/:id', (c) => {
   const id = c.req.param('id')
   const record = localIdentities.get(id)
   if (!record) {
-    return c.json({ error: 'identity not found', id }, 404)
+    return c.json(localError('IDENTITY_NOT_FOUND', 'identity not found', { id }), 404)
   }
   return c.json(safeIdentityRecord(record))
 })
@@ -899,12 +899,12 @@ app.post('/agent-cards', async (c) => {
         ? body.identity.did
         : undefined
   if (!did) {
-    return c.json({ error: 'identity.did or agentId is required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'identity.did or agentId is required', { fields: ['identity.did', 'agentId'] }), 400)
   }
 
   const localIdentity = localIdentities.get(did)
   if (!localIdentity || localIdentity.type !== 'agent') {
-    return c.json({ error: 'agent identity not found in local daemon', did }, 404)
+    return c.json(localError('IDENTITY_NOT_FOUND', 'agent identity not found in local daemon', { did }), 404)
   }
 
   const capabilities = Array.isArray(body.capabilities)
@@ -931,7 +931,7 @@ app.post('/agent-cards', async (c) => {
       : undefined
   const publisher = publisherId ? localIdentities.get(publisherId) : undefined
   if (publisherId && (!publisher || publisher.type !== 'publisher')) {
-    return c.json({ error: 'publisher identity not found in local daemon', publisherId }, 404)
+    return c.json(localError('IDENTITY_NOT_FOUND', 'publisher identity not found in local daemon', { publisherId }), 404)
   }
   const runtimeAttestationIds: string[] = Array.isArray(body.runtimeAttestationIds)
     ? body.runtimeAttestationIds.map(String)
@@ -942,7 +942,7 @@ app.post('/agent-cards', async (c) => {
     .map((id: string) => localRuntimeAttestations.get(id))
     .filter((attestation: RuntimeAttestation | undefined): attestation is RuntimeAttestation => Boolean(attestation))
   if (runtimeAttestationIds.length !== runtimeAttestations.length) {
-    return c.json({ error: 'one or more runtime attestations were not found', runtimeAttestationIds }, 404)
+    return c.json(localError('ATTESTATION_NOT_FOUND', 'one or more runtime attestations were not found', { runtimeAttestationIds }), 404)
   }
 
   const card = normalizeAgentCard({
@@ -987,11 +987,11 @@ app.post('/agent-cards/:id/sign', async (c) => {
   const id = c.req.param('id')
   const card = localAgentCards.get(id)
   if (!card) {
-    return c.json({ error: 'AgentCard not found', id }, 404)
+    return c.json(localError('AGENT_CARD_NOT_FOUND', 'AgentCard not found', { id }), 404)
   }
   const identity = localIdentities.get(card.identity.did)
   if (!identity) {
-    return c.json({ error: 'AgentCard identity key not found', did: card.identity.did }, 404)
+    return c.json(localError('IDENTITY_NOT_FOUND', 'AgentCard identity key not found', { did: card.identity.did }), 404)
   }
 
   const signed = await signAgentCard(card, Buffer.from(identity.privateKeyHex, 'hex'), card.identity.did)
@@ -1015,7 +1015,10 @@ app.post('/agent-cards/:id/verify', async (c) => {
 
   const card = localAgentCards.get(id)
   if (!card) {
-    return c.json({ valid: false, error: 'AgentCard not found', id }, 404)
+    return c.json({
+      valid: false,
+      ...localError('AGENT_CARD_NOT_FOUND', 'AgentCard not found', { id }),
+    }, 404)
   }
   const validation = validateAgentCard(card)
   return c.json({ valid: validation.valid, signed: false, validation })
@@ -1025,7 +1028,7 @@ app.get('/agent-cards/:id', (c) => {
   const id = c.req.param('id')
   const card = localAgentCards.get(id)
   if (!card) {
-    return c.json({ error: 'AgentCard not found', id }, 404)
+    return c.json(localError('AGENT_CARD_NOT_FOUND', 'AgentCard not found', { id }), 404)
   }
   return c.json({
     card,
@@ -1046,19 +1049,19 @@ app.post('/agents/register', async (c) => {
           ? body.agent_id
           : undefined
   if (!cardId) {
-    return c.json({ error: 'agentCardId is required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'agentCardId is required', { field: 'agentCardId' }), 400)
   }
 
   const card = localAgentCards.get(cardId)
   if (!card) {
-    return c.json({ error: 'AgentCard not found', cardId }, 404)
+    return c.json(localError('AGENT_CARD_NOT_FOUND', 'AgentCard not found', { cardId }), 404)
   }
   const signedCard = localSignedAgentCards.get(card.id)
   if (!signedCard) {
-    return c.json({ error: 'Identity-bound signed AgentCard is required before registration', cardId }, 400)
+    return c.json(localError('AGENT_CARD_INVALID_SIGNATURE', 'Identity-bound signed AgentCard is required before registration', { cardId }), 400)
   }
   if (!await verifySignedAgentCardIdentity(signedCard)) {
-    return c.json({ error: 'Signed AgentCard is not bound to the advertised agent identity', cardId }, 400)
+    return c.json(localError('IDENTITY_KEY_UNBOUND', 'Signed AgentCard is not bound to the advertised agent identity', { cardId }), 400)
   }
 
   const record: LocalRegisteredAgent = {
@@ -1087,7 +1090,7 @@ app.get('/agents/:id', (c) => {
   const id = c.req.param('id')
   const record = localAgents.get(id)
   if (!record) {
-    return c.json({ error: 'agent not registered', id }, 404)
+    return c.json(localError('AGENT_NOT_REGISTERED', 'agent not registered', { id }), 404)
   }
 
   return c.json({
@@ -1203,7 +1206,7 @@ function dhtPointerRecordOnly(pointer: Record<string, unknown>): DHTPointerRecor
 async function localDiscoveryResult(body: Record<string, unknown>, provider = 'local') {
   const capability = typeof body.capability === 'string' ? body.capability : undefined
   if (!capability) {
-    return { error: 'capability is required' as const }
+    return { error: localError('REQUEST_INVALID', 'capability is required', { field: 'capability' }) }
   }
 
   const rejectedCandidates: Array<Record<string, unknown>> = []
@@ -1341,21 +1344,21 @@ function appendDiscoveryEvidence<T extends Record<string, unknown>>(
 app.post('/discover', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const result = await localDiscoveryResult(body)
-  if ('error' in result) return c.json({ error: result.error }, 400)
+  if ('error' in result) return c.json(result.error, 400)
   return c.json(appendDiscoveryEvidence('local', body, result))
 })
 
 app.post('/discover/local', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const result = await localDiscoveryResult(body, 'local')
-  if ('error' in result) return c.json({ error: result.error }, 400)
+  if ('error' in result) return c.json(result.error, 400)
   return c.json(appendDiscoveryEvidence('local', body, result))
 })
 
 app.post('/discover/well-known', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const result = await localDiscoveryResult(body, 'well-known')
-  if ('error' in result) return c.json({ error: result.error }, 400)
+  if ('error' in result) return c.json(result.error, 400)
   return c.json(appendDiscoveryEvidence('well-known', body, result))
 })
 
@@ -1375,12 +1378,12 @@ app.post('/trust/evaluate', async (c) => {
       : undefined
 
   if (!agentId || !capability) {
-    return c.json({ error: 'agentId and capability are required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'agentId and capability are required', { fields: ['agentId', 'capability'] }), 400)
   }
 
   const trust = computeLocalTrustResult(agentId, capability)
   if (!trust) {
-    return c.json({ error: 'registered agent capability not found', agentId, capability }, 404)
+    return c.json(localError('CAPABILITY_NOT_FOUND', 'registered agent capability not found', { agentId, capability }), 404)
   }
 
   return c.json({
@@ -1410,12 +1413,12 @@ app.post('/reputation/update', async (c) => {
       : undefined
 
   if (!agentId || !capability) {
-    return c.json({ error: 'agentId and capability are required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'agentId and capability are required', { fields: ['agentId', 'capability'] }), 400)
   }
 
   const found = findLocalCapability(agentId, capability)
   if (!found) {
-    return c.json({ error: 'registered agent capability not found', agentId, capability }, 404)
+    return c.json(localError('CAPABILITY_NOT_FOUND', 'registered agent capability not found', { agentId, capability }), 404)
   }
 
   const reputation = computeCapabilityReputation({
@@ -1456,17 +1459,17 @@ app.post('/policy/evaluate', async (c) => {
       : undefined
 
   if (!targetAgentId || !capabilityId) {
-    return c.json({ error: 'agentId and capability are required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'agentId and capability are required', { fields: ['agentId', 'capability'] }), 400)
   }
 
   const found = findLocalCapability(targetAgentId, capabilityId)
   if (!found) {
-    return c.json({ error: 'registered agent capability not found', agentId: targetAgentId, capability: capabilityId }, 404)
+    return c.json(localError('CAPABILITY_NOT_FOUND', 'registered agent capability not found', { agentId: targetAgentId, capability: capabilityId }), 404)
   }
 
   const trustResult = computeLocalTrustResult(targetAgentId, capabilityId)
   if (!trustResult) {
-    return c.json({ error: 'trust result unavailable', agentId: targetAgentId, capability: capabilityId }, 404)
+    return c.json(localError('TRUST_BELOW_THRESHOLD', 'trust result unavailable', { agentId: targetAgentId, capability: capabilityId }), 404)
   }
 
   const policy = evaluateFidesPolicy({
@@ -1514,7 +1517,7 @@ app.post('/delegations', async (c) => {
       : []
 
   if (!delegator || !delegatee || capabilities.length === 0) {
-    return c.json({ error: 'delegator, delegatee, and capabilities are required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'delegator, delegatee, and capabilities are required', { fields: ['delegator', 'delegatee', 'capabilities'] }), 400)
   }
 
   const expiresAt = typeof body.expiresAt === 'string'
@@ -2417,7 +2420,7 @@ app.post('/attestations', async (c) => {
       ? body.agent_id
       : undefined
   if (!agentId) {
-    return c.json({ error: 'agentId is required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'agentId is required', { field: 'agentId' }), 400)
   }
 
   const codeHash = typeof body.codeHash === 'string'
@@ -2436,7 +2439,7 @@ app.post('/attestations', async (c) => {
       ? body.policy_hash
       : undefined
   if (!codeHash || !runtimeHash || !policyHash) {
-    return c.json({ error: 'codeHash, runtimeHash, and policyHash are required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'codeHash, runtimeHash, and policyHash are required', { fields: ['codeHash', 'runtimeHash', 'policyHash'] }), 400)
   }
 
   const attestation = await runtimeAttestationProvider.issue({
@@ -2479,7 +2482,7 @@ app.get('/attestations/:id', (c) => {
   const id = c.req.param('id')
   const attestation = localRuntimeAttestations.get(id)
   if (!attestation) {
-    return c.json({ error: 'attestation not found', id }, 404)
+    return c.json(localError('ATTESTATION_NOT_FOUND', 'attestation not found', { id }), 404)
   }
   return c.json({ attestation })
 })
@@ -2496,7 +2499,12 @@ app.post('/attestations/:id/verify', async (c) => {
       privacy_mode: 'hash_only',
       metadata: { attestation_id: id },
     })
-    return c.json({ id, valid: false, error: 'attestation not found', evidenceRefs: [failed.event_id], authorityGranted: false }, 404)
+    return c.json({
+      id,
+      valid: false,
+      ...localError('ATTESTATION_NOT_FOUND', 'attestation not found', { id }),
+      evidenceRefs: [failed.event_id],
+    }, 404)
   }
   const valid = await runtimeAttestationProvider.verify(attestation)
   const event = appendRootEvidence({
@@ -2529,9 +2537,8 @@ function issueLocalIdentityAttestation(body: Record<string, unknown>): { body: R
     return {
       status: 404,
       body: {
-        error: 'identity not found',
+        ...localError('IDENTITY_NOT_FOUND', 'identity not found', { identity: identityId }),
         identity: identityId,
-        authorityGranted: false,
       },
     }
   }
@@ -2541,9 +2548,8 @@ function issueLocalIdentityAttestation(body: Record<string, unknown>): { body: R
     return {
       status: 400,
       body: {
-        error: 'attestation type and value are required',
+        ...localError('REQUEST_INVALID', 'attestation type and value are required', { fields: ['type', 'value'] }),
         identity: identityId,
-        authorityGranted: false,
       },
     }
   }
@@ -2654,7 +2660,7 @@ app.post('/dht/start', (c) => {
 app.post('/dht/publish', async (c) => {
   const body = await c.req.json()
   if (!body.capability) {
-    return c.json({ error: 'capability is required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'capability is required', { field: 'capability' }), 400)
   }
 
   const capability = String(body.capability)
@@ -2678,7 +2684,7 @@ app.post('/dht/publish', async (c) => {
 
   if (card && identity) {
     if (!card.capabilities.some(candidate => candidate.id === capability)) {
-      return c.json({ error: 'AgentCard does not advertise capability', capability, cardId: card.id }, 400)
+      return c.json(localError('CAPABILITY_NOT_FOUND', 'AgentCard does not advertise capability', { capability, cardId: card.id }), 400)
     }
     const publisherId = typeof body.publisherId === 'string'
       ? body.publisherId
@@ -2687,7 +2693,7 @@ app.post('/dht/publish', async (c) => {
         : card.publisher?.did ?? card.identity.did
     const publisherIdentity = localIdentities.get(publisherId)
     if (!publisherIdentity) {
-      return c.json({ error: 'DHT pointer publisher key not found', publisherId }, 404)
+      return c.json(localError('IDENTITY_NOT_FOUND', 'DHT pointer publisher key not found', { publisherId }), 404)
     }
 
     const pointer = await signDHTPointerRecord(createDHTPointerRecord({
@@ -2943,11 +2949,11 @@ app.post('/registry/publish', async (c) => {
       ? body.cardId
       : undefined
   if (!cardId) {
-    return c.json({ error: 'agentCardId is required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'agentCardId is required', { field: 'agentCardId' }), 400)
   }
   const record = await localRegistryRecordFor(cardId, body.mode === 'private' ? 'private' : 'public')
   if (!record) {
-    return c.json({ error: 'registered local AgentCard not found', cardId }, 404)
+    return c.json(localError('AGENT_CARD_NOT_FOUND', 'registered local AgentCard not found', { cardId }), 404)
   }
   localRegistryRecords.set(String(record.id), record)
   return c.json({ accepted: true, record, authorityGranted: false }, 201)
@@ -3071,14 +3077,14 @@ app.post('/relay/register', async (c) => {
       ? body.agent_id
       : undefined
   if (!agentId) {
-    return c.json({ error: 'agentId is required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'agentId is required', { field: 'agentId' }), 400)
   }
   const record = await localRelayRecordFor(
     agentId,
     Array.isArray(body.endpointHints) ? body.endpointHints : []
   )
   if (!record) {
-    return c.json({ error: 'registered local agent not found', agentId }, 404)
+    return c.json(localError('AGENT_NOT_REGISTERED', 'registered local agent not found', { agentId }), 404)
   }
   localRelayRecords.set(agentId, record)
   return c.json({ accepted: true, record, authorityGranted: false }, 201)
@@ -3147,12 +3153,12 @@ app.get('/.well-known/agents/*', (c) => {
   const rawId = c.req.path.slice('/.well-known/agents/'.length).replace(/\.json$/, '')
   const id = decodeURIComponent(rawId)
   if (!id) {
-    return c.json({ error: 'agent id is required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'agent id is required', { field: 'agentId' }), 400)
   }
   const registered = localAgents.get(id)
   const card = registered ? localAgentCards.get(registered.cardId) : undefined
   if (!registered || !card) {
-    return c.json({ error: 'registered local agent not found', agentId: id }, 404)
+    return c.json(localError('AGENT_NOT_REGISTERED', 'registered local agent not found', { agentId: id }), 404)
   }
   return c.json({
     agentId: id,

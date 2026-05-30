@@ -18,8 +18,9 @@ Last verified locally: 2026-05-30.
   - `pnpm agentd <command>`
   - `pnpm agentd:dev`
 - Canonical signing model for signed protocol objects.
-- Typed error envelopes on session, invocation, approval, kill switch,
-  revocation, incident, and evidence failure paths.
+- Typed error envelopes on root v2 identity, AgentCard, discovery, trust,
+  reputation, policy, session, invocation, approval, kill switch, revocation,
+  incident, attestation, and evidence failure paths.
 - Signed AgentCards and capability descriptors.
 - Candidate-only discovery across local, well-known, registry, relay, DHT, and
   federation-ready surfaces.

@@ -594,8 +594,13 @@ describe('Agentd Service Routes', () => {
 
       expect(registered.status).toBe(400)
       expect(await registered.json()).toMatchObject({
-        error: 'Identity-bound signed AgentCard is required before registration',
-        cardId: identity.did,
+        authorityGranted: false,
+        error: {
+          code: 'AGENT_CARD_INVALID_SIGNATURE',
+          category: 'agent_card',
+          message: 'Identity-bound signed AgentCard is required before registration',
+          details: { cardId: identity.did },
+        },
       })
     })
 
@@ -1440,6 +1445,153 @@ describe('Agentd Service Routes', () => {
           retryable: false,
         },
         sessionId: 'sess_missing',
+      })
+
+      const invalidIdentity = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'service' }),
+      })
+      expect(invalidIdentity.status).toBe(400)
+      await expect(invalidIdentity.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+          details: { field: 'type' },
+        },
+      })
+
+      const missingIdentity = await app.request('/identities/did:fides:missing')
+      expect(missingIdentity.status).toBe(404)
+      await expect(missingIdentity.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'IDENTITY_NOT_FOUND',
+          category: 'identity',
+          details: { id: 'did:fides:missing' },
+        },
+      })
+
+      const invalidAgentCard = await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      expect(invalidAgentCard.status).toBe(400)
+      await expect(invalidAgentCard.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+          details: { fields: ['identity.did', 'agentId'] },
+        },
+      })
+
+      const missingAgentCard = await app.request('/agent-cards/card_missing')
+      expect(missingAgentCard.status).toBe(404)
+      await expect(missingAgentCard.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'AGENT_CARD_NOT_FOUND',
+          category: 'agent_card',
+          details: { id: 'card_missing' },
+        },
+      })
+
+      const missingAgent = await app.request('/agents/did:fides:agent:missing')
+      expect(missingAgent.status).toBe(404)
+      await expect(missingAgent.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'AGENT_NOT_REGISTERED',
+          category: 'discovery',
+        },
+      })
+
+      const invalidDiscovery = await app.request('/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      expect(invalidDiscovery.status).toBe(400)
+      await expect(invalidDiscovery.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+          details: { field: 'capability' },
+        },
+      })
+
+      const invalidTrust = await app.request('/trust/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: 'did:fides:agent' }),
+      })
+      expect(invalidTrust.status).toBe(400)
+      await expect(invalidTrust.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+        },
+      })
+
+      const invalidAttestation = await app.request('/attestations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      expect(invalidAttestation.status).toBe(400)
+      await expect(invalidAttestation.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+          details: { field: 'agentId' },
+        },
+      })
+
+      const missingAttestation = await app.request('/attestations/att_missing')
+      expect(missingAttestation.status).toBe(404)
+      await expect(missingAttestation.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'ATTESTATION_NOT_FOUND',
+          category: 'attestation',
+          details: { id: 'att_missing' },
+        },
+      })
+
+      const invalidRegistryPublish = await app.request('/registry/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      expect(invalidRegistryPublish.status).toBe(400)
+      await expect(invalidRegistryPublish.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+          details: { field: 'agentCardId' },
+        },
+      })
+
+      const invalidRelayRegister = await app.request('/relay/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      expect(invalidRelayRegister.status).toBe(400)
+      await expect(invalidRelayRegister.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+          details: { field: 'agentId' },
+        },
       })
 
       const missingApprovalCapability = await app.request('/approvals', {

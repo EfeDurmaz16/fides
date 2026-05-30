@@ -62,6 +62,22 @@ describe('error envelopes', () => {
       category: 'request',
       retryable: false,
     })
+    expect(createErrorEnvelope('IDENTITY_NOT_FOUND')).toMatchObject({
+      code: 'IDENTITY_NOT_FOUND',
+      category: 'identity',
+    })
+    expect(createErrorEnvelope('AGENT_CARD_NOT_FOUND')).toMatchObject({
+      code: 'AGENT_CARD_NOT_FOUND',
+      category: 'agent_card',
+    })
+    expect(createErrorEnvelope('AGENT_NOT_REGISTERED')).toMatchObject({
+      code: 'AGENT_NOT_REGISTERED',
+      category: 'discovery',
+    })
+    expect(createErrorEnvelope('ATTESTATION_NOT_FOUND')).toMatchObject({
+      code: 'ATTESTATION_NOT_FOUND',
+      category: 'attestation',
+    })
     expect(createErrorEnvelope('APPROVAL_NOT_FOUND')).toMatchObject({
       code: 'APPROVAL_NOT_FOUND',
       category: 'approval',

@@ -465,6 +465,17 @@ function safeRegisteredAgent(record: LocalRegisteredAgent): Record<string, unkno
   }
 }
 
+function sessionAuthorityFor(policy: FidesPolicyDecision): {
+  authorityGranted: boolean
+  authorityMode: 'full' | 'dry_run_only'
+  allowedActions: Array<'execute' | 'dry_run'>
+} {
+  if (policy.decision === 'allow') {
+    return { authorityGranted: true, authorityMode: 'full', allowedActions: ['execute', 'dry_run'] }
+  }
+  return { authorityGranted: false, authorityMode: 'dry_run_only', allowedActions: ['dry_run'] }
+}
+
 function localCapabilityKey(agentId: string, capability: string): string {
   return `${agentId}::${capability}`
 }
@@ -1573,13 +1584,18 @@ app.post('/sessions', async (c) => {
     ? body.expiresAt
     : new Date(Date.now() + 60 * 60 * 1000).toISOString()
   const authority = await getLocalAuthorityIdentity()
+  const sessionAuthority = sessionAuthorityFor(policy)
+  const requestedConstraints = typeof body.constraints === 'object' && body.constraints !== null ? body.constraints as Record<string, unknown> : {}
+  const sessionConstraints = policy.decision === 'dry_run_only'
+    ? { ...requestedConstraints, dryRunOnly: true }
+    : requestedConstraints
   const session = createSessionGrantV2({
     requesterAgentId,
     targetAgentId,
     principalId,
     capability: capabilityId,
     scopes: requestedScopes,
-    constraints: typeof body.constraints === 'object' && body.constraints !== null ? body.constraints as Record<string, unknown> : {},
+    constraints: sessionConstraints,
     policyHash: hashProtocolPayload(policy),
     trustResultHash: hashProtocolPayload(trust),
     audience: Array.isArray(body.audience) ? body.audience.map(String) : [targetAgentId],
@@ -1600,13 +1616,15 @@ app.post('/sessions', async (c) => {
     privacy_mode: 'hash_only',
     metadata: {
       session_id: session.session_id,
-      authority_granted: policy.decision === 'allow',
+      authority_granted: sessionAuthority.authorityGranted,
+      authority_mode: sessionAuthority.authorityMode,
+      allowed_actions: sessionAuthority.allowedActions,
     },
   })
 
   return c.json({
     authorized: true,
-    authorityGranted: policy.decision === 'allow',
+    ...sessionAuthority,
     session,
     signedSession,
     signedSessionVerified: await verifySignedSessionGrantV2Issuer(signedSession),
@@ -1715,11 +1733,15 @@ app.post('/invoke', async (c) => {
     }), authorityGranted: false }, 400)
   }
 
+  const effectiveDryRun = typeof body.dryRun === 'boolean'
+    ? body.dryRun
+    : record.session.constraints?.dryRunOnly === true
+
   let request = createInvocationRequest({
     issuer: record.session.requester_agent_id,
     sessionGrant: record.session,
     input: body.input ?? {},
-    dryRun: typeof body.dryRun === 'boolean' ? body.dryRun : false,
+    dryRun: effectiveDryRun,
     inputSchema: found.capability.inputSchema,
     outputSchema: found.capability.outputSchema,
   })
@@ -1737,13 +1759,12 @@ app.post('/invoke', async (c) => {
     signedRequestVerified = await verifySignedInvocationRequestIssuer(candidateSignedRequest)
     const signedPayload = candidateSignedRequest.payload
     const expectedInputHash = hashProtocolPayload(body.input ?? {})
-    const expectedDryRun = typeof body.dryRun === 'boolean' ? body.dryRun : false
     const grantValidation = validateInvocationRequestAgainstSessionGrant({
       request: signedPayload,
       sessionGrant: record.session,
     })
     const payloadMatchesInput = signedPayload.input_hash === expectedInputHash &&
-      signedPayload.dry_run === expectedDryRun
+      signedPayload.dry_run === effectiveDryRun
 
     if (!signedRequestVerified || !grantValidation.valid || !payloadMatchesInput) {
       return c.json({ error: createErrorEnvelope('IDENTITY_INVALID_SIGNATURE', {

@@ -434,7 +434,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Policy-checked local SessionGrant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalSessionResponse"
 
   /sessions/{id}:
     get:
@@ -445,7 +449,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Stored local SessionGrant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalSessionResponse"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -1656,6 +1664,41 @@ components:
             signedCard:
               type: object
               nullable: true
+
+    LocalSessionResponse:
+      type: object
+      required: [session, authorityGranted]
+      properties:
+        authorized:
+          type: boolean
+          description: Present on POST /sessions responses.
+        authorityGranted:
+          type: boolean
+          description: True only when the session permits execution, false for dry-run-only sessions.
+        authorityMode:
+          type: string
+          enum: [full, dry_run_only]
+        allowedActions:
+          type: array
+          items:
+            type: string
+            enum: [execute, dry_run]
+        session:
+          type: object
+          description: FIDES v2 SessionGrant. Dry-run-only sessions include constraints.dryRunOnly=true.
+        signedSession:
+          type: object
+          description: Canonically signed SessionGrant.
+        signedSessionVerified:
+          type: boolean
+        policy:
+          type: object
+        trust:
+          type: object
+        evidenceRefs:
+          type: array
+          items:
+            type: string
 
     DiscoveryResponse:
       type: object

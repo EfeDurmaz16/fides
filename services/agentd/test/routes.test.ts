@@ -947,6 +947,8 @@ describe('Agentd Service Routes', () => {
       expect(session.status).toBe(201)
       const sessionData = await session.json()
       expect(sessionData.authorityGranted).toBe(true)
+      expect(sessionData.authorityMode).toBe('full')
+      expect(sessionData.allowedActions).toEqual(['execute', 'dry_run'])
       expect(sessionData.session.capability).toBe('invoice.reconcile')
       expect(sessionData.signedSession.payload).toEqual(sessionData.session)
       expect(sessionData.signedSession.proof.proofPurpose).toBe('delegation')

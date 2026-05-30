@@ -138,6 +138,9 @@ const session = await client.sessions.request({
   capability: 'invoice.reconcile',
   requestedScopes: ['invoice:read'],
 })
+if (session.authorityMode === 'dry_run_only' && session.allowedActions?.includes('dry_run')) {
+  // Dry-run-only sessions are simulation authority, not execution authority.
+}
 const invocation = await client.invoke({
   sessionId: session.session.session_id,
   input: { invoiceId: 'inv_123' },
@@ -165,10 +168,14 @@ preserve `verified: false`, `authorityGranted: false`, and machine-readable
 or permission. Trust and reputation are capability-scoped signals; policy
 decisions still require scoped session grants before invocation.
 Root session and invocation helpers use the local daemon preflight path and are
-currently in-memory. Approval and kill switch helpers expose local authority
-controls, with active kill switch rules overriding normal policy. Revocation
-and incident helpers expose local governance records that feed root session
-policy decisions. Runtime attestation helpers issue and verify local MockTEE
+currently in-memory. Session responses preserve `authorityMode` and
+`allowedActions`; full sessions return `authorityGranted: true`, while
+dry-run-only sessions return `authorityGranted: false`, include
+`allowedActions: ["dry_run"]`, and carry
+`session.constraints.dryRunOnly: true`. Approval and kill switch helpers expose
+local authority controls, with active kill switch rules overriding normal
+policy. Revocation and incident helpers expose local governance records that
+feed root session policy decisions. Runtime attestation helpers issue and verify local MockTEE
 attestations that can satisfy high-risk session policy when passed as an
 `attestationId`. Evidence helpers append hash-only events by default, inspect
 individual events, verify the root hash chain, and export the current local

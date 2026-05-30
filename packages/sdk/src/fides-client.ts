@@ -8,6 +8,7 @@ import {
   type InvocationRequest,
   type InvocationResult,
   type SessionGrantV2,
+  type SignedSessionGrantV2,
   type SignedInvocationRequest,
   type SignedInvocationResult,
 } from '@fides/core'
@@ -209,6 +210,29 @@ export interface FidesPolicyEvaluationResponse {
   explanation: string
 }
 
+export interface FidesSessionResponse {
+  authorized: boolean
+  authorityGranted: boolean
+  authorityMode?: 'full' | 'dry_run_only'
+  allowedActions?: Array<'execute' | 'dry_run'>
+  session: SessionGrantV2
+  signedSession?: SignedSessionGrantV2
+  signedSessionVerified?: boolean
+  policy?: FidesPolicyDecision
+  trust?: TrustResult
+  evidenceRefs?: string[]
+  [key: string]: unknown
+}
+
+export interface FidesSessionVerifyResponse {
+  valid: boolean
+  signatureValid: boolean
+  notExpired: boolean
+  session?: SessionGrantV2
+  authorityGranted?: boolean
+  [key: string]: unknown
+}
+
 export class FidesClientError extends Error {
   readonly name = 'FidesClientError'
 
@@ -316,9 +340,15 @@ export class FidesClient {
   }
 
   readonly sessions = {
-    request: (body: Record<string, unknown>) => this.post('/sessions', body),
-    verify: (sessionId: string) => this.post(`/sessions/${encodeURIComponent(sessionId)}/verify`, {}),
-    get: (sessionId: string) => this.get(`/sessions/${encodeURIComponent(sessionId)}`),
+    request: (body: Record<string, unknown>): Promise<FidesSessionResponse> => (
+      this.post('/sessions', body) as Promise<FidesSessionResponse>
+    ),
+    verify: (sessionId: string): Promise<FidesSessionVerifyResponse> => (
+      this.post(`/sessions/${encodeURIComponent(sessionId)}/verify`, {}) as Promise<FidesSessionVerifyResponse>
+    ),
+    get: (sessionId: string): Promise<FidesSessionResponse> => (
+      this.get(`/sessions/${encodeURIComponent(sessionId)}`) as Promise<FidesSessionResponse>
+    ),
   }
 
   readonly registry = {

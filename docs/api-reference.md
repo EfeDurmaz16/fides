@@ -223,15 +223,19 @@ tokens remain unsigned drafts until signed elsewhere. A delegation must still be
 converted into a policy-checked SessionGrant before invocation. `POST /sessions` issues a local
 `SessionGrant` only after policy allows or limits the action to dry-run, signs
 it with the daemon's local authority DID, and returns `signedSession` plus
-`signedSessionVerified`. `POST /sessions/:id/verify` and `POST /invoke` require
-the stored signed grant to verify against the grant issuer before treating the
-session as usable. `POST /invoke` verifies the session, verifies an optional caller-supplied
+`signedSessionVerified`. Session responses include `authorityMode` and
+`allowedActions`; a `dry_run_only` session sets `authorityGranted: false`,
+forces `session.constraints.dryRunOnly: true`, and can only be used for dry-run
+invocation. `POST /sessions/:id/verify` and `POST /invoke` require the stored
+signed grant to verify against the grant issuer before treating the session as
+usable. `POST /invoke` verifies the session, verifies an optional caller-supplied
 canonical `signedRequest`, runs the policy preflight path, validates the
 capability context, validates input/output schemas for the advertised
 capability, and returns an `InvocationResult` plus a canonical `signedResult`
 proof from the target agent identity when the target is locally managed. A
 supplied signed request must verify and match the session, input hash, and
-dry-run mode before execution. Invocation state and result evidence are
+dry-run mode before execution; core validation rejects non-dry-run requests
+against dry-run-only SessionGrants. Invocation state and result evidence are
 persisted in the local daemon snapshot when SQLite state is enabled; normalized
 durable invocation tables remain follow-up hardening work. Session issuance and
 invocation failures return a stable `ErrorEnvelope` on the `error` field for

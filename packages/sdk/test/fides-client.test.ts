@@ -349,6 +349,56 @@ describe('FidesClient', () => {
     }
   })
 
+  it('types root session responses with authority mode and allowed actions', async () => {
+    const session: SessionGrantV2 = {
+      schema_version: 'fides.session_grant.v1',
+      id: 'sess_1',
+      session_id: 'sess_1',
+      issuer: 'did:fides:agentd',
+      subject: 'did:fides:agent',
+      requester_agent_id: 'did:fides:requester',
+      target_agent_id: 'did:fides:agent',
+      principal_id: 'did:fides:principal',
+      capability: 'payments.prepare',
+      scopes: ['payments:prepare'],
+      constraints: { dryRunOnly: true },
+      policy_hash: 'sha256:policy',
+      trust_result_hash: 'sha256:trust',
+      issued_at: '2026-05-30T00:00:00.000Z',
+      expires_at: '2026-05-30T01:00:00.000Z',
+      audience: ['did:fides:agent'],
+      nonce: 'nonce_1',
+      payload_hash: 'sha256:payload',
+    }
+
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      return new Response(JSON.stringify({
+        authorized: true,
+        authorityGranted: false,
+        authorityMode: 'dry_run_only',
+        allowedActions: ['dry_run'],
+        session,
+        signedSessionVerified: true,
+        evidenceRefs: ['evt_session'],
+      }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const result = await client.sessions.request({
+      agentId: 'did:fides:agent',
+      capability: 'payments.prepare',
+    })
+
+    expect(result.authorized).toBe(true)
+    expect(result.authorityGranted).toBe(false)
+    expect(result.authorityMode).toBe('dry_run_only')
+    expect(result.allowedActions).toEqual(['dry_run'])
+    expect(result.session.constraints).toEqual({ dryRunOnly: true })
+  })
+
   it('adds identity trust-anchor attestations through promise helpers', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {

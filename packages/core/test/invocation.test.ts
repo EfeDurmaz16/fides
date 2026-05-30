@@ -130,6 +130,47 @@ describe('invocation protocol objects', () => {
     ]))
   })
 
+  it('enforces dry-run-only SessionGrant constraints', async () => {
+    const issuer = await createIdentityKeyPair()
+    const grant = createSessionGrantV2({
+      requesterAgentId: 'did:fides:requester',
+      targetAgentId: 'did:fides:target',
+      principalId: 'did:fides:principal',
+      capability: 'payments.prepare',
+      scopes: ['payments:prepare'],
+      constraints: { dryRunOnly: true },
+      policyHash: 'sha256:policy',
+      trustResultHash: 'sha256:trust',
+      issuer: issuer.did,
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    })
+
+    const executeRequest = createInvocationRequest({
+      issuer: 'did:fides:requester',
+      sessionGrant: grant,
+      input: { amount: 100 },
+      dryRun: false,
+    })
+    expect(validateInvocationRequestAgainstSessionGrant({
+      request: executeRequest,
+      sessionGrant: grant,
+    })).toEqual({
+      valid: false,
+      errors: ['InvocationRequest.dry_run must be true for dry-run-only SessionGrant'],
+    })
+
+    const dryRunRequest = createInvocationRequest({
+      issuer: 'did:fides:requester',
+      sessionGrant: grant,
+      input: { amount: 100 },
+      dryRun: true,
+    })
+    expect(validateInvocationRequestAgainstSessionGrant({
+      request: dryRunRequest,
+      sessionGrant: grant,
+    })).toEqual({ valid: true, errors: [] })
+  })
+
   it('creates and verifies signed invocation results', async () => {
     const target = await createIdentityKeyPair()
     const result = createInvocationResult({

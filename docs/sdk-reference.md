@@ -161,6 +161,9 @@ const session = await client.sessions.request({
   capability: 'invoice.reconcile',
   requestedScopes: ['invoice:read'],
 })
+if (session.authorityMode === 'dry_run_only' && session.allowedActions?.includes('dry_run')) {
+  // Dry-run-only sessions are simulation authority, not execution authority.
+}
 const invocation = await client.invoke({
   sessionId: session.session.session_id,
   input: { invoiceId: 'inv_123' },
@@ -197,8 +200,13 @@ before invocation. Delegation helpers create local DelegationToken intents; the
 daemon signs them when the delegator identity is locally managed, but they still
 do not grant invocation authority without policy and a scoped SessionGrant.
 Session request and invocation helpers use the same root
-local daemon API. Approval and kill switch helpers expose local authority
-controls, with kill switch rules overriding normal policy while active.
+local daemon API. Session responses preserve `authorityMode` and
+`allowedActions`; full sessions return `authorityGranted: true`, while
+dry-run-only sessions return `authorityGranted: false`, include
+`allowedActions: ["dry_run"]`, and carry
+`session.constraints.dryRunOnly: true`. Approval and kill switch helpers expose
+local authority controls, with kill switch rules overriding normal policy while
+active.
 Revocation and incident helpers expose local governance records that feed root
 session policy decisions. Attestation helpers include local mock identity trust
 anchors for GitHub, email, domain, package registry, and wallet claims, plus

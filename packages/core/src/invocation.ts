@@ -221,6 +221,10 @@ export function validateInvocationRequestAgainstSessionGrant(
     }
   }
 
+  if (sessionGrant.constraints?.dryRunOnly === true && request.dry_run !== true) {
+    errors.push('InvocationRequest.dry_run must be true for dry-run-only SessionGrant')
+  }
+
   return { valid: errors.length === 0, errors }
 }
 

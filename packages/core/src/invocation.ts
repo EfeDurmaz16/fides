@@ -312,6 +312,10 @@ export function verifySignedInvocationRequest(signed: SignedInvocationRequest): 
   return verifyObject(signed)
 }
 
+export async function verifySignedInvocationRequestIssuer(signed: SignedInvocationRequest): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedInvocationRequest(signed)
+}
+
 export function signInvocationResult(
   result: InvocationResult,
   privateKey: Uint8Array,
@@ -322,4 +326,8 @@ export function signInvocationResult(
 
 export function verifySignedInvocationResult(signed: SignedInvocationResult): Promise<boolean> {
   return verifyObject(signed)
+}
+
+export async function verifySignedInvocationResultIssuer(signed: SignedInvocationResult): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedInvocationResult(signed)
 }

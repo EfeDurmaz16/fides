@@ -60,7 +60,7 @@ import {
   signDHTPointerRecord,
   signRegistryIndexRecord,
   signRegistryPeerRecord,
-  verifySignedInvocationRequest,
+  verifySignedInvocationRequestIssuer,
   signInvocationResult,
   validateAgentCard,
   verifyDHTPointerRecord,
@@ -1633,7 +1633,7 @@ app.post('/invoke', async (c) => {
 
     const candidateSignedRequest = body.signedRequest
     signedRequest = candidateSignedRequest
-    signedRequestVerified = await verifySignedInvocationRequest(candidateSignedRequest)
+    signedRequestVerified = await verifySignedInvocationRequestIssuer(candidateSignedRequest)
     const signedPayload = candidateSignedRequest.payload
     const expectedInputHash = hashProtocolPayload(body.input ?? {})
     const expectedDryRun = typeof body.dryRun === 'boolean' ? body.dryRun : false

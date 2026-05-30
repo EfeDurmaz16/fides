@@ -1060,6 +1060,72 @@ describe('Agentd Service Routes', () => {
       )
     })
 
+    it('rejects signed invocation requests whose proof is not bound to the issuer', async () => {
+      const requester = await createIdentityKeyPair()
+      const attacker = await createIdentityKeyPair()
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Issuer Bound Invoice Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{
+            id: 'invoice.issuer_bound_reconcile',
+            riskLevel: 'medium',
+            requiredScopes: ['invoice:read'],
+          }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const session = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: requester.did,
+          agentId: identity.did,
+          capability: 'invoice.issuer_bound_reconcile',
+          requestedScopes: ['invoice:read'],
+        }),
+      })
+      expect(session.status).toBe(201)
+      const sessionData = await session.json()
+      const input = { invoiceId: 'inv_issuer_bound' }
+      const request = createInvocationRequest({
+        issuer: requester.did,
+        sessionGrant: sessionData.session,
+        input,
+      })
+      const signedRequest = await signInvocationRequest(request, attacker.privateKey, attacker.did)
+
+      const rejected = await app.request('/invoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: sessionData.session.session_id,
+          input,
+          signedRequest,
+        }),
+      })
+      expect(rejected.status).toBe(401)
+      const rejectedData = await rejected.json()
+      expect(rejectedData.authorityGranted).toBe(false)
+      expect(rejectedData.error.code).toBe('IDENTITY_INVALID_SIGNATURE')
+      expect(rejectedData.error.details.signedRequestVerified).toBe(false)
+      expect(rejectedData.error.details.grantValidation.valid).toBe(true)
+    })
+
     it('rejects invocation inputs and outputs that do not satisfy capability schemas', async () => {
       const identityResponse = await app.request('/identities', {
         method: 'POST',

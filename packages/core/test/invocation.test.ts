@@ -9,7 +9,9 @@ import {
   signInvocationResult,
   validateInvocationRequestAgainstSessionGrant,
   validateJsonSchemaValue,
+  verifySignedInvocationRequestIssuer,
   verifySignedInvocationRequest,
+  verifySignedInvocationResultIssuer,
   verifySignedInvocationResult,
 } from '../src/invocation.js'
 
@@ -49,6 +51,23 @@ describe('invocation protocol objects', () => {
 
     const signed = await signInvocationRequest(request, requester.privateKey, requester.did)
     expect(await verifySignedInvocationRequest(signed)).toBe(true)
+    expect(await verifySignedInvocationRequestIssuer(signed)).toBe(true)
+  })
+
+  it('rejects invocation request proofs whose verification method is not the issuer', async () => {
+    const requester = await createIdentityKeyPair()
+    const attacker = await createIdentityKeyPair()
+    const grant = await signedGrant()
+    const request = createInvocationRequest({
+      issuer: requester.did,
+      sessionGrant: grant.payload,
+      input: { invoiceId: 'inv_123' },
+    })
+
+    const signed = await signInvocationRequest(request, attacker.privateKey, attacker.did)
+
+    expect(await verifySignedInvocationRequest(signed)).toBe(true)
+    expect(await verifySignedInvocationRequestIssuer(signed)).toBe(false)
   })
 
   it('preflights denied and approval-required policy decisions without execution', async () => {
@@ -127,6 +146,7 @@ describe('invocation protocol objects', () => {
     expect(result.payload_hash).toMatch(/^sha256:/)
     const signed = await signInvocationResult(result, target.privateKey, target.did)
     expect(await verifySignedInvocationResult(signed)).toBe(true)
+    expect(await verifySignedInvocationResultIssuer(signed)).toBe(true)
   })
 
   it('validates invocation inputs and outputs against a JSON Schema subset', () => {

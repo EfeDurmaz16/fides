@@ -55,7 +55,9 @@ AgentCard or DHT/registry pointer.
 The root `/invoke` daemon endpoint applies this validator to caller-supplied
 signed invocation requests before policy preflight. The signed request must also
 match the submitted input hash and dry-run mode, so a valid requester signature
-cannot widen scopes or replay authority over different invocation input.
+cannot widen scopes or replay authority over different invocation input. The
+proof verification method must match the request `issuer`; a signature from a
+different DID over an otherwise valid requester payload is rejected.
 
 The daemon validates the request body against the capability input schema before
 execution and validates generated outputs against the capability output schema

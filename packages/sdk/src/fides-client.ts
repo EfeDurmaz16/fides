@@ -67,6 +67,31 @@ export interface FidesDiscoveryResponse {
   [key: string]: unknown
 }
 
+export interface FidesLocalAgentRegistration {
+  registered?: true
+  agentId: string
+  cardId: string
+  registeredAt: string
+  signed: boolean
+  verified: boolean
+  authority: 'candidate_only'
+  capabilities: string[]
+  authorityGranted: false
+  reasons: string[]
+  reason?: string
+  [key: string]: unknown
+}
+
+export interface FidesLocalAgentListResponse {
+  agents: FidesLocalAgentRegistration[]
+  authorityGranted: false
+}
+
+export interface FidesLocalAgentDetailResponse extends FidesLocalAgentRegistration {
+  card: Record<string, unknown> | null
+  signedCard: Record<string, unknown> | null
+}
+
 export interface FidesRegistryPublishRequest {
   agentCardId: string
   mode?: 'public' | 'private'
@@ -214,9 +239,13 @@ export class FidesClient {
   }
 
   readonly agents = {
-    register: (card: Record<string, unknown>) => this.post('/agents/register', card),
-    list: () => this.get('/agents'),
-    inspect: (agentId: string) => this.get(`/agents/${encodeURIComponent(agentId)}`),
+    register: (card: Record<string, unknown>): Promise<FidesLocalAgentRegistration> => (
+      this.post('/agents/register', card) as Promise<FidesLocalAgentRegistration>
+    ),
+    list: (): Promise<FidesLocalAgentListResponse> => this.get('/agents') as Promise<FidesLocalAgentListResponse>,
+    inspect: (agentId: string): Promise<FidesLocalAgentDetailResponse> => (
+      this.get(`/agents/${encodeURIComponent(agentId)}`) as Promise<FidesLocalAgentDetailResponse>
+    ),
   }
 
   readonly discovery = {

@@ -512,13 +512,53 @@ describe('FidesClient', () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       calls.push({ url: String(url), init })
       if (String(url).endsWith('/agents/register')) {
-        return new Response(JSON.stringify({ registered: true, agentId: 'did:fides:agent', authorityGranted: false }), { status: 201 })
+        return new Response(JSON.stringify({
+          registered: true,
+          agentId: 'did:fides:agent',
+          cardId: 'card_1',
+          registeredAt: '2026-05-30T00:00:00.000Z',
+          signed: true,
+          verified: true,
+          authority: 'candidate_only',
+          capabilities: ['invoice.reconcile'],
+          authorityGranted: false,
+          reasons: [
+            'identity_bound_signed_agent_card_verified',
+            'local_registration_candidate_only',
+            'discovery_does_not_grant_authority',
+          ],
+        }), { status: 201 })
       }
       if (String(url).endsWith('/agents/did%3Afides%3Aagent')) {
-        return new Response(JSON.stringify({ agentId: 'did:fides:agent', card: {} }), { status: 200 })
+        return new Response(JSON.stringify({
+          agentId: 'did:fides:agent',
+          cardId: 'card_1',
+          registeredAt: '2026-05-30T00:00:00.000Z',
+          signed: true,
+          verified: true,
+          authority: 'candidate_only',
+          capabilities: ['invoice.reconcile'],
+          authorityGranted: false,
+          reasons: ['local_registration_candidate_only', 'discovery_does_not_grant_authority'],
+          card: {},
+          signedCard: {},
+        }), { status: 200 })
       }
       if (String(url).endsWith('/agents')) {
-        return new Response(JSON.stringify({ agents: [{ agentId: 'did:fides:agent' }] }), { status: 200 })
+        return new Response(JSON.stringify({
+          agents: [{
+            agentId: 'did:fides:agent',
+            cardId: 'card_1',
+            registeredAt: '2026-05-30T00:00:00.000Z',
+            signed: true,
+            verified: true,
+            authority: 'candidate_only',
+            capabilities: ['invoice.reconcile'],
+            authorityGranted: false,
+            reasons: ['identity_bound_signed_agent_card_verified', 'discovery_does_not_grant_authority'],
+          }],
+          authorityGranted: false,
+        }), { status: 200 })
       }
       return new Response(JSON.stringify({
         authorityGranted: false,
@@ -534,10 +574,24 @@ describe('FidesClient', () => {
 
     await expect(client.agents.register({ agentCardId: 'did:fides:agent' })).resolves.toMatchObject({
       registered: true,
+      authority: 'candidate_only',
+      verified: true,
+      authorityGranted: false,
+      reasons: expect.arrayContaining(['discovery_does_not_grant_authority']),
+    })
+    await expect(client.agents.list()).resolves.toMatchObject({
+      agents: [{
+        agentId: 'did:fides:agent',
+        authority: 'candidate_only',
+        authorityGranted: false,
+      }],
       authorityGranted: false,
     })
-    await expect(client.agents.list()).resolves.toMatchObject({ agents: [{ agentId: 'did:fides:agent' }] })
-    await expect(client.agents.inspect('did:fides:agent')).resolves.toMatchObject({ agentId: 'did:fides:agent' })
+    await expect(client.agents.inspect('did:fides:agent')).resolves.toMatchObject({
+      agentId: 'did:fides:agent',
+      authority: 'candidate_only',
+      authorityGranted: false,
+    })
     await expect(client.discovery.find({ capability: 'invoice.reconcile' })).resolves.toMatchObject({
       authorityGranted: false,
       candidates: [{

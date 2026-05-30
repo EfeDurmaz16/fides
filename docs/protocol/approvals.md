@@ -11,8 +11,14 @@ Current implementation anchor:
 - `ApprovalRequest`
 - `ApprovalDecision`
 
-Approval requests include requester, target, principal, capability, scopes, risk level, policy decision hash, and evidence refs.
+Approval requests include `id`, `issuer`, `subject`, requester, target,
+principal, capability, scopes, risk level, policy decision hash, evidence refs,
+timestamps, and canonical `payload_hash`. The request issuer is the requester
+agent and the subject is the target agent.
 
+Approval decisions include `id`, `issuer`, `subject`, approver, decision,
+constraints, evidence refs, timestamps, and canonical `payload_hash`. The
+decision issuer is the approver and the subject is the approval request id.
 Approval decisions are signed by the approver and may include constraints.
 
 ## Evidence

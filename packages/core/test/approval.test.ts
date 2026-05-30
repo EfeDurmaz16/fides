@@ -28,6 +28,9 @@ describe('approval and kill switch primitives', () => {
     })
 
     const signedRequest = await signApprovalRequest(request, approver.privateKey, approver.did)
+    expect(request.issuer).toBe('did:fides:requester')
+    expect(request.subject).toBe('did:fides:target')
+    expect(request.payload_hash).toMatch(/^sha256:/)
     expect(await verifySignedApprovalRequest(signedRequest)).toBe(true)
 
     const decision = createApprovalDecision({
@@ -39,6 +42,9 @@ describe('approval and kill switch primitives', () => {
     })
 
     const signedDecision = await signApprovalDecision(decision, approver.privateKey, approver.did)
+    expect(decision.issuer).toBe(approver.did)
+    expect(decision.subject).toBe(request.id)
+    expect(decision.payload_hash).toMatch(/^sha256:/)
     expect(await verifySignedApprovalDecision(signedDecision)).toBe(true)
   })
 

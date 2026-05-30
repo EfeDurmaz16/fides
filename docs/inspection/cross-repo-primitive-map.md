@@ -44,8 +44,8 @@ This map reflects the current local inspection of:
 | PolicyBundle | `packages/policy` | guard chain | not core | policy package | policy DSL/pipeline | FIDES + OAPS | extend existing |
 | Policy engine | `packages/policy`, `services/policy-engine`, guard | guards/blast radius | not core | fail-closed evaluator | pre-execution pipeline | FIDES + Sardis | extend existing |
 | Intent | not first-class | not found | not found | foundation intent | AP2/payment intents | OAPS | create new |
-| ApprovalRequest | missing first-class core | `approval.rs` | HITL spec | core approvals | approval flow | OAPS + Sardis | create new |
-| ApprovalDecision | missing first-class core | `approval.rs` | HITL spec | core approvals | approval flow | OAPS + Sardis | create new |
+| ApprovalRequest | `packages/core/src/approval.ts` | `approval.rs` | HITL spec | core approvals | approval flow | FIDES + OAPS + Sardis | extend existing |
+| ApprovalDecision | `packages/core/src/approval.ts` | `approval.rs` | HITL spec | core approvals | approval flow | FIDES + OAPS + Sardis | extend existing |
 | EvidenceEvent | `packages/evidence` | commits/events/audit | webhook events | hash-linked evidence | evidence export/hash-chain | FIDES + OAPS + AGIT | extend existing |
 | Hash chain | `packages/evidence` | strong lineage/hash prior art | not generic | evidence package | policy hash-chain | FIDES + AGIT | extend existing |
 | Merkle proof | Merkle root + inclusion proof helpers | Merkle/state diff concepts | not found | not found | ledger anchor | FIDES + AGIT | extend existing |

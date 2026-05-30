@@ -7,6 +7,8 @@ export type KillSwitchTargetType = 'agent' | 'publisher' | 'capability' | 'sessi
 export interface ApprovalRequest {
   schema_version: 'fides.approval.request.v1'
   id: string
+  issuer: string
+  subject: string
   requester_agent_id: string
   target_agent_id: string
   principal_id: string
@@ -24,6 +26,8 @@ export interface ApprovalRequest {
 export interface ApprovalDecision {
   schema_version: 'fides.approval.decision.v1'
   id: string
+  issuer: string
+  subject: string
   approval_request_id: string
   approver_id: string
   decision: ApprovalDecisionValue
@@ -95,6 +99,8 @@ export function createApprovalRequest(input: CreateApprovalRequestInput): Approv
   return withPayloadHash({
     schema_version: 'fides.approval.request.v1' as const,
     id: crypto.randomUUID(),
+    issuer: input.requesterAgentId,
+    subject: input.targetAgentId,
     requester_agent_id: input.requesterAgentId,
     target_agent_id: input.targetAgentId,
     principal_id: input.principalId,
@@ -113,6 +119,8 @@ export function createApprovalDecision(input: CreateApprovalDecisionInput): Appr
   return withPayloadHash({
     schema_version: 'fides.approval.decision.v1' as const,
     id: crypto.randomUUID(),
+    issuer: input.approverId,
+    subject: input.approvalRequestId,
     approval_request_id: input.approvalRequestId,
     approver_id: input.approverId,
     decision: input.decision,

@@ -1134,19 +1134,35 @@ function dhtPointerRecordOnly(pointer: Record<string, unknown>): DHTPointerRecor
   }
 }
 
-function localDiscoveryResult(body: Record<string, unknown>, provider = 'local') {
+async function localDiscoveryResult(body: Record<string, unknown>, provider = 'local') {
   const capability = typeof body.capability === 'string' ? body.capability : undefined
   if (!capability) {
     return { error: 'capability is required' as const }
   }
 
   const rejectedCandidates: Array<Record<string, unknown>> = []
-  const candidates = Array.from(localAgents.values()).flatMap((record) => {
+  const candidateSets = await Promise.all(Array.from(localAgents.values()).map(async (record) => {
     const card = localAgentCards.get(record.cardId)
     if (!card) return []
 
     const descriptor = card.capabilities.find(candidate => candidate.id === capability)
     if (!descriptor) return []
+
+    const signedCard = localSignedAgentCards.get(record.cardId)
+    if (!signedCard || !await verifySignedAgentCardIdentity(signedCard)) {
+      rejectedCandidates.push({
+        agentId: record.agentId,
+        cardId: record.cardId,
+        capability,
+        authorityGranted: false,
+        reasons: [
+          'candidate_matched_capability',
+          'agent_card_identity_bound_signature_required',
+          'discovery_does_not_grant_authority',
+        ],
+      })
+      return []
+    }
 
     const versionNegotiation = discoveryVersionNegotiation(body, card)
     if (!versionNegotiation.compatible) {
@@ -1169,7 +1185,7 @@ function localDiscoveryResult(body: Record<string, unknown>, provider = 'local')
       agentId: record.agentId,
       cardId: record.cardId,
       capability,
-      signed: localSignedAgentCards.has(record.cardId),
+      signed: true,
       authorityGranted: false,
       versionNegotiation,
       resolution: {
@@ -1188,7 +1204,8 @@ function localDiscoveryResult(body: Record<string, unknown>, provider = 'local')
         'url_not_required_for_local_discovery',
       ],
     }]
-  })
+  }))
+  const candidates = candidateSets.flat()
 
   return {
     query: body,
@@ -1203,21 +1220,21 @@ function localDiscoveryResult(body: Record<string, unknown>, provider = 'local')
 
 app.post('/discover', async (c) => {
   const body = await c.req.json().catch(() => ({}))
-  const result = localDiscoveryResult(body)
+  const result = await localDiscoveryResult(body)
   if ('error' in result) return c.json({ error: result.error }, 400)
   return c.json(result)
 })
 
 app.post('/discover/local', async (c) => {
   const body = await c.req.json().catch(() => ({}))
-  const result = localDiscoveryResult(body, 'local')
+  const result = await localDiscoveryResult(body, 'local')
   if ('error' in result) return c.json({ error: result.error }, 400)
   return c.json(result)
 })
 
 app.post('/discover/well-known', async (c) => {
   const body = await c.req.json().catch(() => ({}))
-  const result = localDiscoveryResult(body, 'well-known')
+  const result = await localDiscoveryResult(body, 'well-known')
   if ('error' in result) return c.json({ error: result.error }, 400)
   return c.json(result)
 })
@@ -3137,7 +3154,7 @@ async function runLocalFullDemo() {
   }
   localDhtPointers.push(dhtPointer)
 
-  const calendarDiscovery = localDiscoveryResult({ capability: calendarCapability.id }, 'local')
+  const calendarDiscovery = await localDiscoveryResult({ capability: calendarCapability.id }, 'local')
   const invoiceRegistryRecords = Array.from(localRegistryRecords.values()).filter((record) => (
     (record.capabilities as string[] | undefined)?.includes(invoiceCapability.id)
   ))

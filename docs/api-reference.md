@@ -161,7 +161,9 @@ AgentCard as a discovery candidate. Unsigned cards and cards signed by a DID
 other than the advertised agent identity are rejected before they can enter
 local discovery. `GET /agents` and `GET /agents/:id` expose local registration
 state and the associated AgentCard. `POST /discover` and `POST /discover/local`
-search registered local agents by capability. `POST /discover/well-known`,
+search registered local agents by capability and re-check the identity-bound
+AgentCard proof before returning a candidate, so restored or tampered local
+state is rejected at resolution time as well. `POST /discover/well-known`,
 `POST /discover/registry`, `POST /discover/relay`, `POST /discover/dht`, and
 `POST /discover/federation` expose provider-specific discovery aliases over
 the daemon's local state.

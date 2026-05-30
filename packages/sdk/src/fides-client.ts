@@ -1,5 +1,7 @@
 import {
   type AgentIdentity,
+  type ApprovalDecision,
+  type ApprovalRequest,
   type CapabilityControl,
   type PrincipalIdentity,
   type PublisherIdentity,
@@ -259,6 +261,30 @@ export interface FidesPolicyEvaluationResponse {
   explanation: string
 }
 
+export interface FidesApprovalRequestResponse {
+  approval: ApprovalRequest
+  evidenceRefs: string[]
+  authorityGranted: false
+  explanation?: string
+  [key: string]: unknown
+}
+
+export interface FidesApprovalDecisionResponse {
+  approval: ApprovalRequest
+  decision: ApprovalDecision
+  evidenceRefs: string[]
+  authorityGranted: false
+  explanation?: string
+  [key: string]: unknown
+}
+
+export interface FidesApprovalListResponse {
+  approvals: ApprovalRequest[]
+  decisions: ApprovalDecision[]
+  authorityGranted: false
+  [key: string]: unknown
+}
+
 export interface FidesSessionResponse {
   authorized: boolean
   authorityGranted: boolean
@@ -364,10 +390,16 @@ export class FidesClient {
   }
 
   readonly approvals = {
-    create: (body: Record<string, unknown>) => this.post('/approvals', body),
-    list: () => this.get('/approvals'),
-    approve: (approvalId: string, body: Record<string, unknown> = {}) => this.post(`/approvals/${encodeURIComponent(approvalId)}/approve`, body),
-    deny: (approvalId: string, body: Record<string, unknown> = {}) => this.post(`/approvals/${encodeURIComponent(approvalId)}/deny`, body),
+    create: (body: Record<string, unknown>): Promise<FidesApprovalRequestResponse> => (
+      this.post('/approvals', body) as Promise<FidesApprovalRequestResponse>
+    ),
+    list: (): Promise<FidesApprovalListResponse> => this.get('/approvals') as Promise<FidesApprovalListResponse>,
+    approve: (approvalId: string, body: Record<string, unknown> = {}): Promise<FidesApprovalDecisionResponse> => (
+      this.post(`/approvals/${encodeURIComponent(approvalId)}/approve`, body) as Promise<FidesApprovalDecisionResponse>
+    ),
+    deny: (approvalId: string, body: Record<string, unknown> = {}): Promise<FidesApprovalDecisionResponse> => (
+      this.post(`/approvals/${encodeURIComponent(approvalId)}/deny`, body) as Promise<FidesApprovalDecisionResponse>
+    ),
   }
 
   readonly killSwitch = {

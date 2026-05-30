@@ -45,6 +45,76 @@ describe('FidesClient', () => {
     expect(result.requiresSessionGrant).toBe(false)
   })
 
+  it('types root approval responses without granting authority', async () => {
+    const approval = {
+      schema_version: 'fides.approval.request.v1',
+      id: 'appr_1',
+      issuer: 'did:fides:requester',
+      subject: 'did:fides:target',
+      requester_agent_id: 'did:fides:requester',
+      target_agent_id: 'did:fides:target',
+      principal_id: 'did:fides:principal',
+      capability: 'payments.prepare',
+      requested_scopes: ['payments:prepare'],
+      risk_level: 'high',
+      evidence_refs: [],
+      status: 'pending',
+      created_at: '2026-05-30T00:00:00.000Z',
+      payload_hash: 'sha256:approval',
+    }
+    const decision = {
+      schema_version: 'fides.approval.decision.v1',
+      id: 'apprd_1',
+      issuer: 'did:fides:approver',
+      subject: 'appr_1',
+      approval_request_id: 'appr_1',
+      approver_id: 'did:fides:approver',
+      decision: 'approved',
+      reason: 'human approved',
+      constraints: {},
+      evidence_refs: [],
+      decided_at: '2026-05-30T00:01:00.000Z',
+      payload_hash: 'sha256:decision',
+    }
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).endsWith('/approvals/appr_1/approve')) {
+        return new Response(JSON.stringify({
+          approval: { ...approval, status: 'approved' },
+          decision,
+          evidenceRefs: ['evt_approval_decision'],
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/approvals') && init?.method === 'GET') {
+        return new Response(JSON.stringify({
+          approvals: [approval],
+          decisions: [],
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({
+        approval,
+        evidenceRefs: ['evt_approval_requested'],
+        authorityGranted: false,
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const created = await client.approvals.create({ agentId: 'did:fides:target', capability: 'payments.prepare' })
+    expect(created.approval.status).toBe('pending')
+    expect(created.authorityGranted).toBe(false)
+
+    const listed = await client.approvals.list()
+    expect(listed.approvals[0]?.capability).toBe('payments.prepare')
+    expect(listed.authorityGranted).toBe(false)
+
+    const approved = await client.approvals.approve('appr_1', { approverId: 'did:fides:approver' })
+    expect(approved.approval.status).toBe('approved')
+    expect(approved.decision.decision).toBe('approved')
+    expect(approved.authorityGranted).toBe(false)
+  })
+
   it('exposes promise-based identity, card, discovery, trust, session, and invocation namespaces', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {

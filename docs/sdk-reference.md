@@ -213,7 +213,9 @@ dry-run-only sessions return `authorityGranted: false`, include
 `allowedActions: ["dry_run"]`, and carry
 `session.constraints.dryRunOnly: true`. Approval and kill switch helpers expose
 local authority controls, with kill switch rules overriding normal policy while
-active.
+active. Approval helpers return typed `ApprovalRequest` / `ApprovalDecision`
+responses and keep `authorityGranted: false`; an approval record is evidence for
+policy, not invocation authority by itself.
 Revocation and incident helpers expose local governance records that feed root
 session policy decisions. Attestation helpers include local mock identity trust
 anchors for GitHub, email, domain, package registry, and wallet claims, plus

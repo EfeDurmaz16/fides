@@ -151,6 +151,11 @@ describe('Evidence Ledger', () => {
     })
 
     expect(event.schema_version).toBe('fides.evidence_event.v1')
+    expect(event.id).toBe(event.event_id)
+    expect(event.issuer).toBe('did:fides:agent')
+    expect(event.issued_at).toBe(event.timestamp)
+    expect(event.payload_hash).toMatch(/^sha256:/)
+    expect(event.event_hash).toMatch(/^sha256:/)
     expect(event.privacy_mode).toBe('hash_only')
     expect(event.input_hash).toBe(hashEvidenceValue({ invoiceId: 'inv_123', secret: 'hidden' }))
     expect(event.policy_hash).toMatch(/^sha256:/)
@@ -173,6 +178,8 @@ describe('Evidence Ledger', () => {
     expect(await verifyEvidenceEventV2(signed)).toBe(true)
 
     expect(await verifyEvidenceEventV2({ ...signed, metadata: { score: 0.1 } })).toBe(false)
+    expect(await verifyEvidenceEventV2({ ...signed, issuer: 'did:fides:other' })).toBe(false)
+    expect(await verifyEvidenceEventV2({ ...signed, payload_hash: 'sha256:tampered' })).toBe(false)
   })
 
   it('verifies v2 hash chains and detects broken links', () => {

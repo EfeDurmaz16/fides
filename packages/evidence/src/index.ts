@@ -71,7 +71,9 @@ export type EvidencePrivacyMode = 'public' | 'private' | 'redacted' | 'hash_only
 
 export interface EvidenceEventV2 {
   schema_version: 'fides.evidence_event.v1'
+  id: string
   event_id: string
+  issuer: string
   type: EvidenceEventType
   actor: string
   subject?: string
@@ -83,8 +85,10 @@ export interface EvidenceEventV2 {
   decision?: string
   risk_level?: 'low' | 'medium' | 'high' | 'critical'
   privacy_mode: EvidencePrivacyMode
+  issued_at: string
   timestamp: string
   prev_event_hash: string
+  payload_hash: string
   event_hash: string
   signature: string
   metadata?: Record<string, unknown>
@@ -128,13 +132,18 @@ export function createEvidenceEventV2(
   input: EvidenceEventV2Input,
   previousEventHash = '0'
 ): EvidenceEventV2 {
-  const eventWithoutHash: Omit<EvidenceEventV2, 'event_hash' | 'signature'> = {
+  const eventId = input.event_id ?? crypto.randomUUID()
+  const timestamp = input.timestamp ?? new Date().toISOString()
+  const eventPayload: Omit<EvidenceEventV2, 'payload_hash' | 'event_hash' | 'signature'> = {
     schema_version: 'fides.evidence_event.v1',
-    event_id: input.event_id ?? crypto.randomUUID(),
+    id: eventId,
+    event_id: eventId,
+    issuer: input.actor,
     type: input.type,
     actor: input.actor,
     privacy_mode: input.privacy_mode ?? defaultPrivacyMode(input),
-    timestamp: input.timestamp ?? new Date().toISOString(),
+    issued_at: timestamp,
+    timestamp,
     prev_event_hash: previousEventHash,
     ...(input.subject !== undefined && { subject: input.subject }),
     ...(input.principal !== undefined && { principal: input.principal }),
@@ -151,6 +160,10 @@ export function createEvidenceEventV2(
     ...(input.decision !== undefined && { decision: input.decision }),
     ...(input.risk_level !== undefined && { risk_level: input.risk_level }),
     ...(input.metadata !== undefined && { metadata: input.metadata }),
+  }
+  const eventWithoutHash: Omit<EvidenceEventV2, 'event_hash' | 'signature'> = {
+    ...eventPayload,
+    payload_hash: hashEvidenceValue(eventPayload),
   }
   const event_hash = hashEvidenceValue(eventWithoutHash)
   return {
@@ -181,8 +194,13 @@ export async function verifyEvidenceEventV2(
   verificationMethod = event.actor
 ): Promise<boolean> {
   if (!event.signature) return false
-  const { event_hash, signature, ...withoutHashAndSignature } = event
-  if (hashEvidenceValue(withoutHashAndSignature) !== event_hash) return false
+  if (event.id !== event.event_id) return false
+  if (event.issuer !== event.actor) return false
+  if (event.issued_at !== event.timestamp) return false
+  const { event_hash, signature, payload_hash, ...withoutHashAndSignature } = event
+  if (hashEvidenceValue(withoutHashAndSignature) !== payload_hash) return false
+  const withPayloadHash = { ...withoutHashAndSignature, payload_hash }
+  if (hashEvidenceValue(withPayloadHash) !== event_hash) return false
   return verifyObject({
     payload: { ...event, signature: '' },
     proof: {
@@ -194,6 +212,17 @@ export async function verifyEvidenceEventV2(
       proofValue: signature,
     },
   })
+}
+
+export function verifyUnsignedEvidenceEventV2(event: EvidenceEventV2): boolean {
+  if (event.id !== event.event_id) return false
+  if (event.issuer !== event.actor) return false
+  if (event.issued_at !== event.timestamp) return false
+  const { event_hash, signature: _signature, payload_hash, ...withoutHashAndSignature } = event
+  if (hashEvidenceValue(withoutHashAndSignature) !== payload_hash) return false
+  const withPayloadHash = { ...withoutHashAndSignature, payload_hash }
+  if (hashEvidenceValue(withPayloadHash) !== event_hash) return false
+  return true
 }
 
 export function appendEvidenceEventV2(
@@ -212,8 +241,7 @@ export function verifyEvidenceEventsV2(events: EvidenceEventV2[]): boolean {
     const event = events[index]
     const expectedPrevious = index === 0 ? '0' : events[index - 1].event_hash
     if (event.prev_event_hash !== expectedPrevious) return false
-    const { event_hash, signature: _signature, ...withoutHashAndSignature } = event
-    if (hashEvidenceValue(withoutHashAndSignature) !== event_hash) return false
+    if (!verifyUnsignedEvidenceEventV2(event)) return false
   }
   return true
 }

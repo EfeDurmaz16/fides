@@ -9,6 +9,18 @@ Current implementation anchors:
 
 ## Event Classes
 
+`EvidenceEventV2` is also aligned with the shared FIDES signed object envelope:
+
+- `schema_version`
+- `id` as an alias for `event_id`
+- `issuer` as an alias for the event `actor`
+- `issued_at` as an alias for `timestamp`
+- `payload_hash`
+- `signature`
+
+The event still keeps evidence-native fields such as `prev_event_hash` and
+`event_hash` for hash-chain verification.
+
 The event taxonomy includes agent registration, discovery, trust computation, policy evaluation, approval, session, invocation, attestation, revocation, incident, and kill switch events.
 
 Current root `agentd` mutations append hash-only lifecycle evidence for:

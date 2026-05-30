@@ -127,6 +127,7 @@ const reputation = await client.reputation.update({
   capability: 'invoice.reconcile',
   successfulInvocations: 3,
 })
+const reputationSignal = await client.reputation.inspect(identity.identity.did, 'invoice.reconcile')
 const policy = await client.policy.evaluate({
   principalId: 'did:fides:principal',
   requesterAgentId: 'did:fides:requester',

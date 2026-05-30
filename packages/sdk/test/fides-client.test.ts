@@ -1029,6 +1029,16 @@ describe('FidesClient', () => {
     expect(reputationList.reputations[0]?.capability).toBe('invoice.reconcile')
     expect(reputationList.authorityGranted).toBe(false)
 
+    const reputationInspection = await client.reputation.inspect('did:fides:agent', 'invoice.reconcile')
+    expect(reputationInspection.reputation?.score).toBe(0.81)
+    expect(reputationInspection.reputationSignals).toHaveLength(1)
+    expect(reputationInspection.authorityGranted).toBe(false)
+
+    const missingCapabilityInspection = await client.reputation.inspect('did:fides:agent', 'payments.execute')
+    expect(missingCapabilityInspection.reputation).toBeNull()
+    expect(missingCapabilityInspection.reputationSignals).toEqual([])
+    expect(missingCapabilityInspection.authorityGranted).toBe(false)
+
     const delegation = await client.delegations.create({
       delegator: 'did:fides:principal',
       delegatee: 'did:fides:requester',

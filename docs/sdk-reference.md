@@ -67,6 +67,10 @@ const reputation = await client.reputation.update({
   capability: 'invoice.reconcile',
   successfulInvocations: 3,
 })
+const reputationSignal = await client.reputation.inspect(identity.identity.did, 'invoice.reconcile')
+if (reputationSignal.authorityGranted !== false) {
+  throw new Error('Reputation inspection must not grant authority')
+}
 const policy = await client.policy.evaluate({
   principalId: 'did:fides:principal',
   requesterAgentId: 'did:fides:requester',

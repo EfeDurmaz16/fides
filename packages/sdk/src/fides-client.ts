@@ -593,6 +593,14 @@ export interface FidesReputationListResponse {
   [key: string]: unknown
 }
 
+export interface FidesReputationInspectionResponse {
+  agentId: string
+  capability: string
+  reputation: ReputationRecord | null
+  reputationSignals: ReputationRecord[]
+  authorityGranted: false
+}
+
 export interface FidesDelegationResponse {
   token: DelegationToken
   signed: boolean
@@ -789,6 +797,17 @@ export class FidesClient {
     get: (agentId: string): Promise<FidesReputationListResponse> => (
       this.get(`/reputation/${encodeURIComponent(agentId)}`) as Promise<FidesReputationListResponse>
     ),
+    inspect: async (agentId: string, capability: string): Promise<FidesReputationInspectionResponse> => {
+      const result = await this.reputation.get(agentId)
+      const reputationSignals = result.reputations.filter((record) => record.capability === capability)
+      return {
+        agentId,
+        capability,
+        reputation: reputationSignals[0] ?? null,
+        reputationSignals,
+        authorityGranted: false,
+      }
+    },
   }
 
   readonly policy = {

@@ -513,6 +513,36 @@ describe('Agentd Service Routes', () => {
       })
     })
 
+    it('rejects local agent registration before identity-bound AgentCard signing', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Unsigned Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: 'invoice.reconcile' }],
+          endpoints: [],
+        }),
+      })
+
+      const registered = await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      expect(registered.status).toBe(400)
+      expect(await registered.json()).toMatchObject({
+        error: 'Identity-bound signed AgentCard is required before registration',
+        cardId: identity.did,
+      })
+    })
+
     it('filters discovery candidates with incompatible protocol versions', async () => {
       const identityResponse = await app.request('/identities', {
         method: 'POST',

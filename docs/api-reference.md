@@ -156,9 +156,11 @@ routes are durable across daemon restarts when SQLite local state is enabled,
 but remain prototype-local until the daemon state is migrated from snapshot
 storage to normalized identity/card tables.
 
-`POST /agents/register` registers a locally stored AgentCard as a discovery
-candidate. `GET /agents` and `GET /agents/:id` expose local registration state
-and the associated AgentCard. `POST /discover` and `POST /discover/local`
+`POST /agents/register` registers a locally stored, identity-bound signed
+AgentCard as a discovery candidate. Unsigned cards and cards signed by a DID
+other than the advertised agent identity are rejected before they can enter
+local discovery. `GET /agents` and `GET /agents/:id` expose local registration
+state and the associated AgentCard. `POST /discover` and `POST /discover/local`
 search registered local agents by capability. `POST /discover/well-known`,
 `POST /discover/registry`, `POST /discover/relay`, `POST /discover/dht`, and
 `POST /discover/federation` expose provider-specific discovery aliases over

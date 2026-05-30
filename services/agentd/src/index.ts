@@ -995,12 +995,19 @@ app.post('/agents/register', async (c) => {
   if (!card) {
     return c.json({ error: 'AgentCard not found', cardId }, 404)
   }
+  const signedCard = localSignedAgentCards.get(card.id)
+  if (!signedCard) {
+    return c.json({ error: 'Identity-bound signed AgentCard is required before registration', cardId }, 400)
+  }
+  if (!await verifySignedAgentCardIdentity(signedCard)) {
+    return c.json({ error: 'Signed AgentCard is not bound to the advertised agent identity', cardId }, 400)
+  }
 
   const record: LocalRegisteredAgent = {
     agentId: card.identity.did,
     cardId: card.id,
     registeredAt: new Date().toISOString(),
-    signed: localSignedAgentCards.has(card.id),
+    signed: true,
   }
   localAgents.set(record.agentId, record)
 

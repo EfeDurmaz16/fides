@@ -267,7 +267,6 @@ describe('AgentDiscoveryClient', () => {
     await client.registerAgent({
       did: 'did:fides:agent',
       name: 'Agent',
-      url: 'https://agent.example.com',
     })
     await client.updateAgent('did:fides:agent', { name: 'Agent v2' })
     await client.heartbeat('did:fides:agent')

@@ -263,10 +263,11 @@ await agents.registerAgent({
   did: 'did:fides:agent',
   name: 'Payment Agent',
   description: 'Executes approved payment workflows',
-  capabilities: ['payments.execute'],
-  endpoints: [{ type: 'mcp', url: 'https://agent.example.com/mcp' }],
-  trustLevel: 'high',
+  skills: [{ id: 'payments.prepare', name: 'Prepare payment dry-runs' }],
 })
+
+// URL-less registration is supported. The discovery service stores a
+// local://agents/<did> transport hint and returns authorityGranted: false.
 
 await agents.heartbeat('did:fides:agent')
 ```

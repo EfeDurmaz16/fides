@@ -5,7 +5,7 @@ export interface RegisterAgentParams {
   did: string
   name: string
   description?: string
-  url: string
+  url?: string
   version?: string
   provider?: AgentProvider
   capabilities?: AgentCapabilities

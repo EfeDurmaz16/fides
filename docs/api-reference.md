@@ -147,7 +147,11 @@ fail-closed behavior as other mutating `agentd` routes.
 `POST /agent-cards` creates local AgentCards bound to local daemon identities.
 `POST /agent-cards/:id/sign` signs the stored card with the local agent identity
 key using the canonical AgentCard signing model, and
-`POST /agent-cards/:id/verify` verifies the signed card when present. These
+`POST /agent-cards/:id/verify` verifies the signed card when present and returns
+`valid: true` only when the canonical proof is also bound to the advertised
+agent identity. The response includes `canonicalValid` and `identityBound` for
+signed cards so callers can distinguish malformed signatures from signatures
+made by the wrong DID. These
 routes are durable across daemon restarts when SQLite local state is enabled,
 but remain prototype-local until the daemon state is migrated from snapshot
 storage to normalized identity/card tables.

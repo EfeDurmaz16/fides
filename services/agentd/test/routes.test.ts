@@ -419,7 +419,10 @@ describe('Agentd Service Routes', () => {
 
       const verified = await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/verify`, { method: 'POST' })
       expect(verified.status).toBe(200)
-      expect((await verified.json()).valid).toBe(true)
+      const verifiedData = await verified.json()
+      expect(verifiedData.valid).toBe(true)
+      expect(verifiedData.canonicalValid).toBe(true)
+      expect(verifiedData.identityBound).toBe(true)
 
       const fetched = await app.request(`/agent-cards/${encodeURIComponent(identity.did)}`)
       expect(fetched.status).toBe(200)

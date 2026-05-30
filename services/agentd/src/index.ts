@@ -68,6 +68,7 @@ import {
   verifySignedRegistryIndexRecord,
   verifySignedRegistryPeerRecord,
   verifySignedAgentCard,
+  verifySignedAgentCardIdentity,
   verifyDelegationTokenSignature,
   verifyDomainDid,
   evaluateInvocationPreflight,
@@ -944,7 +945,14 @@ app.post('/agent-cards/:id/verify', async (c) => {
   const id = c.req.param('id')
   const signed = localSignedAgentCards.get(id)
   if (signed) {
-    return c.json({ valid: await verifySignedAgentCard(signed), signed: true })
+    const canonicalValid = await verifySignedAgentCard(signed)
+    const identityBound = await verifySignedAgentCardIdentity(signed)
+    return c.json({
+      valid: identityBound,
+      signed: true,
+      canonicalValid,
+      identityBound,
+    })
   }
 
   const card = localAgentCards.get(id)
@@ -2461,6 +2469,16 @@ app.post('/dht/publish', async (c) => {
     if (!card.capabilities.some(candidate => candidate.id === capability)) {
       return c.json({ error: 'AgentCard does not advertise capability', capability, cardId: card.id }, 400)
     }
+    const publisherId = typeof body.publisherId === 'string'
+      ? body.publisherId
+      : typeof body.publisher_id === 'string'
+        ? body.publisher_id
+        : card.publisher?.did ?? card.identity.did
+    const publisherIdentity = localIdentities.get(publisherId)
+    if (!publisherIdentity) {
+      return c.json({ error: 'DHT pointer publisher key not found', publisherId }, 404)
+    }
+
     const pointer = await signDHTPointerRecord(createDHTPointerRecord({
       capability,
       agentId: card.identity.did,
@@ -2470,18 +2488,14 @@ app.post('/dht/publish', async (c) => {
           ? body.agent_card_url
           : `local://agent-cards/${encodeURIComponent(card.id)}`,
       agentCardHash: hashAgentCard(card),
-      publisherId: typeof body.publisherId === 'string'
-        ? body.publisherId
-        : typeof body.publisher_id === 'string'
-          ? body.publisher_id
-          : card.publisher?.did ?? card.identity.did,
+      publisherId,
       expiresAt: typeof body.expiresAt === 'string'
         ? body.expiresAt
         : typeof body.expires_at === 'string'
           ? body.expires_at
           : new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       sequence: typeof body.sequence === 'number' ? body.sequence : undefined,
-    }), Buffer.from(identity.privateKeyHex, 'hex'), card.identity.did)
+    }), Buffer.from(publisherIdentity.privateKeyHex, 'hex'), publisherId)
     const storedPointer = {
       ...pointer,
       id: body.id ?? crypto.randomUUID(),
@@ -2527,7 +2541,7 @@ async function findLocalDhtPointers(capability?: string) {
       const card = localCardForProviderRecord(pointer)
       const verification = await verifyDHTPointerRecord(pointerRecord, {
         ...(card && { card }),
-        verificationMethod: typeof pointer.agent_id === 'string' ? pointer.agent_id : undefined,
+        verificationMethod: typeof pointer.publisher_id === 'string' ? pointer.publisher_id : undefined,
       })
       const enriched = { ...pointer, verification }
       if (!verification.valid) {
@@ -3101,7 +3115,7 @@ async function runLocalFullDemo() {
     agentCardHash: hashAgentCard(payment.card),
     publisherId: publisher.identity.did,
     expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-  }), Buffer.from(payment.identity.privateKeyHex, 'hex'), payment.card.identity.did)
+  }), Buffer.from(publisher.privateKeyHex, 'hex'), publisher.identity.did)
   const dhtPointer = {
     ...dhtPointerRecord,
     id: crypto.randomUUID(),
@@ -3121,7 +3135,7 @@ async function runLocalFullDemo() {
     (record.capabilities as string[] | undefined)?.includes(invoiceCapability.id)
   ))
   const paymentDhtPointers = await findLocalDhtPointers(paymentCapability.id)
-  const verifiedCards = await Promise.all([calendar.signed, invoice.signed, payment.signed].map(verifySignedAgentCard))
+  const verifiedCards = await Promise.all([calendar.signed, invoice.signed, payment.signed].map(verifySignedAgentCardIdentity))
 
   const invoiceTrust = computeLocalTrustResult(invoice.card.identity.did, invoiceCapability.id)
   const invoiceReputation = computeCapabilityReputation({

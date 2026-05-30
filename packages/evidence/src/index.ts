@@ -32,6 +32,18 @@ export interface EvidenceChain {
   merkleRoot?: string
 }
 
+export interface MerkleProofStep {
+  position: 'left' | 'right'
+  hash: string
+}
+
+export interface MerkleProof {
+  leafHash: string
+  leafIndex: number
+  root: string
+  steps: MerkleProofStep[]
+}
+
 export type EvidenceEventType =
   | 'agent.registered'
   | 'agent.updated'
@@ -213,8 +225,7 @@ export function buildMerkleRoot(eventHashes: string[]): string {
     const nextLevel: string[] = []
     for (let i = 0; i < level.length; i += 2) {
       if (i + 1 < level.length) {
-        const combined = level[i] + level[i + 1]
-        nextLevel.push(bytesToHex(sha256(new TextEncoder().encode(combined))))
+        nextLevel.push(hashMerklePair(level[i], level[i + 1]))
       } else {
         nextLevel.push(level[i])
       }
@@ -222,6 +233,72 @@ export function buildMerkleRoot(eventHashes: string[]): string {
     level = nextLevel
   }
   return level[0]
+}
+
+export function buildMerkleProof(eventHashes: string[], leafIndex: number): MerkleProof {
+  if (eventHashes.length === 0) {
+    throw new Error('Cannot build a Merkle proof for an empty tree')
+  }
+  if (!Number.isInteger(leafIndex) || leafIndex < 0 || leafIndex >= eventHashes.length) {
+    throw new Error('Merkle proof leafIndex is out of range')
+  }
+
+  let index = leafIndex
+  let level = [...eventHashes]
+  const steps: MerkleProofStep[] = []
+
+  while (level.length > 1) {
+    const siblingIndex = index % 2 === 0 ? index + 1 : index - 1
+    if (siblingIndex < level.length) {
+      steps.push({
+        position: siblingIndex < index ? 'left' : 'right',
+        hash: level[siblingIndex],
+      })
+    }
+
+    const nextLevel: string[] = []
+    for (let i = 0; i < level.length; i += 2) {
+      if (i + 1 < level.length) {
+        nextLevel.push(hashMerklePair(level[i], level[i + 1]))
+      } else {
+        nextLevel.push(level[i])
+      }
+    }
+    index = Math.floor(index / 2)
+    level = nextLevel
+  }
+
+  return {
+    leafHash: eventHashes[leafIndex],
+    leafIndex,
+    root: level[0],
+    steps,
+  }
+}
+
+export function buildEvidenceMerkleProof(chain: EvidenceChain, eventId: string): MerkleProof {
+  const leafIndex = chain.events.findIndex(event => event.id === eventId)
+  if (leafIndex === -1) {
+    throw new Error(`Evidence event not found in chain: ${eventId}`)
+  }
+  return buildMerkleProof(chain.events.map(event => event.hash), leafIndex)
+}
+
+export function verifyMerkleProof(proof: MerkleProof): boolean {
+  if (!proof.leafHash || !proof.root || proof.leafIndex < 0 || !Number.isInteger(proof.leafIndex)) {
+    return false
+  }
+  let computed = proof.leafHash
+  for (const step of proof.steps) {
+    computed = step.position === 'left'
+      ? hashMerklePair(step.hash, computed)
+      : hashMerklePair(computed, step.hash)
+  }
+  return computed === proof.root
+}
+
+function hashMerklePair(left: string, right: string): string {
+  return bytesToHex(sha256(new TextEncoder().encode(left + right)))
 }
 
 /**

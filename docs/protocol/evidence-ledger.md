@@ -23,4 +23,10 @@ Current root `agentd` mutations append hash-only lifecycle evidence for:
 
 ## Integrity
 
-Each event links to the previous event hash. Verification detects broken chains. Export should preserve enough metadata to audit without leaking sensitive inputs or outputs.
+Each event links to the previous event hash. Verification detects broken
+chains. The evidence package can also compute Merkle roots and generate
+Merkle inclusion proofs for individual events, so an exported event can be
+verified against an anchored root without disclosing the entire log.
+
+Export should preserve enough metadata to audit without leaking sensitive
+inputs or outputs.

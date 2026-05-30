@@ -2,7 +2,9 @@
 
 Tamper-evident evidence chains for FIDES.
 
-This package provides hash-chained evidence events, Merkle root computation, privacy levels, and verification helpers for audit trails produced by autonomous agents and trust services.
+This package provides hash-chained evidence events, Merkle root computation,
+Merkle inclusion proofs, privacy levels, and verification helpers for audit
+trails produced by autonomous agents and trust services.
 
 ## Installation
 
@@ -13,7 +15,13 @@ npm install @fides/evidence
 ## Usage
 
 ```typescript
-import { appendEvidenceEvent, createEvidenceChain, verifyEvidenceChain } from '@fides/evidence'
+import {
+  appendEvidenceEvent,
+  buildEvidenceMerkleProof,
+  createEvidenceChain,
+  verifyEvidenceChain,
+  verifyMerkleProof,
+} from '@fides/evidence'
 
 let chain = createEvidenceChain()
 
@@ -28,6 +36,8 @@ chain = appendEvidenceEvent(chain, {
 }, 'signature-hex')
 
 const valid = verifyEvidenceChain(chain)
+const proof = buildEvidenceMerkleProof(chain, 'evt_1')
+const included = verifyMerkleProof(proof)
 ```
 
 ## License

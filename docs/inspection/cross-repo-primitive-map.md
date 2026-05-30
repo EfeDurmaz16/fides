@@ -48,7 +48,7 @@ This map reflects the current local inspection of:
 | ApprovalDecision | missing first-class core | `approval.rs` | HITL spec | core approvals | approval flow | OAPS + Sardis | create new |
 | EvidenceEvent | `packages/evidence` | commits/events/audit | webhook events | hash-linked evidence | evidence export/hash-chain | FIDES + OAPS + AGIT | extend existing |
 | Hash chain | `packages/evidence` | strong lineage/hash prior art | not generic | evidence package | policy hash-chain | FIDES + AGIT | extend existing |
-| Merkle proof | Merkle root only | Merkle/state diff concepts | not found | not found | ledger anchor | AGIT + Sardis | create new |
+| Merkle proof | Merkle root + inclusion proof helpers | Merkle/state diff concepts | not found | not found | ledger anchor | FIDES + AGIT | extend existing |
 | Revocation | `packages/core/src/revocation.ts`, services | not core | docs/spec | revoke flow | identity/payment revocation | FIDES | extend existing |
 | Incident | `packages/core/src/revocation.ts`, services | not core | not found | not found | payment/trust context | FIDES | extend existing |
 | Runtime attestation | `packages/runtime` | not found | not found | not found | not generic | FIDES | extend existing |

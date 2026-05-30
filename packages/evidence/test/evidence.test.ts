@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   appendEvidenceEvent,
   appendEvidenceEventV2,
+  buildEvidenceMerkleProof,
+  buildMerkleProof,
   createEvidenceChain,
   createEvidenceEventV2,
   hashEvidenceValue,
@@ -10,6 +12,7 @@ import {
   verifyEvidenceChain,
   verifyEvidenceEventV2,
   verifyEvidenceEventsV2,
+  verifyMerkleProof,
 } from '../src/index.js'
 import type { EvidenceEvent } from '../src/index.js'
 import { createAgentIdentity } from '@fides/core'
@@ -46,6 +49,54 @@ describe('Evidence Ledger', () => {
     expect(chain.events[0].prevHash).toBe('0')
     expect(chain.events[1].prevHash).toBe(chain.events[0].hash)
     expect(verifyEvidenceChain(chain)).toBe(true)
+  })
+
+  it('builds and verifies Merkle inclusion proofs for evidence chains', () => {
+    let chain = createEvidenceChain()
+    chain = appendEvidenceEvent(chain, {
+      id: 'evt_1',
+      type: 'invocation',
+      timestamp: '2026-05-29T00:00:00.000Z',
+      actor: 'did:fides:alice',
+      action: 'read',
+      payload: { file: 'doc1' },
+      privacy: { level: 'hash-only' },
+    }, 'sig1')
+    chain = appendEvidenceEvent(chain, {
+      id: 'evt_2',
+      type: 'policy',
+      timestamp: '2026-05-29T00:00:01.000Z',
+      actor: 'did:fides:policy',
+      action: 'evaluate',
+      payload: { decision: 'allow' },
+      privacy: { level: 'hash-only' },
+    }, 'sig2')
+    chain = appendEvidenceEvent(chain, {
+      id: 'evt_3',
+      type: 'invocation',
+      timestamp: '2026-05-29T00:00:02.000Z',
+      actor: 'did:fides:bob',
+      action: 'write',
+      payload: { file: 'doc2' },
+      privacy: { level: 'hash-only' },
+    }, 'sig3')
+
+    const proof = buildEvidenceMerkleProof(chain, 'evt_2')
+
+    expect(proof.leafHash).toBe(chain.events[1].hash)
+    expect(proof.root).toBe(chain.merkleRoot)
+    expect(verifyMerkleProof(proof)).toBe(true)
+    expect(verifyMerkleProof({ ...proof, leafHash: 'tampered' })).toBe(false)
+  })
+
+  it('builds Merkle proofs from raw event hashes', () => {
+    const hashes = ['h1', 'h2', 'h3', 'h4']
+    const proof = buildMerkleProof(hashes, 3)
+
+    expect(proof.leafHash).toBe('h4')
+    expect(proof.leafIndex).toBe(3)
+    expect(verifyMerkleProof(proof)).toBe(true)
+    expect(verifyMerkleProof({ ...proof, steps: proof.steps.slice(1) })).toBe(false)
   })
 
   it('should detect tampered chain', () => {

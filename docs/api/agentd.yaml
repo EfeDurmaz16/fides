@@ -332,7 +332,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Capability-scoped trust signal; never grants invocation authority
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalTrustEvaluationResponse"
 
   /trust/{id}:
     get:
@@ -343,7 +347,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local trust results for an agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalTrustListResponse"
 
   /reputation/update:
     post:
@@ -356,7 +364,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Capability-specific reputation signal; never grants invocation authority
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalReputationUpdateResponse"
 
   /reputation/{id}:
     get:
@@ -367,7 +379,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local capability-specific reputation records for an agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalReputationListResponse"
 
   /policy/evaluate:
     post:
@@ -463,7 +479,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: DelegationToken created; still requires policy-checked SessionGrant before invocation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalDelegationResponse"
 
   /sessions:
     post:
@@ -1944,6 +1964,224 @@ components:
             signedCard:
               type: object
               nullable: true
+
+    TrustReason:
+      type: object
+      required: [component, value, weight, description]
+      properties:
+        component:
+          type: string
+          enum:
+            - IdentityScore
+            - PublisherScore
+            - TrustAnchorScore
+            - CapabilityFitScore
+            - EvidenceScore
+            - PolicyComplianceScore
+            - RuntimeSafetyScore
+            - PeerAttestationScore
+            - IncidentPenalty
+            - NoveltyPenalty
+            - ContextBoundaryPenalty
+        value:
+          type: number
+        weight:
+          type: number
+        description:
+          type: string
+
+    TrustResult:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - agent_id
+        - capability
+        - score
+        - band
+        - reasons
+        - risk_flags
+        - evidence_refs
+        - required_controls
+        - computed_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.trust.result.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        agent_id:
+          type: string
+        capability:
+          type: string
+        score:
+          type: number
+        band:
+          type: string
+          enum: [unknown, low, medium, high, verified]
+        reasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustReason"
+        risk_flags:
+          type: array
+          items:
+            type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        required_controls:
+          type: array
+          items:
+            type: string
+            enum: [dry_run, human_approval, policy_proof, runtime_attestation, scope_limit, rate_limit]
+        computed_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalTrustEvaluationResponse:
+      type: object
+      required: [trust, authorityGranted, explanation]
+      properties:
+        trust:
+          $ref: "#/components/schemas/TrustResult"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        explanation:
+          type: string
+
+    LocalTrustListResponse:
+      type: object
+      required: [agentId, trust, authorityGranted]
+      properties:
+        agentId:
+          type: string
+        trust:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustResult"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    ReputationReason:
+      type: object
+      required: [factor, value, description]
+      properties:
+        factor:
+          type: string
+          enum: [success_rate, volume_confidence, publisher_weight, incident_penalty, context_boundary_penalty]
+        value:
+          type: number
+        description:
+          type: string
+
+    ReputationRecord:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - agent_id
+        - capability
+        - score
+        - successful_invocations
+        - failed_invocations
+        - incident_count
+        - publisher_weight
+        - context_boundary_penalty
+        - reasons
+        - computed_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.reputation.record.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        agent_id:
+          type: string
+        publisher_id:
+          type: string
+        principal_id:
+          type: string
+        capability:
+          type: string
+        score:
+          type: number
+        successful_invocations:
+          type: integer
+        failed_invocations:
+          type: integer
+        incident_count:
+          type: integer
+        publisher_weight:
+          type: number
+        context_boundary_penalty:
+          type: number
+        reasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReputationReason"
+        computed_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalReputationUpdateResponse:
+      type: object
+      required: [reputation, authorityGranted]
+      properties:
+        reputation:
+          $ref: "#/components/schemas/ReputationRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalReputationListResponse:
+      type: object
+      required: [agentId, reputations, authorityGranted]
+      properties:
+        agentId:
+          type: string
+        reputations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReputationRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalDelegationResponse:
+      type: object
+      required: [token, signed, authorityGranted, explanation]
+      properties:
+        token:
+          $ref: "#/components/schemas/DelegationToken"
+        signed:
+          type: boolean
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        explanation:
+          type: string
 
     LocalSessionResponse:
       type: object

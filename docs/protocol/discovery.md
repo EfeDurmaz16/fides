@@ -28,6 +28,32 @@ Current implementation anchors:
 9. Return ranked candidates with explanations.
 10. Emit evidence.
 
+## URL-less Discovery
+
+FIDES discovery does not require every candidate to already expose an HTTP URL.
+An endpoint URL is transport metadata, not identity, trust, or authority.
+
+Current support:
+
+- Local discovery can resolve from daemon-held AgentCards without endpoint URLs.
+  `agentd` marks these candidates with `resolution.urlRequired: false` and the
+  reason `url_not_required_for_local_discovery`.
+- DHT discovery can resolve a signed capability pointer to a daemon-held
+  AgentCard. The DHT pointer is only a hint; it is not a trust source and it
+  does not grant authority.
+- Relay discovery can advertise presence and endpoint hints for NAT-hidden
+  agents. A relay hint is not an authority decision.
+- Registry discovery can return AgentCards that have no callable endpoint yet,
+  but invocation still requires a later transport/session path.
+
+URL-dependent cases:
+
+- Well-known discovery requires a domain or DID-to-domain mapping because the
+  discovery mechanism itself is HTTP `.well-known`.
+- Capability invocation eventually needs a transport path, relay route, local
+  process binding, or adapter-specific execution channel. Discovery alone only
+  returns candidates.
+
 The package-level `DiscoveryOrchestrator` supports capability-query providers,
 candidate explanations, provider scoping, ranking, and protocol version
 negotiation. Incompatible provider or legacy DID-resolution candidates are

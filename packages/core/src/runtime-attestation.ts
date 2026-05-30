@@ -46,7 +46,7 @@ export function isRuntimeAttestationExpired(attestation: RuntimeAttestation, now
 export function createRuntimeAttestation(input: RuntimeAttestationIssueInput & {
   provider: RuntimeAttestation['provider']
   issuer?: string
-  signature: string
+  signature?: string
 }): RuntimeAttestation {
   const issuedAt = input.issuedAt ?? new Date().toISOString()
   const id = crypto.randomUUID()
@@ -76,7 +76,7 @@ export function createRuntimeAttestation(input: RuntimeAttestationIssueInput & {
   return {
     ...payload,
     payload_hash: hashProtocolPayload(payload),
-    signature: input.signature,
+    signature: input.signature ?? localRuntimeAttestationSignature(payload),
   }
 }
 
@@ -96,14 +96,15 @@ export class MockTEEProvider implements TeeAttestationProvider {
     return createRuntimeAttestation({
       ...input,
       provider: this.provider,
-      signature: 'mock-tee-signature',
     })
   }
 
   async verify(attestation: RuntimeAttestation): Promise<boolean> {
     if (attestation.provider !== this.provider) return false
     if (isRuntimeAttestationExpired(attestation)) return false
-    return attestation.signature === 'mock-tee-signature' &&
+    const payload = runtimeAttestationPayload(attestation)
+    return attestation.payload_hash === hashProtocolPayload(payload) &&
+      attestation.signature === localRuntimeAttestationSignature(payload) &&
       isSha256(attestation.code_hash) &&
       isSha256(attestation.runtime_hash) &&
       isSha256(attestation.policy_hash) &&
@@ -129,4 +130,26 @@ export class NullAttestationProvider implements AttestationProvider {
 
 function isSha256(value: string): boolean {
   return /^sha256:[a-f0-9]{64}$/i.test(value)
+}
+
+function runtimeAttestationPayload(attestation: RuntimeAttestation): Omit<RuntimeAttestation, 'payload_hash' | 'signature'> {
+  return {
+    schema_version: attestation.schema_version,
+    id: attestation.id,
+    issuer: attestation.issuer,
+    subject: attestation.subject,
+    attestation_id: attestation.attestation_id,
+    agent_id: attestation.agent_id,
+    provider: attestation.provider,
+    code_hash: attestation.code_hash,
+    runtime_hash: attestation.runtime_hash,
+    policy_hash: attestation.policy_hash,
+    enclave_measurement: attestation.enclave_measurement,
+    issued_at: attestation.issued_at,
+    expires_at: attestation.expires_at,
+  }
+}
+
+function localRuntimeAttestationSignature(payload: Omit<RuntimeAttestation, 'payload_hash' | 'signature'>): string {
+  return `local-attestation:${hashProtocolPayload(payload).slice('sha256:'.length)}`
 }

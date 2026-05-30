@@ -30,8 +30,24 @@ describe('runtime attestation v2', () => {
     })
     expect(attestation.attestation_id).toBe(attestation.id)
     expect(attestation.payload_hash).toMatch(/^sha256:/)
+    expect(attestation.signature).toMatch(/^local-attestation:/)
     expect(await provider.verify(attestation)).toBe(true)
     expect(await verifyRuntimeAttestation(attestation, provider)).toBe(true)
+  })
+
+  it('rejects tampered mock TEE attestation payload fields', async () => {
+    const provider = new MockTEEProvider()
+    const attestation = await provider.issue({
+      agentId: 'did:fides:agent',
+      codeHash: `sha256:${'a'.repeat(64)}`,
+      runtimeHash: `sha256:${'b'.repeat(64)}`,
+      policyHash: `sha256:${'c'.repeat(64)}`,
+    })
+
+    attestation.code_hash = `sha256:${'d'.repeat(64)}`
+
+    expect(await provider.verify(attestation)).toBe(false)
+    expect(await verifyRuntimeAttestation(attestation, provider)).toBe(false)
   })
 
   it('rejects expired attestations', async () => {

@@ -163,10 +163,11 @@ describe('CLI Commands', () => {
   });
 
   describe('v2 command surface', () => {
-    it('exposes registry, dht, evidence, demo, simulate, and invoke commands', async () => {
+    it('exposes registry, dht, evidence, attest, demo, simulate, and invoke commands', async () => {
       const { createRegistryCommand } = await import('../src/commands/registry.js');
       const { createDhtCommand } = await import('../src/commands/dht.js');
       const { createEvidenceCommand } = await import('../src/commands/evidence.js');
+      const { createAttestCommand } = await import('../src/commands/attest.js');
       const { createDemoCommand } = await import('../src/commands/demo.js');
       const { createSimulateCommand } = await import('../src/commands/simulate.js');
       const { createInvokeCommand } = await import('../src/commands/invoke.js');
@@ -174,6 +175,7 @@ describe('CLI Commands', () => {
       expect(createRegistryCommand().name()).toBe('registry');
       expect(createDhtCommand().name()).toBe('dht');
       expect(createEvidenceCommand().name()).toBe('evidence');
+      expect(createAttestCommand().name()).toBe('attest');
       expect(createDemoCommand().name()).toBe('demo');
       expect(createSimulateCommand().name()).toBe('simulate');
       expect(createInvokeCommand().name()).toBe('invoke');
@@ -1016,6 +1018,52 @@ describe('CLI Commands', () => {
       );
       expect(mockFetch).toHaveBeenNthCalledWith(3, 'http://agentd.test/revocations', expect.objectContaining({ method: 'GET' }));
       expect(mockFetch).toHaveBeenNthCalledWith(4, 'http://agentd.test/revocations/rev_1', expect.objectContaining({ method: 'GET' }));
+    });
+
+    it('attest runtime should issue a root v2 runtime attestation', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        attestation: { attestation_id: 'att_1' },
+        evidenceRefs: ['evt_1'],
+        authorityGranted: false,
+      }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createAttestCommand } = await import('../src/commands/attest.js');
+      const cmd = createAttestCommand();
+
+      await cmd.parseAsync([
+        'runtime',
+        '--agent',
+        'did:fides:agent',
+        '--code-hash',
+        'sha256:code',
+        '--runtime-hash',
+        'sha256:runtime',
+        '--policy-hash',
+        'sha256:policy',
+        '--enclave-measurement',
+        'sha256:measurement',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            codeHash: 'sha256:code',
+            runtimeHash: 'sha256:runtime',
+            policyHash: 'sha256:policy',
+            enclaveMeasurement: 'sha256:measurement',
+          }),
+        })
+      );
     });
 
     it('incident report should call agentd incidents', async () => {

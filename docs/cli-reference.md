@@ -18,6 +18,7 @@ Current implementation anchors:
 - `session`
 - `invoke`
 - `authorize`
+- `attest`
 - `runtime`
 - `revoke`
 - `incident`
@@ -60,6 +61,7 @@ agentd invoke --session-id sess_... --input invoice.json
 agentd invoke --dry-run did:fides:... --capability payments.prepare --input payment.json
 agentd session request did:fides:... --capability invoice.reconcile --requested-scopes invoice:read
 agentd session verify sess_...
+agentd attest runtime --agent did:fides:... --code-hash sha256:... --runtime-hash sha256:... --policy-hash sha256:...
 agentd incident report did:fides:... --severity high --category unauthorized_action --description "policy bypass"
 agentd incident list
 agentd incident inspect inc_...
@@ -111,6 +113,11 @@ authority by this command.
 agentd session endpoints. The older `session create` and `session revoke`
 commands remain available for the legacy signed `DelegationToken` `/v1`
 authority path.
+
+`attest runtime` uses the root v2 local agentd runtime attestation endpoint,
+emits attestation evidence, and does not grant authority by itself. The older
+`runtime attest` command remains a local MockTEE helper for standalone runtime
+package checks.
 
 `incident report/list/inspect/resolve` use the root v2 incident endpoints by
 default. Passing `--private-key-hex` keeps the legacy signed `/v1/incidents`

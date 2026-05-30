@@ -199,6 +199,7 @@ console.log({ authorityGrantedByDiscovery: candidates.authorityGranted, trust, r
 Recently verified commands:
 
 ```bash
+pnpm verify
 pnpm --filter @fides/sdk build
 pnpm --filter @fides/sdk test
 pnpm --filter @fides/cli lint
@@ -238,12 +239,13 @@ Observed manual smoke results:
   in Sardis.
 - Some legacy standalone service docs remain for compatibility and deployment
   reference.
-- Full `pnpm verify` was not run in the latest local verification pass.
+- Full verification has passed locally, but remote CI has not been checked in
+  the current session.
 - The branch has not been pushed in the current session.
 
 ## Future Hardening Steps
 
-- Run full `pnpm verify` before release.
+- Keep full `pnpm verify` green before release.
 - Push `fides-v2-agent-trust-fabric` and open/update a PR.
 - Normalize target package boundaries where the current monorepo is still
   consolidated.

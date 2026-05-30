@@ -342,7 +342,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: FIDES v2 policy decision. This never grants invocation authority by itself.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalPolicyEvaluationResponse"
 
   /approvals:
     post:
@@ -1674,6 +1678,74 @@ components:
         explanation:
           type: object
 
+    FidesPolicyDecision:
+      type: object
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.policy.decision.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        decision:
+          type: string
+          enum: [allow, deny, require_approval, dry_run_only, scope_limit, risk_limit]
+        principal_id:
+          type: string
+        requester_agent_id:
+          type: string
+        target_agent_id:
+          type: string
+        capability:
+          type: string
+        reason_codes:
+          type: array
+          items:
+            type: string
+        machine_reasons:
+          type: array
+          items:
+            type: object
+        human_reasons:
+          type: array
+          items:
+            type: string
+        required_controls:
+          type: array
+          items:
+            type: string
+            enum: [dry_run, human_approval, policy_proof, runtime_attestation, scope_limit, rate_limit]
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        issued_at:
+          type: string
+          format: date-time
+        evaluated_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalPolicyEvaluationResponse:
+      type: object
+      properties:
+        policy:
+          $ref: "#/components/schemas/FidesPolicyDecision"
+        trust:
+          type: object
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        requiresSessionGrant:
+          type: boolean
+        explanation:
+          type: string
+
     EvidenceSubmitRequest:
       type: object
       required: [actor, action]
@@ -2086,7 +2158,7 @@ components:
       properties:
         decision:
           type: string
-          enum: [allow, deny, approve-required]
+          enum: [allow, deny, approve-required, dry-run]
         explanation:
           type: string
         factors:

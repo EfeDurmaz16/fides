@@ -20,6 +20,12 @@ Current implementation anchors:
 
 Kill switch checks should run before policy grants or invocation execution.
 
+Signed kill switch verification has two levels. `verifySignedKillSwitchRule`
+checks the canonical Ed25519 proof. `verifySignedKillSwitchRuleIssuer`
+additionally requires `proof.verificationMethod` to equal the rule `issuer`.
+Authority paths should use the issuer-bound verifier so a valid signature from
+another DID cannot activate or disable emergency controls for the stated issuer.
+
 ## Evidence
 
 The local root daemon appends a hash-only `kill_switch.triggered` event when a

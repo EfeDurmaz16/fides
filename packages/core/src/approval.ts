@@ -167,6 +167,10 @@ export function verifySignedApprovalRequest(signed: SignedApprovalRequest): Prom
   return verifyObject(signed)
 }
 
+export async function verifySignedApprovalRequestIssuer(signed: SignedApprovalRequest): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedApprovalRequest(signed)
+}
+
 export function signApprovalDecision(
   decision: ApprovalDecision,
   privateKey: Uint8Array,
@@ -179,6 +183,10 @@ export function verifySignedApprovalDecision(signed: SignedApprovalDecision): Pr
   return verifyObject(signed)
 }
 
+export async function verifySignedApprovalDecisionIssuer(signed: SignedApprovalDecision): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedApprovalDecision(signed)
+}
+
 export function signKillSwitchRule(
   rule: KillSwitchRule,
   privateKey: Uint8Array,
@@ -189,4 +197,8 @@ export function signKillSwitchRule(
 
 export function verifySignedKillSwitchRule(signed: SignedKillSwitchRule): Promise<boolean> {
   return verifyObject(signed)
+}
+
+export async function verifySignedKillSwitchRuleIssuer(signed: SignedKillSwitchRule): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedKillSwitchRule(signed)
 }

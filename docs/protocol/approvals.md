@@ -21,6 +21,13 @@ constraints, evidence refs, timestamps, and canonical `payload_hash`. The
 decision issuer is the approver and the subject is the approval request id.
 Approval decisions are signed by the approver and may include constraints.
 
+Approval verification has two levels. `verifySignedApprovalRequest` and
+`verifySignedApprovalDecision` check canonical Ed25519 proofs.
+`verifySignedApprovalRequestIssuer` and
+`verifySignedApprovalDecisionIssuer` additionally require
+`proof.verificationMethod` to equal the payload `issuer`, which is the
+authority-safe check for approval workflows.
+
 ## Evidence
 
 The local root daemon appends hash-only evidence for approval lifecycle

@@ -384,6 +384,10 @@ paths:
                   heartbeatAt:
                     type: string
                     format: date-time
+                  authorityGranted:
+                    type: boolean
+                    enum: [false]
+                    description: Heartbeat updates presence only and do not grant invocation authority.
 
   /.well-known/fides.json:
     get:
@@ -771,10 +775,14 @@ components:
 
     MessageResponse:
       type: object
+      required: [message, authorityGranted]
       properties:
         message:
           type: string
           example: "Agent deregistered"
+        authorityGranted:
+          type: boolean
+          enum: [false]
 
     AgentProvider:
       type: object

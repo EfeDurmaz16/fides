@@ -218,7 +218,7 @@ agentsRouter.put('/:did/heartbeat', async (c) => {
       return c.json({ error: 'Agent not found' }, 404)
     }
 
-    return c.json({ status: 'online', heartbeatAt: now.toISOString() })
+    return c.json({ status: 'online', heartbeatAt: now.toISOString(), authorityGranted: false })
   } catch (error) {
     return c.json({ error: 'Internal server error' }, 500)
   }
@@ -238,7 +238,7 @@ agentsRouter.delete('/:did', async (c) => {
       return c.json({ error: 'Agent not found' }, 404)
     }
 
-    return c.json({ message: 'Agent deregistered' })
+    return c.json({ message: 'Agent deregistered', authorityGranted: false })
   } catch (error) {
     return c.json({ error: 'Internal server error' }, 500)
   }

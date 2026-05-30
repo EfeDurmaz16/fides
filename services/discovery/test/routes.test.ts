@@ -55,6 +55,11 @@ vi.mock('../src/db/client.js', () => {
         }),
       }),
     }),
+    delete: vi.fn().mockReturnValue({
+      where: vi.fn().mockReturnValue({
+        returning: vi.fn().mockResolvedValue([{ did: baseIdentity.did }]),
+      }),
+    }),
   }
 
   // Create a mock sql that supports template literal calls (e.g., sql`SELECT 1`)
@@ -140,7 +145,7 @@ describe('Discovery Service Routes', () => {
 
       const allowedRes = await app.fetch(allowedReq)
       expect(allowedRes.status).toBe(200)
-      expect(await allowedRes.json()).toMatchObject({ status: 'online' })
+      expect(await allowedRes.json()).toMatchObject({ status: 'online', authorityGranted: false })
     })
 
     it('fails closed when scoped discovery API keys are malformed', async () => {
@@ -434,6 +439,27 @@ describe('Discovery Service Routes', () => {
       expect(data.reasons).toContain('standalone_discovery_candidate')
       expect(data.reasons).toContain('signed_agent_card_not_verified_by_discovery_service')
       expect(data.reasons).toContain('discovery_does_not_grant_authority')
+    })
+  })
+
+  describe('DELETE /agents/:did', () => {
+    it('does not grant authority when deregistering an agent', async () => {
+      const { db } = await import('../src/db/client.js')
+      vi.mocked(db.delete).mockReturnValueOnce({
+        where: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([{ did: TEST_DID }]),
+        }),
+      } as any)
+
+      const res = await app.fetch(new Request(`http://localhost/agents/${encodeURIComponent(TEST_DID)}`, {
+        method: 'DELETE',
+      }))
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({
+        message: 'Agent deregistered',
+        authorityGranted: false,
+      })
     })
   })
 

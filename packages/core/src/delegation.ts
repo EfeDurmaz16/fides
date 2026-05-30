@@ -32,6 +32,24 @@ export interface DelegationToken {
 
 export type SignedDelegationToken = SignedObject<DelegationToken>
 
+export interface DelegationTokenV2 {
+  schema_version: 'fides.delegation_token.v1'
+  id: string
+  issuer: string
+  subject: string
+  delegator: string
+  delegatee: string
+  capabilities: string[]
+  constraints: Record<string, unknown>
+  issued_at: string
+  expires_at: string
+  nonce: string
+  audience: string[]
+  payload_hash: string
+}
+
+export type SignedDelegationTokenV2 = SignedObject<DelegationTokenV2>
+
 export interface SessionGrant {
   id: string
   token: DelegationToken
@@ -75,6 +93,17 @@ export interface DelegationInput {
   audience?: string[]
 }
 
+export interface DelegationTokenV2Input {
+  delegator: string
+  delegatee: string
+  capabilities: string[]
+  constraints?: Record<string, unknown>
+  expiresAt: string
+  audience?: string[]
+  issuedAt?: string
+  nonce?: string
+}
+
 export interface SessionGrantV2Input {
   requesterAgentId: string
   targetAgentId: string
@@ -106,6 +135,28 @@ export function createDelegationToken(input: DelegationInput): DelegationToken {
     nonce: crypto.randomUUID(),
     audience: input.audience,
     signature: '',
+  }
+}
+
+export function createDelegationTokenV2(input: DelegationTokenV2Input): DelegationTokenV2 {
+  const payload = {
+    schema_version: 'fides.delegation_token.v1' as const,
+    id: crypto.randomUUID(),
+    issuer: input.delegator,
+    subject: input.delegatee,
+    delegator: input.delegator,
+    delegatee: input.delegatee,
+    capabilities: input.capabilities,
+    constraints: input.constraints ?? {},
+    issued_at: input.issuedAt ?? new Date().toISOString(),
+    expires_at: input.expiresAt,
+    nonce: input.nonce ?? crypto.randomUUID(),
+    audience: input.audience ?? [input.delegatee],
+  }
+
+  return {
+    ...payload,
+    payload_hash: hashProtocolPayload(payload),
   }
 }
 
@@ -198,6 +249,33 @@ export function validateDelegationToken(token: DelegationToken): { valid: boolea
   return { valid: errors.length === 0, errors }
 }
 
+export function validateDelegationTokenV2(token: DelegationTokenV2, now: Date = new Date()): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+  const { payload_hash: _, ...payload } = token
+
+  if (token.schema_version !== 'fides.delegation_token.v1') errors.push('DelegationToken.schema_version is invalid')
+  if (!token.id) errors.push('DelegationToken.id is required')
+  if (!token.issuer) errors.push('DelegationToken.issuer is required')
+  if (!token.subject) errors.push('DelegationToken.subject is required')
+  if (!token.delegator) errors.push('DelegationToken.delegator is required')
+  if (!token.delegatee) errors.push('DelegationToken.delegatee is required')
+  if (token.issuer && token.delegator && token.issuer !== token.delegator) {
+    errors.push('DelegationToken.issuer must match DelegationToken.delegator')
+  }
+  if (token.subject && token.delegatee && token.subject !== token.delegatee) {
+    errors.push('DelegationToken.subject must match DelegationToken.delegatee')
+  }
+  if (!token.capabilities || token.capabilities.length === 0) errors.push('DelegationToken.capabilities must not be empty')
+  if (!token.issued_at) errors.push('DelegationToken.issued_at is required')
+  if (!token.expires_at) errors.push('DelegationToken.expires_at is required')
+  if (token.expires_at && new Date(token.expires_at) <= now) errors.push('DelegationToken is expired')
+  if (!token.nonce) errors.push('DelegationToken.nonce is required')
+  if (!token.audience || token.audience.length === 0) errors.push('DelegationToken.audience must not be empty')
+  if (token.payload_hash !== hashProtocolPayload(payload)) errors.push('DelegationToken.payload_hash mismatch')
+
+  return { valid: errors.length === 0, errors }
+}
+
 export function validateSessionGrantV2(session: SessionGrantV2): { valid: boolean; errors: string[] } {
   const errors: string[] = []
   if (session.schema_version !== 'fides.session_grant.v1') errors.push('SessionGrant.schema_version is invalid')
@@ -240,6 +318,22 @@ export function validateSessionGrantV2(session: SessionGrantV2): { valid: boolea
   if (!session.expires_at) errors.push('SessionGrant.expires_at is required')
   if (session.expires_at && isSessionGrantV2Expired(session)) errors.push('SessionGrant is expired')
   return { valid: errors.length === 0, errors }
+}
+
+export function signDelegationTokenV2(
+  token: DelegationTokenV2,
+  privateKey: Uint8Array,
+  verificationMethod: string
+): Promise<SignedDelegationTokenV2> {
+  return signObject(token, privateKey, { verificationMethod, proofPurpose: 'delegation' })
+}
+
+export function verifySignedDelegationTokenV2(signed: SignedDelegationTokenV2): Promise<boolean> {
+  return verifyObject(signed)
+}
+
+export async function verifySignedDelegationTokenV2Issuer(signed: SignedDelegationTokenV2): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedDelegationTokenV2(signed)
 }
 
 export function signSessionGrantV2(

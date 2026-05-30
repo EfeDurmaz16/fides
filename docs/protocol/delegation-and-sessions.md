@@ -8,6 +8,38 @@ Current implementation anchors:
 - `packages/core/src/session-store.ts`
 - `packages/core/src/invocation.ts`
 
+## DelegationToken Fields
+
+`DelegationTokenV2` is the canonical FIDES v2 delegation payload. Legacy
+camelCase `DelegationToken` helpers remain for compatibility, but new authority
+paths should use `DelegationTokenV2` and `SignedDelegationTokenV2`.
+
+- `schema_version`
+- `id`
+- `issuer`
+- `subject`
+- `delegator`
+- `delegatee`
+- `capabilities`
+- `constraints`
+- `issued_at`
+- `expires_at`
+- `nonce`
+- `audience`
+- `payload_hash`
+- canonical signature
+
+`issuer` and `delegator` are the same DID. `subject` and `delegatee` are the
+same DID. `payload_hash` is computed with the shared canonical JSON digest over
+the unsigned delegation payload. `signDelegationTokenV2` signs with the shared
+canonical object signing model and proof purpose `delegation`.
+
+Signed delegation verification has two levels. `verifySignedDelegationTokenV2`
+checks the canonical Ed25519 proof. `verifySignedDelegationTokenV2Issuer` also
+requires `proof.verificationMethod` to equal the delegation `issuer`. Authority
+paths should use the issuer-bound verifier so a valid signature from a different
+DID cannot grant delegation authority.
+
 ## SessionGrant Fields
 
 - `id`

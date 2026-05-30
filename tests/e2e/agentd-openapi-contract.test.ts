@@ -111,6 +111,11 @@ describe('Agentd OpenAPI contract', () => {
     expect(openApi).toContain('ApiKeyAuth:')
   })
 
+  it('documents runtime evidence privacy modes', () => {
+    expect(openApi).toContain('enum: [public, private, redacted, hash_only]')
+    expect(openApi).not.toContain('enum: [public, private, redacted, hash-only]')
+  })
+
   it('documents API key auth on mutating v1 operations', () => {
     const mutatingV1Operations = [
       'post /v1/policy/evaluate',

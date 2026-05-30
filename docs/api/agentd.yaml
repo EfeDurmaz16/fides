@@ -897,7 +897,7 @@ components:
       properties:
         level:
           type: string
-          enum: [public, private, redacted, hash-only]
+          enum: [public, private, redacted, hash_only]
         redactionKey:
           type: string
 

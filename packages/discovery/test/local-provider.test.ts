@@ -48,6 +48,46 @@ describe('LocalDiscoveryProvider', () => {
     await expect(local.resolve(card.id)).resolves.toMatchObject({ id: card.id })
   })
 
+  it('returns verified discovery candidates for persisted signed AgentCards', async () => {
+    const { agent, card } = await signedCard()
+    card.capabilities = [{
+      id: 'invoice.reconcile',
+      namespace: 'invoice',
+      action: 'reconcile',
+      resource: 'invoice',
+      inputSchema: { type: 'object' },
+      outputSchema: { type: 'object' },
+      riskClass: 'medium',
+      requiredScopes: ['read:invoices'],
+      supportedControls: ['dry_run', 'human_approval'],
+      dryRunSupported: true,
+      humanApprovalSupported: true,
+      policyProofSupported: false,
+    }]
+    const signed = await signAgentCard(card, agent.privateKey, agent.identity.did)
+    const dir = mkdtempSync(join(tmpdir(), 'fides-local-provider-'))
+    tempDirs.push(dir)
+    const storePath = join(dir, 'local-agents.json')
+    const local = new LocalDiscoveryProvider({ storePath })
+
+    await local.register(signed)
+
+    const reloaded = new LocalDiscoveryProvider({ storePath })
+    const candidates = await reloaded.discover({
+      schema_version: 'fides.discovery_query.v1',
+      id: 'query_1',
+      capability: 'invoice.reconcile',
+    })
+
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0]).toMatchObject({
+      agentId: card.id,
+      capability: 'invoice.reconcile',
+      verified: true,
+      authority: 'candidate_only',
+    })
+  })
+
   it('rejects AgentCards not signed by the advertised agent identity', async () => {
     const { card } = await signedCard()
     const attacker = await createAgentIdentity()

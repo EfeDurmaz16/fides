@@ -624,14 +624,22 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Incident recorded; open incidents require policy review for matching target agents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIncidentRecordResponse"
     get:
       operationId: listLocalIncidents
       tags: [Authority]
       summary: List local incidents
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local incident records and open subset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIncidentListResponse"
 
   /incidents/{id}:
     get:
@@ -642,7 +650,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local incident record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIncidentRecordResponse"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -659,7 +671,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Resolved local incident record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalIncidentRecordResponse"
 
   /killswitch:
     post:
@@ -2265,6 +2281,100 @@ components:
           type: boolean
         record:
           $ref: "#/components/schemas/RevocationRecordV2"
+
+    IncidentRecordV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - reporter
+        - target_agent_id
+        - severity
+        - category
+        - description
+        - evidence_refs
+        - resolution_status
+        - trust_penalty
+        - reputation_penalty
+        - created_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.incident.record.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        reporter:
+          type: string
+        target_agent_id:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        category:
+          type: string
+          enum:
+            - policy_violation
+            - data_exfiltration
+            - malicious_output
+            - sandbox_escape
+            - unauthorized_action
+            - prompt_injection_failure
+            - payment_error
+            - suspicious_behavior
+        description:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        resolution_status:
+          type: string
+          enum: [open, resolved, dismissed, false_positive]
+        trust_penalty:
+          type: number
+        reputation_penalty:
+          type: number
+        created_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalIncidentRecordResponse:
+      type: object
+      required: [record]
+      properties:
+        record:
+          $ref: "#/components/schemas/IncidentRecordV2"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        explanation:
+          type: string
+
+    LocalIncidentListResponse:
+      type: object
+      required: [records, open]
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentRecordV2"
+        open:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentRecordV2"
 
     EvidenceSubmitRequest:
       type: object

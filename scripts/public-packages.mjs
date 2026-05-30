@@ -19,6 +19,8 @@ export const publicPackageDirs = [
   'packages/evidence',
   'packages/revocation',
   'packages/incidents',
+  'packages/adapters',
+  'packages/guard',
   'packages/daemon',
   'packages/sdk',
   'packages/cli',

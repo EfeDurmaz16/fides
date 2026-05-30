@@ -21,6 +21,7 @@ tags:
   - name: Health
   - name: Identity
   - name: Card
+  - name: Discovery
   - name: Trust
   - name: Policy
   - name: Evidence
@@ -580,6 +581,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/KillSwitchResponse"
 
+  /discover/federation:
+    post:
+      operationId: discoverFederation
+      tags: [Discovery]
+      summary: Discover candidates through federated registry peers
+      description: |
+        Queries local mock federation peers for capability candidates.
+        Federation expands discovery only; returned candidates are marked
+        `authority: candidate_only` and never grant invocation authority.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiscoveryQuery"
+      responses:
+        "200":
+          description: Federation candidates and rejected candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryResponse"
+
   /metrics:
     get:
       operationId: getMetrics
@@ -696,6 +720,76 @@ components:
         reason:
           type: string
           enum: [invalid-domain, invalid-did, record-not-found, resolver-error]
+
+    DiscoveryQuery:
+      type: object
+      properties:
+        capability:
+          type: string
+          example: invoice.reconcile
+        constraints:
+          type: object
+        supported_versions:
+          type: array
+          items:
+            type: string
+          example: ["fides.v2.0"]
+        required_versions:
+          type: array
+          items:
+            type: string
+          example: ["fides.v2.0"]
+        limit:
+          type: integer
+          minimum: 1
+
+    DiscoveryCandidate:
+      type: object
+      properties:
+        provider:
+          type: string
+        agentId:
+          type: string
+        capability:
+          type: string
+        authority:
+          type: string
+          enum: [candidate_only]
+        verified:
+          type: boolean
+        rank:
+          type: number
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        explanations:
+          type: array
+          items:
+            type: string
+
+    DiscoveryResponse:
+      type: object
+      required: [authorityGranted]
+      properties:
+        provider:
+          type: string
+          example: federation
+        capability:
+          type: string
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscoveryCandidate"
+        rejectedCandidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscoveryCandidate"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        explanation:
+          type: string
 
     CardResponse:
       type: object

@@ -44,6 +44,14 @@ and dry-run mode before policy preflight. `InvocationRequest` includes `id`,
 optional schema hashes, `issued_at`, and `payload_hash`; the subject is the
 target agent id.
 
+Core exposes `validateInvocationRequestAgainstSessionGrant` so SDKs, daemons,
+and adapters can reject requests that mutate the signed request payload, swap
+session ids, change requester/target/principal identity, request a different
+capability, exceed granted scopes, use an expired grant, or target an audience
+outside the grant. This keeps discovery, trust, and policy separate from actual
+authority: invocation authority is the scoped `SessionGrant`, not the discovered
+AgentCard or DHT/registry pointer.
+
 The daemon validates the request body against the capability input schema before
 execution and validates generated outputs against the capability output schema
 before returning a successful result. The daemon then emits hash-only evidence

@@ -1,7 +1,7 @@
 import { signObject, verifyObject, type SignedObject } from './canonical-signer.js'
 import { hashProtocolPayload } from './protocol.js'
 import type { JSONSchema } from './capability.js'
-import type { SessionGrantV2 } from './delegation.js'
+import { isSessionGrantV2Expired, type SessionGrantV2 } from './delegation.js'
 
 export type InvocationStatus =
   | 'dry_run'
@@ -89,6 +89,12 @@ export interface SchemaValidationResult {
   errors: string[]
 }
 
+export interface InvocationGrantValidationInput {
+  request: InvocationRequest
+  sessionGrant: SessionGrantV2
+  now?: Date
+}
+
 export function createInvocationRequest(input: InvocationRequestInput): InvocationRequest {
   const payload = {
     schema_version: 'fides.invocation.request.v1' as const,
@@ -165,6 +171,57 @@ export function evaluateInvocationPreflight(input: InvocationPreflightInput): In
         reason_codes: input.policyDecision.reason_codes,
       }
   }
+}
+
+export function validateInvocationRequestAgainstSessionGrant(
+  input: InvocationGrantValidationInput
+): SchemaValidationResult {
+  const { request, sessionGrant } = input
+  const errors: string[] = []
+  const { payload_hash: _, ...requestPayload } = request
+
+  if (request.schema_version !== 'fides.invocation.request.v1') {
+    errors.push('InvocationRequest.schema_version is invalid')
+  }
+  if (request.payload_hash !== hashProtocolPayload(requestPayload)) {
+    errors.push('InvocationRequest.payload_hash mismatch')
+  }
+  if (isSessionGrantV2Expired(sessionGrant, input.now)) {
+    errors.push('SessionGrant is expired')
+  }
+  if (request.session_id !== sessionGrant.session_id) {
+    errors.push('InvocationRequest.session_id does not match SessionGrant')
+  }
+  if (request.issuer !== sessionGrant.requester_agent_id) {
+    errors.push('InvocationRequest.issuer must match SessionGrant.requester_agent_id')
+  }
+  if (request.requester_agent_id !== sessionGrant.requester_agent_id) {
+    errors.push('InvocationRequest.requester_agent_id does not match SessionGrant')
+  }
+  if (request.target_agent_id !== sessionGrant.target_agent_id) {
+    errors.push('InvocationRequest.target_agent_id does not match SessionGrant')
+  }
+  if (request.subject !== sessionGrant.target_agent_id) {
+    errors.push('InvocationRequest.subject must match SessionGrant.target_agent_id')
+  }
+  if (request.principal_id !== sessionGrant.principal_id) {
+    errors.push('InvocationRequest.principal_id does not match SessionGrant')
+  }
+  if (request.capability !== sessionGrant.capability) {
+    errors.push('InvocationRequest.capability does not match SessionGrant')
+  }
+  if (!sessionGrant.audience.includes(request.target_agent_id)) {
+    errors.push('SessionGrant audience does not include InvocationRequest.target_agent_id')
+  }
+
+  const grantedScopes = new Set(sessionGrant.scopes)
+  for (const scope of request.scopes) {
+    if (!grantedScopes.has(scope)) {
+      errors.push(`InvocationRequest.scope ${scope} is not granted by SessionGrant`)
+    }
+  }
+
+  return { valid: errors.length === 0, errors }
 }
 
 export function validateJsonSchemaValue(schema: JSONSchema | undefined, value: unknown): SchemaValidationResult {

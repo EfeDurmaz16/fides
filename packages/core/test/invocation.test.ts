@@ -7,6 +7,7 @@ import {
   evaluateInvocationPreflight,
   signInvocationRequest,
   signInvocationResult,
+  validateInvocationRequestAgainstSessionGrant,
   validateJsonSchemaValue,
   verifySignedInvocationRequest,
   verifySignedInvocationResult,
@@ -69,6 +70,45 @@ describe('invocation protocol objects', () => {
       policyDecision: { decision: 'require_approval', reason_codes: ['APPROVAL_REQUIRED'] },
     })
     expect(pending.status).toBe('approval_required')
+  })
+
+  it('validates invocation requests against scoped SessionGrants', async () => {
+    const grant = await signedGrant()
+    const request = createInvocationRequest({
+      issuer: 'did:fides:requester',
+      sessionGrant: grant.payload,
+      input: { invoiceId: 'inv_123' },
+    })
+
+    expect(validateInvocationRequestAgainstSessionGrant({
+      request,
+      sessionGrant: grant.payload,
+    })).toEqual({ valid: true, errors: [] })
+  })
+
+  it('rejects invocation requests that exceed or mutate the SessionGrant', async () => {
+    const grant = await signedGrant()
+    const request = createInvocationRequest({
+      issuer: 'did:fides:requester',
+      sessionGrant: grant.payload,
+      input: { invoiceId: 'inv_123' },
+    })
+
+    const result = validateInvocationRequestAgainstSessionGrant({
+      request: {
+        ...request,
+        capability: 'payments.execute',
+        scopes: ['invoice:read', 'payments:execute'],
+      },
+      sessionGrant: grant.payload,
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual(expect.arrayContaining([
+      'InvocationRequest.payload_hash mismatch',
+      'InvocationRequest.capability does not match SessionGrant',
+      'InvocationRequest.scope payments:execute is not granted by SessionGrant',
+    ]))
   })
 
   it('creates and verifies signed invocation results', async () => {

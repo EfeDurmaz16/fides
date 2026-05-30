@@ -1337,6 +1337,8 @@ describe('Agentd Service Routes', () => {
       expect(attestation.status).toBe(201)
       const attestationData = await attestation.json()
       expect(attestationData.attestation.agent_id).toBe(identity.did)
+      expect(attestationData.authorityGranted).toBe(false)
+      expect(attestationData.evidenceRefs).toHaveLength(1)
 
       const shown = await app.request(`/attestations/${attestationData.attestation.attestation_id}`)
       expect(shown.status).toBe(200)
@@ -1344,7 +1346,10 @@ describe('Agentd Service Routes', () => {
 
       const verified = await app.request(`/attestations/${attestationData.attestation.attestation_id}/verify`, { method: 'POST' })
       expect(verified.status).toBe(200)
-      expect((await verified.json()).valid).toBe(true)
+      const verifiedData = await verified.json()
+      expect(verifiedData.valid).toBe(true)
+      expect(verifiedData.authorityGranted).toBe(false)
+      expect(verifiedData.evidenceRefs).toHaveLength(1)
 
       const session = await app.request('/sessions', {
         method: 'POST',
@@ -1360,6 +1365,46 @@ describe('Agentd Service Routes', () => {
       })
       expect(session.status).toBe(201)
       expect((await session.json()).policy.reason_codes).toContain('POLICY_ALLOWED')
+
+      const evidence = await app.request('/evidence')
+      const evidenceData = await evidence.json()
+      expect(evidenceData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          event_id: attestationData.evidenceRefs[0],
+          type: 'attestation.issued',
+          subject: identity.did,
+          privacy_mode: 'hash_only',
+        }),
+        expect.objectContaining({
+          event_id: verifiedData.evidenceRefs[0],
+          type: 'attestation.verified',
+          subject: identity.did,
+          privacy_mode: 'hash_only',
+        }),
+      ]))
+    })
+
+    it('records failed attestation verification evidence for missing attestations', async () => {
+      const verified = await app.request('/attestations/att_missing/verify', { method: 'POST' })
+      expect(verified.status).toBe(404)
+      const verifiedData = await verified.json()
+      expect(verifiedData).toMatchObject({
+        id: 'att_missing',
+        valid: false,
+        authorityGranted: false,
+      })
+      expect(verifiedData.evidenceRefs).toHaveLength(1)
+
+      const evidence = await app.request('/evidence')
+      const evidenceData = await evidence.json()
+      expect(evidenceData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          event_id: verifiedData.evidenceRefs[0],
+          type: 'attestation.failed',
+          subject: 'att_missing',
+          privacy_mode: 'hash_only',
+        }),
+      ]))
     })
 
     it('serves local DHT publish and find endpoints', async () => {

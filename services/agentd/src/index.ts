@@ -2102,8 +2102,23 @@ app.post('/attestations', async (c) => {
         : undefined,
   })
   localRuntimeAttestations.set(attestation.attestation_id, attestation)
+  const event = appendRootEvidence({
+    type: 'attestation.issued',
+    actor: agentId,
+    subject: agentId,
+    output: attestation,
+    decision: 'issued',
+    privacy_mode: 'hash_only',
+    metadata: {
+      attestation_id: attestation.attestation_id,
+      provider: attestation.provider,
+      code_hash: attestation.code_hash,
+      runtime_hash: attestation.runtime_hash,
+      policy_hash: attestation.policy_hash,
+    },
+  })
 
-  return c.json({ attestation }, 201)
+  return c.json({ attestation, evidenceRefs: [event.event_id], authorityGranted: false }, 201)
 })
 
 app.get('/attestations/:id', (c) => {
@@ -2119,10 +2134,30 @@ app.post('/attestations/:id/verify', async (c) => {
   const id = c.req.param('id')
   const attestation = localRuntimeAttestations.get(id)
   if (!attestation) {
-    return c.json({ id, valid: false, error: 'attestation not found' }, 404)
+    const failed = appendRootEvidence({
+      type: 'attestation.failed',
+      actor: 'did:fides:agentd:local',
+      subject: id,
+      decision: 'not_found',
+      privacy_mode: 'hash_only',
+      metadata: { attestation_id: id },
+    })
+    return c.json({ id, valid: false, error: 'attestation not found', evidenceRefs: [failed.event_id], authorityGranted: false }, 404)
   }
   const valid = await runtimeAttestationProvider.verify(attestation)
-  return c.json({ id, valid, attestation })
+  const event = appendRootEvidence({
+    type: valid ? 'attestation.verified' : 'attestation.failed',
+    actor: attestation.agent_id,
+    subject: attestation.agent_id,
+    output: { valid, attestation_id: id },
+    decision: valid ? 'verified' : 'failed',
+    privacy_mode: 'hash_only',
+    metadata: {
+      attestation_id: id,
+      provider: attestation.provider,
+    },
+  })
+  return c.json({ id, valid, attestation, evidenceRefs: [event.event_id], authorityGranted: false })
 })
 
 // ─── FIDES v2 Local API Aliases ───────────────────────────────────

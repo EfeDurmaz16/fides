@@ -20,3 +20,15 @@ Current implementation anchors:
 ## Policy Rule
 
 High-risk capabilities require valid runtime attestation or explicit approval. Missing attestation should not deny low-risk actions by default.
+
+## Evidence
+
+Runtime attestation lifecycle actions are evidence-producing. Local `agentd`
+appends hash-only events for:
+
+- `attestation.issued` when `POST /attestations` creates a MockTEE attestation.
+- `attestation.verified` when `POST /attestations/:id/verify` succeeds.
+- `attestation.failed` when verification fails or the attestation is missing.
+
+These evidence events do not grant authority. They provide audit references
+that policy and trust decisions can cite later.

@@ -224,4 +224,6 @@ resolved with `POST /incidents/:id/resolve`.
 `POST /attestations` issues a local FIDES v2 runtime attestation through the
 MockTEE provider. `POST /attestations/:id/verify` verifies provider, expiry,
 and hash shape. Root `POST /sessions` can consume a valid `attestationId` as
-runtime attestation evidence for high-risk capability policy.
+runtime attestation evidence for high-risk capability policy. Attestation
+issuance and verification append `attestation.issued`, `attestation.verified`,
+or `attestation.failed` evidence events and return `evidenceRefs`.

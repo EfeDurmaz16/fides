@@ -1913,12 +1913,15 @@ components:
 
     LocalDhtPublishResponse:
       type: object
-      required: [accepted, pointer]
+      required: [accepted, pointer, authorityGranted]
       properties:
         accepted:
           type: boolean
         pointer:
           $ref: "#/components/schemas/LocalDiscoveryRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
 
     LocalDhtFindResponse:
       type: object
@@ -1947,12 +1950,15 @@ components:
 
     LocalRegistryPublishResponse:
       type: object
-      required: [accepted, record]
+      required: [accepted, record, authorityGranted]
       properties:
         accepted:
           type: boolean
         record:
           $ref: "#/components/schemas/LocalDiscoveryRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
 
     LocalRegistryIndexResponse:
       type: object
@@ -1984,12 +1990,15 @@ components:
 
     LocalRelayRegisterResponse:
       type: object
-      required: [accepted, record]
+      required: [accepted, record, authorityGranted]
       properties:
         accepted:
           type: boolean
         record:
           $ref: "#/components/schemas/LocalDiscoveryRecord"
+        authorityGranted:
+          type: boolean
+          enum: [false]
 
     WellKnownFidesResponse:
       type: object

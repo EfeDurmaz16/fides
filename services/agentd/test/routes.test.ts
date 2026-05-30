@@ -1858,6 +1858,7 @@ describe('Agentd Service Routes', () => {
         }),
       })
       expect(publish.status).toBe(201)
+      expect((await publish.json()).authorityGranted).toBe(false)
 
       const find = await app.request('/dht/find?capability=invoice.reconcile')
       expect(find.status).toBe(200)
@@ -1935,6 +1936,7 @@ describe('Agentd Service Routes', () => {
       })
       expect(publish.status).toBe(201)
       const published = await publish.json()
+      expect(published.authorityGranted).toBe(false)
       expect(published.pointer).toMatchObject({
         schema_version: 'fides.dht.pointer.v1',
         record_type: 'capability_pointer',
@@ -2063,6 +2065,7 @@ describe('Agentd Service Routes', () => {
       })
       expect(publish.status).toBe(201)
       const publishedRegistry = await publish.json()
+      expect(publishedRegistry.authorityGranted).toBe(false)
       expect(publishedRegistry.record).toMatchObject({
         agentId: identity.did,
         agentCardUrl: `local://agent-cards/${encodeURIComponent(identity.did)}`,
@@ -2147,6 +2150,7 @@ describe('Agentd Service Routes', () => {
       })
       expect(relayRegister.status).toBe(201)
       const relayRegistration = await relayRegister.json()
+      expect(relayRegistration.authorityGranted).toBe(false)
       expect(relayRegistration.record).toMatchObject({
         agentId: identity.did,
         agentCardUrl: `local://agent-cards/${encodeURIComponent(identity.did)}`,

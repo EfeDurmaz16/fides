@@ -2625,7 +2625,7 @@ app.post('/dht/publish', async (c) => {
       source: 'agentd-signed-dht-pointer',
     }
     localDhtPointers.push(storedPointer)
-    return c.json({ accepted: true, pointer: storedPointer }, 201)
+    return c.json({ accepted: true, pointer: storedPointer, authorityGranted: false }, 201)
   }
 
   const pointer = {
@@ -2642,7 +2642,7 @@ app.post('/dht/publish', async (c) => {
     source: 'agentd-in-memory-dht',
   }
   localDhtPointers.push(pointer)
-  return c.json({ accepted: true, pointer }, 201)
+  return c.json({ accepted: true, pointer, authorityGranted: false }, 201)
 })
 
 async function findLocalDhtPointers(capability?: string) {
@@ -2854,7 +2854,7 @@ app.post('/registry/publish', async (c) => {
     return c.json({ error: 'registered local AgentCard not found', cardId }, 404)
   }
   localRegistryRecords.set(String(record.id), record)
-  return c.json({ accepted: true, record }, 201)
+  return c.json({ accepted: true, record, authorityGranted: false }, 201)
 })
 
 app.post('/registry/search', async (c) => {
@@ -2983,7 +2983,7 @@ app.post('/relay/register', async (c) => {
     return c.json({ error: 'registered local agent not found', agentId }, 404)
   }
   localRelayRecords.set(agentId, record)
-  return c.json({ accepted: true, record }, 201)
+  return c.json({ accepted: true, record, authorityGranted: false }, 201)
 })
 
 app.post('/relay/discover', async (c) => {

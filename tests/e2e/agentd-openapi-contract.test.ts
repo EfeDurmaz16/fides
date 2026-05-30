@@ -240,6 +240,13 @@ describe('Agentd OpenAPI contract', () => {
     ])
   })
 
+  it('documents discovery publish and presence writes as non-authority responses', () => {
+    for (const schemaName of ['LocalDhtPublishResponse', 'LocalRegistryPublishResponse', 'LocalRelayRegisterResponse']) {
+      expect(extractSchemaRequired(openApi, schemaName), schemaName).toContain('authorityGranted')
+      expect(extractSchemaPropertyBlock(openApi, schemaName, 'authorityGranted'), schemaName).toContain('enum: [false]')
+    }
+  })
+
   it('keeps root v2 runtime routes documented in OpenAPI', () => {
     const runtimeOperations = extractAgentdRuntimeRoutes(agentdSource)
       .filter(operation => operation.path.startsWith('/'))
@@ -382,17 +389,26 @@ function extractSchemaRequired(source: string, schemaName: string): string[] {
 }
 
 function extractNestedRequired(source: string, schemaName: string, propertyName: string): string[] {
+  const property = extractSchemaPropertyBlock(source, schemaName, propertyName)
+  for (const line of property.split('\n')) {
+    const match = line.match(/^ {10}required: \[(.*)\]$/)
+    if (match) return match[1].split(',').map(item => item.trim()).filter(Boolean)
+  }
+  throw new Error(`OpenAPI schema ${schemaName}.${propertyName} does not define a required array`)
+}
+
+function extractSchemaPropertyBlock(source: string, schemaName: string, propertyName: string): string {
   const schema = extractSchemaBlock(source, schemaName)
   const lines = schema.split('\n')
   const propertyStart = lines.findIndex(line => line === `        ${propertyName}:`)
   if (propertyStart === -1) throw new Error(`OpenAPI schema ${schemaName} does not define ${propertyName}`)
 
+  const propertyLines = []
   for (const line of lines.slice(propertyStart + 1)) {
     if (line.match(/^        [A-Za-z0-9_]+:$/)) break
-    const match = line.match(/^ {10}required: \[(.*)\]$/)
-    if (match) return match[1].split(',').map(item => item.trim()).filter(Boolean)
+    propertyLines.push(line)
   }
-  throw new Error(`OpenAPI schema ${schemaName}.${propertyName} does not define a required array`)
+  return propertyLines.join('\n')
 }
 
 function extractSchemaBlock(source: string, schemaName: string): string {

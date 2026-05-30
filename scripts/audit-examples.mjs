@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -73,6 +74,31 @@ if (paymentAgent?.capabilities.find(entry => entry.id === 'payments.execute')?.d
 
 if (!paymentAgent?.authorityNotes.some(note => note.includes('Sardis-specific'))) {
   errors.push('payment-agent must document that execution remains Sardis-specific')
+}
+
+const forbiddenLegacyCapabilities = [
+  'calendar:create',
+  'calendar:list',
+  'calendar:delete',
+  'invoice:create',
+  'invoice:approve',
+  'invoice:list',
+  'payment:charge',
+  'payment:refund',
+  'payment:status',
+  'email:send',
+]
+const exampleSourceFiles = readdirSync(resolve(root, 'examples'))
+  .filter(file => file.endsWith('.ts'))
+  .filter(file => file !== 'agent-catalog.ts')
+
+for (const file of exampleSourceFiles) {
+  const source = readFileSync(resolve(root, 'examples', file), 'utf8')
+  for (const capability of forbiddenLegacyCapabilities) {
+    if (source.includes(capability)) {
+      errors.push(`${file} still references legacy capability ${capability}`)
+    }
+  }
 }
 
 if (errors.length > 0) {

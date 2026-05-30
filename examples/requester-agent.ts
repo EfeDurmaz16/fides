@@ -50,17 +50,17 @@ async function main() {
   calendarAgent.metadata = { name: 'Calendar Service' }
   const calendarCapabilities: CapabilityDescriptor[] = [
     {
-      id: 'calendar:create',
-      name: 'Create Event',
-      description: 'Create a calendar event',
+      id: 'calendar.schedule',
+      name: 'Schedule Event',
+      description: 'Schedule a calendar event',
       inputSchema: { type: 'object', properties: { title: { type: 'string' }, date: { type: 'string' } }, required: ['title', 'date'] },
       outputSchema: { type: 'object', properties: { eventId: { type: 'string' } } },
-      riskLevel: 'medium',
+      riskLevel: 'low',
       requiresApproval: false,
       requiresRuntimeAttestation: false,
     },
     {
-      id: 'calendar:list',
+      id: 'calendar.read',
       name: 'List Events',
       description: 'List calendar events',
       inputSchema: { type: 'object', properties: { start: { type: 'string' }, end: { type: 'string' } } },
@@ -75,7 +75,7 @@ async function main() {
     identity: calendarAgent,
     capabilities: calendarCapabilities,
     endpoints: [
-      { url: 'https://calendar.example.com/fides', protocol: 'https', capabilities: ['calendar:create', 'calendar:list'], auth: 'signature' },
+      { url: 'https://calendar.example.com/fides', protocol: 'https', capabilities: ['calendar.schedule', 'calendar.read'], auth: 'signature' },
     ],
     policies: [{ requiresRuntimeAttestation: false, requiresApproval: false, minTrustScore: 0.5 }],
     createdAt: new Date().toISOString(),
@@ -87,24 +87,14 @@ async function main() {
   paymentAgent.metadata = { name: 'Payment Service' }
   const paymentCapabilities: CapabilityDescriptor[] = [
     {
-      id: 'payment:charge',
-      name: 'Charge Payment',
-      description: 'Process a payment charge',
+      id: 'payments.prepare',
+      name: 'Prepare Payment',
+      description: 'Prepare a payment plan without executing funds movement',
       inputSchema: { type: 'object', properties: { amount: { type: 'number' }, currency: { type: 'string' } }, required: ['amount', 'currency'] },
-      outputSchema: { type: 'object', properties: { transactionId: { type: 'string' } } },
+      outputSchema: { type: 'object', properties: { preparationId: { type: 'string' } } },
       riskLevel: 'high',
       requiresApproval: true,
       requiresRuntimeAttestation: true,
-    },
-    {
-      id: 'payment:status',
-      name: 'Check Payment Status',
-      description: 'Check payment transaction status',
-      inputSchema: { type: 'object', properties: { transactionId: { type: 'string' } } },
-      outputSchema: { type: 'object', properties: { status: { type: 'string' } } },
-      riskLevel: 'low',
-      requiresApproval: false,
-      requiresRuntimeAttestation: false,
     },
   ]
   const paymentCard: AgentCard = {
@@ -112,7 +102,7 @@ async function main() {
     identity: paymentAgent,
     capabilities: paymentCapabilities,
     endpoints: [
-      { url: 'https://payment.example.com/fides', protocol: 'https', capabilities: ['payment:charge', 'payment:status'], auth: 'signature' },
+      { url: 'https://payment.example.com/fides', protocol: 'https', capabilities: ['payments.prepare'], auth: 'signature' },
     ],
     policies: [{ requiresRuntimeAttestation: true, requiresApproval: true, minTrustScore: 0.8 }],
     createdAt: new Date().toISOString(),
@@ -124,17 +114,17 @@ async function main() {
   invoiceAgent.metadata = { name: 'Invoice Service' }
   const invoiceCapabilities: CapabilityDescriptor[] = [
     {
-      id: 'invoice:create',
-      name: 'Create Invoice',
-      description: 'Generate an invoice',
+      id: 'invoice.reconcile',
+      name: 'Reconcile Invoice',
+      description: 'Reconcile an invoice',
       inputSchema: { type: 'object', properties: { orderId: { type: 'string' }, amount: { type: 'number' } }, required: ['orderId', 'amount'] },
       outputSchema: { type: 'object', properties: { invoiceId: { type: 'string' } } },
-      riskLevel: 'high',
+      riskLevel: 'medium',
       requiresApproval: false,
       requiresRuntimeAttestation: true,
     },
     {
-      id: 'invoice:list',
+      id: 'invoice.read',
       name: 'List Invoices',
       description: 'List invoices',
       inputSchema: { type: 'object', properties: { status: { type: 'string' } } },
@@ -149,7 +139,7 @@ async function main() {
     identity: invoiceAgent,
     capabilities: invoiceCapabilities,
     endpoints: [
-      { url: 'https://invoice.example.com/fides', protocol: 'https', capabilities: ['invoice:create', 'invoice:list'], auth: 'signature' },
+      { url: 'https://invoice.example.com/fides', protocol: 'https', capabilities: ['invoice.reconcile', 'invoice.read'], auth: 'signature' },
     ],
     policies: [{ requiresRuntimeAttestation: true, requiresApproval: false, minTrustScore: 0.7 }],
     createdAt: new Date().toISOString(),
@@ -186,7 +176,7 @@ async function main() {
   const verifiedCalendarCandidates = await localDiscovery.discover({
     schema_version: 'fides.discovery_query.v1',
     id: 'requester-calendar-query',
-    capability: 'calendar:create',
+    capability: 'calendar.schedule',
   })
   console.log(`  Total agents in discovery: ${allAgents.length}`)
   console.log(`  Verified calendar candidates: ${verifiedCalendarCandidates.filter(candidate => candidate.verified).length}`)
@@ -199,7 +189,7 @@ async function main() {
   const userDelegation = await signDelegationToken(createDelegationToken({
     delegator: user.did,
     delegatee: requesterAgent.did,
-    capabilities: ['calendar:create', 'payment:charge', 'invoice:create'],
+    capabilities: ['calendar.schedule', 'payments.prepare', 'invoice.reconcile'],
     constraints: {
       maxActions: 20,
       maxSpend: '5000.00',
@@ -296,7 +286,7 @@ async function main() {
 
   const calendarGuard = await evaluateGuard({
     agentDid: calendarAgent.did,
-    capabilityId: 'calendar:create',
+    capabilityId: 'calendar.schedule',
     policy: requesterPolicy,
     context: { requestCount: 5, reputationScore: calendarTrustScore },
     trust: calendarTrust,
@@ -304,7 +294,7 @@ async function main() {
   console.log(`  │ 1c. Guard decision: ${calendarGuard.decision}`)
 
   if (calendarGuard.decision === 'allow') {
-    console.log(`  │ 1d. ✅ Invoked calendar:create successfully`)
+    console.log(`  │ 1d. ✅ Invoked calendar.schedule successfully`)
 
     // Record evidence
     const calendarEvent = {
@@ -312,7 +302,7 @@ async function main() {
       type: 'capability_invoke',
       timestamp: new Date().toISOString(),
       actor: requesterAgent.did,
-      action: 'calendar:create',
+      action: 'calendar.schedule',
       target: calendarAgent.did,
       payload: { title: 'Team Meeting', date: '2026-05-06T10:00:00Z' },
       privacy: { level: 'redacted' as const },
@@ -324,7 +314,7 @@ async function main() {
   console.log(`  │`)
 
   // Flow 2: Invoke payment service (high risk, high trust)
-  console.log(`  ┌─ Flow 2: Process Payment`)
+  console.log(`  ┌─ Flow 2: Prepare Payment`)
   console.log(`  │`)
 
   const paymentProvider = await localDiscovery.resolve(paymentAgent.did)
@@ -345,7 +335,7 @@ async function main() {
 
   const paymentGuard = await evaluateGuard({
     agentDid: paymentAgent.did,
-    capabilityId: 'payment:charge',
+    capabilityId: 'payments.prepare',
     policy: requesterPolicy,
     context: { requestCount: 5, reputationScore: paymentTrustScore },
     trust: paymentTrust,
@@ -353,13 +343,13 @@ async function main() {
   console.log(`  │ 2c. Guard decision: ${paymentGuard.decision}`)
 
   if (paymentGuard.decision === 'allow') {
-    console.log(`  │ 2d. ✅ Invoked payment:charge successfully`)
+    console.log(`  │ 2d. ✅ Invoked payments.prepare successfully`)
     const paymentEvent = {
       id: 'req-002',
       type: 'capability_invoke',
       timestamp: new Date().toISOString(),
       actor: requesterAgent.did,
-      action: 'payment:charge',
+      action: 'payments.prepare',
       target: paymentAgent.did,
       payload: { amount: 150, currency: 'USD' },
       privacy: { level: 'redacted' as const },
@@ -370,8 +360,8 @@ async function main() {
   }
   console.log(`  │`)
 
-  // Flow 3: Invoke invoice service (high risk, medium trust)
-  console.log(`  ┌─ Flow 3: Create Invoice`)
+  // Flow 3: Invoke invoice service (medium risk, medium trust)
+  console.log(`  ┌─ Flow 3: Reconcile Invoice`)
   console.log(`  │`)
 
   const invoiceProvider = await localDiscovery.resolve(invoiceAgent.did)
@@ -392,7 +382,7 @@ async function main() {
 
   const invoiceGuard = await evaluateGuard({
     agentDid: invoiceAgent.did,
-    capabilityId: 'invoice:create',
+    capabilityId: 'invoice.reconcile',
     policy: requesterPolicy,
     context: { requestCount: 5, reputationScore: invoiceTrustScore },
     trust: invoiceTrust,
@@ -400,7 +390,7 @@ async function main() {
   console.log(`  │ 3c. Guard decision: ${invoiceGuard.decision}`)
 
   if (invoiceGuard.decision === 'allow') {
-    console.log(`  │ 3d. ✅ Invoked invoice:create successfully`)
+    console.log(`  │ 3d. ✅ Invoked invoice.reconcile successfully`)
   } else if (invoiceGuard.decision === 'dry-run') {
     console.log(`  │ 3d. ⚠️  Dry-run mode (trust score below optimal)`)
   } else {
@@ -421,7 +411,7 @@ async function main() {
       actor: requesterAgent.did,
       action: 'evaluate',
       target: calendarAgent.did,
-      payload: { capability: 'calendar:create', decision: calendarGuard.decision },
+      payload: { capability: 'calendar.schedule', decision: calendarGuard.decision },
       privacy: { level: 'public' as const },
     },
     {
@@ -431,7 +421,7 @@ async function main() {
       actor: requesterAgent.did,
       action: 'evaluate',
       target: paymentAgent.did,
-      payload: { capability: 'payment:charge', decision: paymentGuard.decision },
+      payload: { capability: 'payments.prepare', decision: paymentGuard.decision },
       privacy: { level: 'public' as const },
     },
     {
@@ -441,7 +431,7 @@ async function main() {
       actor: requesterAgent.did,
       action: 'evaluate',
       target: invoiceAgent.did,
-      payload: { capability: 'invoice:create', decision: invoiceGuard.decision },
+      payload: { capability: 'invoice.reconcile', decision: invoiceGuard.decision },
       privacy: { level: 'public' as const },
     },
   ]

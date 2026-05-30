@@ -47,6 +47,10 @@ capability names:
 - `payments.prepare`
 - `payments.execute`
 
+Standalone example scripts also use dot-separated v2 capability IDs. The
+`examples:audit` gate rejects legacy `namespace:action` IDs for the canonical
+calendar, invoice, payment, and email examples.
+
 ## Example Agents
 
 Each example is a self-contained script that demonstrates specific FIDES concepts.

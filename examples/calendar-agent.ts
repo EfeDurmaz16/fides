@@ -46,17 +46,17 @@ async function main() {
 
   const capabilities: CapabilityDescriptor[] = [
     {
-      id: 'calendar:create',
-      name: 'Create Event',
-      description: 'Create a new calendar event',
+      id: 'calendar.schedule',
+      name: 'Schedule Event',
+      description: 'Schedule a new calendar event',
       inputSchema: { type: 'object', properties: { title: { type: 'string' }, date: { type: 'string' } }, required: ['title', 'date'] },
       outputSchema: { type: 'object', properties: { eventId: { type: 'string' } } },
-      riskLevel: 'medium',
+      riskLevel: 'low',
       requiresApproval: false,
       requiresRuntimeAttestation: false,
     },
     {
-      id: 'calendar:list',
+      id: 'calendar.read',
       name: 'List Events',
       description: 'List calendar events for a date range',
       inputSchema: { type: 'object', properties: { start: { type: 'string' }, end: { type: 'string' } } },
@@ -66,7 +66,7 @@ async function main() {
       requiresRuntimeAttestation: false,
     },
     {
-      id: 'calendar:delete',
+      id: 'calendar.delete',
       name: 'Delete Event',
       description: 'Delete a calendar event',
       inputSchema: { type: 'object', properties: { eventId: { type: 'string' } }, required: ['eventId'] },
@@ -85,7 +85,7 @@ async function main() {
       {
         url: 'https://calendar-agent.example.com/fides',
         protocol: 'https',
-        capabilities: ['calendar:create', 'calendar:list', 'calendar:delete'],
+        capabilities: ['calendar.schedule', 'calendar.read', 'calendar.delete'],
         auth: 'signature',
       },
     ],
@@ -126,7 +126,7 @@ async function main() {
   const discovered = await localDiscovery.discover({
     schema_version: 'fides.discovery_query.v1',
     id: 'calendar-local-query',
-    capability: 'calendar:create',
+    capability: 'calendar.schedule',
   })
   console.log(`  Registered: ${resolved ? 'yes' : 'no'}`)
   console.log(`  Verified candidate: ${discovered[0]?.verified ? 'yes' : 'no'}`)
@@ -140,7 +140,7 @@ async function main() {
   const delegation = await signDelegationToken(createDelegationToken({
     delegator: user.did,
     delegatee: calendarAgent.did,
-    capabilities: ['calendar:create', 'calendar:list'],
+    capabilities: ['calendar.schedule', 'calendar.read'],
     constraints: {
       maxActions: 50,
       allowedContexts: ['work', 'personal'],
@@ -217,7 +217,7 @@ async function main() {
       type: 'capability_invoke',
       timestamp: new Date().toISOString(),
       actor: calendarAgent.did,
-      action: 'calendar:create',
+      action: 'calendar.schedule',
       target: 'team-standup',
       payload: { title: 'Team Standup', date: '2026-05-05T09:00:00Z' },
       privacy: { level: 'redacted' as const },
@@ -227,7 +227,7 @@ async function main() {
       type: 'capability_invoke',
       timestamp: new Date().toISOString(),
       actor: calendarAgent.did,
-      action: 'calendar:list',
+      action: 'calendar.read',
       target: 'week-view',
       payload: { start: '2026-05-05', end: '2026-05-12' },
       privacy: { level: 'hash_only' as const },
@@ -274,7 +274,7 @@ async function main() {
 
   const goodDecision = await evaluateGuard({
     agentDid: calendarAgent.did,
-    capabilityId: 'calendar:create',
+    capabilityId: 'calendar.schedule',
     policy: calendarPolicy,
     context: { dailyEvents: 5, context: 'work' },
     trust: goodTrust,
@@ -297,7 +297,7 @@ async function main() {
 
   const killedDecision = await evaluateGuard({
     agentDid: calendarAgent.did,
-    capabilityId: 'calendar:create',
+    capabilityId: 'calendar.schedule',
     policy: calendarPolicy,
     context: { dailyEvents: 5 },
     trust: killedTrust,

@@ -52,17 +52,17 @@ async function main() {
 
   const capabilities: CapabilityDescriptor[] = [
     {
-      id: 'invoice:create',
-      name: 'Create Invoice',
-      description: 'Generate a new invoice from order data',
+      id: 'invoice.reconcile',
+      name: 'Reconcile Invoice',
+      description: 'Reconcile invoice data against orders and approvals',
       inputSchema: { type: 'object', properties: { orderId: { type: 'string' }, amount: { type: 'number' }, currency: { type: 'string' } }, required: ['orderId', 'amount'] },
       outputSchema: { type: 'object', properties: { invoiceId: { type: 'string' } } },
-      riskLevel: 'high',
+      riskLevel: 'medium',
       requiresApproval: false,
       requiresRuntimeAttestation: true,
     },
     {
-      id: 'invoice:approve',
+      id: 'invoice.approve',
       name: 'Approve Invoice',
       description: 'Approve an invoice for payment',
       inputSchema: { type: 'object', properties: { invoiceId: { type: 'string' }, approverDid: { type: 'string' } }, required: ['invoiceId', 'approverDid'] },
@@ -72,7 +72,7 @@ async function main() {
       requiresRuntimeAttestation: true,
     },
     {
-      id: 'invoice:list',
+      id: 'invoice.read',
       name: 'List Invoices',
       description: 'List invoices with optional filters',
       inputSchema: { type: 'object', properties: { status: { type: 'string' }, dateFrom: { type: 'string' } } },
@@ -91,7 +91,7 @@ async function main() {
       {
         url: 'https://invoice-agent.example.com/fides',
         protocol: 'https',
-        capabilities: ['invoice:create', 'invoice:approve', 'invoice:list'],
+        capabilities: ['invoice.reconcile', 'invoice.approve', 'invoice.read'],
         auth: 'signature',
       },
     ],
@@ -130,7 +130,7 @@ async function main() {
   const cfoDelegation = await signDelegationToken(createDelegationToken({
     delegator: cfo.did,
     delegatee: invoiceAgent.did,
-    capabilities: ['invoice:create', 'invoice:approve'],
+    capabilities: ['invoice.reconcile', 'invoice.approve'],
     constraints: {
       maxActions: 100,
       maxSpend: '50000.00',
@@ -154,7 +154,7 @@ async function main() {
   const mgrDelegation = await signDelegationToken(createDelegationToken({
     delegator: financeManager.did,
     delegatee: invoiceAgent.did,
-    capabilities: ['invoice:list', 'invoice:create'],
+    capabilities: ['invoice.read', 'invoice.reconcile'],
     constraints: {
       maxActions: 50,
       maxSpend: '10000.00',
@@ -178,7 +178,7 @@ async function main() {
   const discovered = await localDiscovery.discover({
     schema_version: 'fides.discovery_query.v1',
     id: 'invoice-local-query',
-    capability: 'invoice:create',
+    capability: 'invoice.reconcile',
   })
   console.log(`  Registered: ${resolved ? 'yes' : 'no'}`)
   console.log(`  Verified candidate: ${discovered[0]?.verified ? 'yes' : 'no'}`)
@@ -221,13 +221,13 @@ async function main() {
     defaultAction: 'deny' as const,
   } satisfies PolicyBundle
 
-  // Scenario 1: High trust, normal invoice
+  // Scenario 1: High trust, normal reconciliation
   const normalResult = evaluatePolicy(invoicePolicy, {
     reputationScore: 0.9,
     invoiceAmount: 5000,
     suspiciousFlags: 0,
   })
-  console.log(`  High trust, $5,000 invoice: ${normalResult.decision}`)
+  console.log(`  High trust, $5,000 invoice reconciliation: ${normalResult.decision}`)
   console.log(`    Matched: ${normalResult.matchedRules.join(', ')}`)
 
   // Scenario 2: Large invoice requiring approval
@@ -236,7 +236,7 @@ async function main() {
     invoiceAmount: 50000,
     suspiciousFlags: 0,
   })
-  console.log(`  High trust, $50,000 invoice: ${largeResult.decision}`)
+  console.log(`  High trust, $50,000 invoice reconciliation: ${largeResult.decision}`)
   console.log(`    Explanation: ${largeResult.explanation.decision}`)
 
   // Scenario 3: Fraud detected
@@ -254,7 +254,7 @@ async function main() {
     invoiceAmount: 5000,
     suspiciousFlags: 0,
   })
-  console.log(`  Medium trust, $5,000 invoice: ${mediumResult.decision}`)
+  console.log(`  Medium trust, $5,000 invoice reconciliation: ${mediumResult.decision}`)
   console.log()
 
   // ─── Step 7: Evidence Ledger (Audit Trail) ───────────────────
@@ -269,7 +269,7 @@ async function main() {
       type: 'delegation_created',
       timestamp: new Date().toISOString(),
       actor: cfo.did,
-      action: 'invoice:create',
+      action: 'invoice.reconcile',
       target: invoiceAgent.did,
       payload: { maxSpend: '50000.00', maxActions: 100 },
       privacy: { level: 'hash_only' as const },
@@ -279,7 +279,7 @@ async function main() {
       type: 'capability_invoke',
       timestamp: new Date().toISOString(),
       actor: invoiceAgent.did,
-      action: 'invoice:create',
+      action: 'invoice.reconcile',
       target: 'INV-2026-001',
       payload: { orderId: 'ORD-123', amount: 5000, currency: 'USD' },
       privacy: { level: 'redacted' as const },
@@ -289,7 +289,7 @@ async function main() {
       type: 'capability_invoke',
       timestamp: new Date().toISOString(),
       actor: invoiceAgent.did,
-      action: 'invoice:approve',
+      action: 'invoice.approve',
       target: 'INV-2026-001',
       payload: { approverDid: financeManager.did, approved: true },
       privacy: { level: 'redacted' as const },
@@ -308,7 +308,7 @@ async function main() {
       type: 'capability_invoke',
       timestamp: new Date().toISOString(),
       actor: invoiceAgent.did,
-      action: 'invoice:create',
+      action: 'invoice.reconcile',
       target: 'INV-2026-002',
       payload: { orderId: 'ORD-456', amount: 50000, currency: 'USD' },
       privacy: { level: 'redacted' as const },
@@ -318,7 +318,7 @@ async function main() {
       type: 'approval_required',
       timestamp: new Date().toISOString(),
       actor: invoiceAgent.did,
-      action: 'invoice:approve',
+      action: 'invoice.approve',
       target: 'INV-2026-002',
       payload: { reason: 'Amount exceeds $25,000 threshold', escalatedTo: cfo.did },
       privacy: { level: 'public' as const },
@@ -356,13 +356,13 @@ async function main() {
 
   const goodDecision = await evaluateGuard({
     agentDid: invoiceAgent.did,
-    capabilityId: 'invoice:create',
+    capabilityId: 'invoice.reconcile',
     policy: invoicePolicy,
     context: { invoiceAmount: 5000, suspiciousFlags: 0 },
     trust: goodTrust,
   })
 
-  console.log(`  Scenario: Good agent, $5,000 invoice`)
+  console.log(`  Scenario: Good agent, $5,000 invoice reconciliation`)
   console.log(`    Decision: ${goodDecision.decision}`)
   console.log(`    Explanation: ${goodDecision.explanation}`)
   console.log(`    Factors: ${goodDecision.factors.length}`)
@@ -376,7 +376,7 @@ async function main() {
 
   const lowDecision = await evaluateGuard({
     agentDid: invoiceAgent.did,
-    capabilityId: 'invoice:create',
+    capabilityId: 'invoice.reconcile',
     policy: invoicePolicy,
     context: { invoiceAmount: 5000 },
     trust: lowTrust,
@@ -395,7 +395,7 @@ async function main() {
   console.log('  Demonstrated:')
   console.log('    ✅ Identity creation (agent + principals)')
   console.log('    ✅ AgentCard with financial capabilities')
-  console.log('    ✅ Financial risk classification (high risk)')
+  console.log('    ✅ Invoice risk classification (medium risk)')
   console.log('    ✅ Delegation with spending constraints')
   console.log('    ✅ Chain of authority (CFO + Finance Mgr)')
   console.log('    ✅ Policy evaluation (allow / approve-required / deny / dry-run)')

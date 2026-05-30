@@ -52,34 +52,24 @@ async function main() {
 
   const capabilities: CapabilityDescriptor[] = [
     {
-      id: 'payment:charge',
-      name: 'Charge Payment',
-      description: 'Process a payment charge',
+      id: 'payments.prepare',
+      name: 'Prepare Payment',
+      description: 'Prepare a payment plan without executing funds movement',
       inputSchema: { type: 'object', properties: { amount: { type: 'number' }, currency: { type: 'string' }, customerId: { type: 'string' } }, required: ['amount', 'currency', 'customerId'] },
-      outputSchema: { type: 'object', properties: { transactionId: { type: 'string' }, status: { type: 'string' } } },
+      outputSchema: { type: 'object', properties: { preparationId: { type: 'string' }, status: { type: 'string' } } },
       riskLevel: 'high',
       requiresApproval: true,
       requiresRuntimeAttestation: true,
     },
     {
-      id: 'payment:refund',
-      name: 'Refund Payment',
-      description: 'Process a payment refund',
-      inputSchema: { type: 'object', properties: { transactionId: { type: 'string' }, amount: { type: 'number' } }, required: ['transactionId'] },
-      outputSchema: { type: 'object', properties: { refundId: { type: 'string' }, status: { type: 'string' } } },
-      riskLevel: 'high',
+      id: 'payments.execute',
+      name: 'Execute Payment',
+      description: 'Sardis-specific payment execution capability, modeled but not executed by generic FIDES',
+      inputSchema: { type: 'object', properties: { preparationId: { type: 'string' }, amount: { type: 'number' } }, required: ['preparationId'] },
+      outputSchema: { type: 'object', properties: { executionId: { type: 'string' }, status: { type: 'string' } } },
+      riskLevel: 'critical',
       requiresApproval: true,
       requiresRuntimeAttestation: true,
-    },
-    {
-      id: 'payment:status',
-      name: 'Check Payment Status',
-      description: 'Check the status of a payment transaction',
-      inputSchema: { type: 'object', properties: { transactionId: { type: 'string' } }, required: ['transactionId'] },
-      outputSchema: { type: 'object', properties: { status: { type: 'string' }, amount: { type: 'number' } } },
-      riskLevel: 'low',
-      requiresApproval: false,
-      requiresRuntimeAttestation: false,
     },
   ]
 
@@ -91,7 +81,7 @@ async function main() {
       {
         url: 'https://payment-agent.example.com/fides',
         protocol: 'https',
-        capabilities: ['payment:charge', 'payment:refund', 'payment:status'],
+        capabilities: ['payments.prepare', 'payments.execute'],
         auth: 'signature',
       },
     ],
@@ -129,7 +119,7 @@ async function main() {
   const merchantDelegation = await signDelegationToken(createDelegationToken({
     delegator: merchant.did,
     delegatee: paymentAgent.did,
-    capabilities: ['payment:charge', 'payment:refund'],
+    capabilities: ['payments.prepare'],
     constraints: {
       maxActions: 1000,
       maxSpend: '100000.00',
@@ -157,7 +147,7 @@ async function main() {
   const discovered = await localDiscovery.discover({
     schema_version: 'fides.discovery_query.v1',
     id: 'payment-local-query',
-    capability: 'payment:charge',
+    capability: 'payments.prepare',
   })
   console.log(`  Registered: ${resolved ? 'yes' : 'no'}`)
   console.log(`  Verified candidate: ${discovered[0]?.verified ? 'yes' : 'no'}`)
@@ -259,7 +249,7 @@ async function main() {
       type: 'delegation_created',
       timestamp: new Date().toISOString(),
       actor: merchant.did,
-      action: 'payment:charge',
+      action: 'payments.prepare',
       target: paymentAgent.did,
       payload: { maxSpend: '100000.00', maxActions: 1000 },
       privacy: { level: 'hash_only' as const },
@@ -269,7 +259,7 @@ async function main() {
       type: 'capability_invoke',
       timestamp: new Date().toISOString(),
       actor: paymentAgent.did,
-      action: 'payment:charge',
+      action: 'payments.prepare',
       target: 'TXN-001',
       payload: { amount: 500, currency: 'USD', customerId: customer.did },
       privacy: { level: 'redacted' as const },
@@ -288,7 +278,7 @@ async function main() {
       type: 'capability_invoke',
       timestamp: new Date().toISOString(),
       actor: paymentAgent.did,
-      action: 'payment:charge',
+      action: 'payments.prepare',
       target: 'TXN-002',
       payload: { amount: 25000, currency: 'USD', customerId: customer.did },
       privacy: { level: 'redacted' as const },
@@ -298,7 +288,7 @@ async function main() {
       type: 'approval_required',
       timestamp: new Date().toISOString(),
       actor: paymentAgent.did,
-      action: 'payment:charge',
+      action: 'payments.prepare',
       target: 'TXN-002',
       payload: { reason: 'Amount exceeds $10,000 threshold', escalatedTo: merchant.did },
       privacy: { level: 'public' as const },
@@ -308,10 +298,10 @@ async function main() {
       type: 'capability_invoke',
       timestamp: new Date().toISOString(),
       actor: paymentAgent.did,
-      action: 'payment:refund',
-      target: 'REF-001',
-      payload: { transactionId: 'TXN-001', amount: 500 },
-      privacy: { level: 'redacted' as const },
+      action: 'payments.execute',
+      target: 'blocked-generic-fides',
+      payload: { reason: 'Payment execution remains Sardis-specific in generic FIDES examples' },
+      privacy: { level: 'public' as const },
     },
   ]
 
@@ -370,7 +360,7 @@ async function main() {
 
   const goodDecision = await evaluateGuard({
     agentDid: paymentAgent.did,
-    capabilityId: 'payment:charge',
+    capabilityId: 'payments.prepare',
     policy: paymentPolicy,
     context: { paymentAmount: 500, fraudScore: 0.05, transactionsPerMinute: 2 },
     trust: goodTrust,
@@ -390,7 +380,7 @@ async function main() {
 
   const killedDecision = await evaluateGuard({
     agentDid: paymentAgent.did,
-    capabilityId: 'payment:charge',
+    capabilityId: 'payments.prepare',
     policy: paymentPolicy,
     context: { paymentAmount: 500 },
     trust: killedTrust,
@@ -409,7 +399,7 @@ async function main() {
 
   const badDecision = await evaluateGuard({
     agentDid: paymentAgent.did,
-    capabilityId: 'payment:charge',
+    capabilityId: 'payments.prepare',
     policy: paymentPolicy,
     context: { paymentAmount: 500 },
     trust: badTrust,
@@ -428,7 +418,7 @@ async function main() {
   console.log('  Demonstrated:')
   console.log('    ✅ Identity creation (agent + merchant + customer)')
   console.log('    ✅ AgentCard with payment capabilities')
-  console.log('    ✅ Critical risk classification (payment keywords)')
+  console.log('    ✅ Critical risk classification (payments.execute remains Sardis-specific)')
   console.log('    ✅ Delegation with spending constraints')
   console.log('    ✅ Policy evaluation (allow / approve-required / deny / dry-run)')
   console.log('    ✅ Fraud detection policies (fraud score, velocity)')

@@ -43,7 +43,7 @@ async function demo() {
   console.log('\nStep 2: Creating an AgentCard')
   const capabilities: CapabilityDescriptor[] = [
     {
-      id: 'email:send',
+      id: 'email.send',
       name: 'Send Email',
       description: 'Send emails on behalf of a principal',
       inputSchema: { type: 'object', required: ['to', 'subject'] },
@@ -53,7 +53,7 @@ async function demo() {
       requiresRuntimeAttestation: true,
     },
     {
-      id: 'calendar:create',
+      id: 'calendar.schedule',
       name: 'Create Calendar Event',
       description: 'Create calendar events on behalf of a principal',
       inputSchema: { type: 'object', required: ['title', 'start'] },
@@ -72,7 +72,7 @@ async function demo() {
       {
         url: 'https://alice.example.com/fides',
         protocol: 'https',
-        capabilities: ['email:send', 'calendar:create'],
+        capabilities: ['email.send', 'calendar.schedule'],
         auth: 'signature',
       },
     ],
@@ -93,7 +93,7 @@ async function demo() {
   const delegation = await signDelegationToken(createDelegationToken({
     delegator: charlie.did,
     delegatee: alice.did,
-    capabilities: ['email:send', 'calendar:create'],
+    capabilities: ['email.send', 'calendar.schedule'],
     constraints: { maxActions: 10, maxSpend: '10.00', allowedContexts: ['work'] },
     expiresAt: new Date(Date.now() + 3600_000).toISOString(),
   }), charliePrivateKey)
@@ -128,8 +128,8 @@ async function demo() {
   console.log('\nStep 6: Appending evidence events')
   let chain = createEvidenceChain()
   for (const event of [
-    { id: 'e1', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'email:send', payload: {}, privacy: { level: 'redacted' as const } },
-    { id: 'e2', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'calendar:create', payload: {}, privacy: { level: 'hash_only' as const } },
+    { id: 'e1', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'email.send', payload: {}, privacy: { level: 'redacted' as const } },
+    { id: 'e2', type: 'invoke', timestamp: new Date().toISOString(), actor: alice.did, action: 'calendar.schedule', payload: {}, privacy: { level: 'hash_only' as const } },
     { id: 'e3', type: 'policy', timestamp: new Date().toISOString(), actor: alice.did, action: 'evaluate', payload: {}, privacy: { level: 'public' as const } },
   ]) {
     chain = appendEvidenceEvent(chain, event, localEvidenceSignature(event))
@@ -162,7 +162,7 @@ async function demo() {
   })
   const goodDecision = await evaluateGuard({
     agentDid: alice.did,
-    capabilityId: 'email:send',
+    capabilityId: 'email.send',
     policy,
     context: { requestCount: 10 },
     trust: goodTrust,
@@ -172,7 +172,7 @@ async function demo() {
   const badTrust = createTrustContext({ reputationScore: 0.05, killSwitchEngaged: false, recentIncidents: 10 })
   const badDecision = await evaluateGuard({
     agentDid: bob.did,
-    capabilityId: 'calendar:create',
+    capabilityId: 'calendar.schedule',
     policy,
     context: { requestCount: 10 },
     trust: badTrust,
@@ -182,7 +182,7 @@ async function demo() {
   const killSwitchTrust = createTrustContext({ reputationScore: 0.9, killSwitchEngaged: true, recentIncidents: 0 })
   const killSwitchDecision = await evaluateGuard({
     agentDid: alice.did,
-    capabilityId: 'email:send',
+    capabilityId: 'email.send',
     policy,
     context: { requestCount: 10 },
     trust: killSwitchTrust,

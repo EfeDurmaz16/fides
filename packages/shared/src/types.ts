@@ -130,8 +130,10 @@ export interface AgentCard {
   heartbeatAt?: string
   createdAt: string
   updatedAt: string
+  verified?: false
   urlRequired?: false
   authorityGranted?: false
+  reasons?: string[]
 }
 
 export interface AgentCardQuery {

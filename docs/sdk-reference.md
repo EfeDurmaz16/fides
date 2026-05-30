@@ -183,7 +183,9 @@ await client.evidence.export({ privacy_mode: 'hash_only', include_metadata: fals
 intentionally thin. The AgentCard helpers target root `agentd` AgentCard
 endpoints and use daemon-held local identity keys for signing. Agent
 registration and discovery return candidates only; `authorityGranted` remains
-`false`. Trust and reputation APIs return capability-scoped signals, and policy
+`false`. Standalone discovery candidate metadata also carries `verified: false`
+and machine-readable `reasons`, which the SDK preserves on returned AgentCard
+objects. Trust and reputation APIs return capability-scoped signals, and policy
 evaluation explains the decision but still requires session grant issuance
 before invocation. Delegation helpers create local DelegationToken intents; the
 daemon signs them when the delegator identity is locally managed, but they still

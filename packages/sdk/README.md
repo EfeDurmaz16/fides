@@ -154,8 +154,11 @@ await client.evidence.export({ privacy_mode: 'hash_only', include_metadata: fals
 The local identity API returns public identity data only; it does not return
 private keys. AgentCard signing uses the daemon-held local identity key.
 Registration and discovery produce candidate records only; discovery does not
-grant authority to invoke the agent. Trust and reputation are capability-scoped
-signals; policy decisions still require scoped session grants before invocation.
+grant authority to invoke the agent. Standalone discovery responses preserve
+`verified: false`, `authorityGranted: false`, and machine-readable `reasons`
+so SDK callers do not accidentally treat metadata discovery as trust or
+permission. Trust and reputation are capability-scoped signals; policy
+decisions still require scoped session grants before invocation.
 Root session and invocation helpers use the local daemon preflight path and are
 currently in-memory. Approval and kill switch helpers expose local authority
 controls, with active kill switch rules overriding normal policy. Revocation

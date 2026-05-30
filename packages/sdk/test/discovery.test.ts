@@ -311,6 +311,60 @@ describe('AgentDiscoveryClient', () => {
       })
     )
   })
+
+  it('preserves candidate-only discovery metadata on agent responses', async () => {
+    const agent = {
+      did: 'did:fides:agent',
+      name: 'Agent',
+      url: 'local://agents/did%3Afides%3Aagent',
+      version: '1.0.0',
+      publicKey: '00'.repeat(32),
+      algorithm: 'ed25519',
+      capabilities: {},
+      skills: [{ id: 'invoice.reconcile', name: 'Invoice Reconcile' }],
+      status: 'online',
+      createdAt: '2026-05-30T00:00:00.000Z',
+      updatedAt: '2026-05-30T00:00:00.000Z',
+      verified: false,
+      urlRequired: false,
+      authorityGranted: false,
+      reasons: [
+        'standalone_discovery_candidate',
+        'signed_agent_card_not_verified_by_discovery_service',
+        'discovery_does_not_grant_authority',
+      ],
+    } as const
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => agent,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [agent],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => agent,
+      })
+
+    const registered = await client.registerAgent({
+      did: agent.did,
+      name: agent.name,
+    })
+    const discovered = await client.discoverAgents({ capability: 'invoice.reconcile' })
+    const fetched = await client.getAgent(agent.did)
+
+    expect(registered).toMatchObject({
+      verified: false,
+      urlRequired: false,
+      authorityGranted: false,
+    })
+    expect(registered.reasons).toContain('discovery_does_not_grant_authority')
+    expect(discovered[0].reasons).toContain('standalone_discovery_candidate')
+    expect(fetched?.reasons).toContain('signed_agent_card_not_verified_by_discovery_service')
+  })
 })
 
 describe('IdentityResolver', () => {

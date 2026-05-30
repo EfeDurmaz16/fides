@@ -193,7 +193,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Local agent registered as a discovery candidate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentRegistration"
 
   /agents:
     get:
@@ -202,7 +206,11 @@ paths:
       summary: List locally registered agents
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Locally registered discovery candidates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentListResponse"
 
   /agents/{id}:
     get:
@@ -213,7 +221,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local registration detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalAgentDetailResponse"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -1577,6 +1589,73 @@ components:
           type: array
           items:
             type: string
+
+    LocalAgentRegistration:
+      type: object
+      required: [agentId, cardId, registeredAt, signed, verified, authority, authorityGranted, reasons]
+      properties:
+        registered:
+          type: boolean
+          enum: [true]
+          description: Present on POST /agents/register responses.
+        agentId:
+          type: string
+        cardId:
+          type: string
+        registeredAt:
+          type: string
+          format: date-time
+        signed:
+          type: boolean
+          description: Whether the local AgentCard has an identity-bound canonical signature.
+        verified:
+          type: boolean
+          description: True only when the local registration is backed by an identity-bound signed AgentCard.
+        authority:
+          type: string
+          enum: [candidate_only]
+        capabilities:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        reasons:
+          type: array
+          items:
+            type: string
+          example:
+            - identity_bound_signed_agent_card_verified
+            - local_registration_candidate_only
+            - discovery_does_not_grant_authority
+        reason:
+          type: string
+          description: Human-readable registration note returned by POST /agents/register.
+
+    LocalAgentListResponse:
+      type: object
+      required: [agents, authorityGranted]
+      properties:
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/LocalAgentRegistration"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalAgentDetailResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalAgentRegistration"
+        - type: object
+          properties:
+            card:
+              type: object
+              nullable: true
+            signedCard:
+              type: object
+              nullable: true
 
     DiscoveryResponse:
       type: object

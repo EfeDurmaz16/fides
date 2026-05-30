@@ -22,6 +22,9 @@ import { FidesClient } from '@fides/sdk'
 
 const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
 const health = await client.health()
+if (health.status !== 'healthy') {
+  console.warn('agentd is reachable but degraded', health.checks)
+}
 
 const principal = await client.identity.createPrincipal({ name: 'Demo Principal' })
 const requester = await client.identity.createAgent({ name: 'Requester Agent' })

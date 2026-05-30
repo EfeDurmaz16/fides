@@ -121,6 +121,7 @@ pnpm agentd card sign <card-id>
 pnpm agentd register <card-id>
 pnpm agentd discover --capability invoice.reconcile
 pnpm agentd trust <agent-id> --capability invoice.reconcile
+pnpm agentd graph inspect <agent-id>
 pnpm agentd policy evaluate --agent <agent-id> --capability invoice.reconcile
 pnpm agentd session request <agent-id> --capability invoice.reconcile
 pnpm agentd invoke --session-id <session-id> --input invoice.json

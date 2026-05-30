@@ -155,6 +155,7 @@ Trust is capability-specific.
 
 ```bash
 agentd trust did:fides:invoice-agent --capability invoice.reconcile --agentd-url http://localhost:7345
+agentd graph inspect did:fides:invoice-agent --agentd-url http://localhost:7345
 ```
 
 Reputation is also capability-specific and can be principal/publisher-aware.
@@ -170,7 +171,8 @@ agentd reputation update \
 agentd reputation get did:fides:invoice-agent --agentd-url http://localhost:7345
 ```
 
-Trust and reputation are signals. Policy is the authority.
+Trust graph inspection, trust, and reputation are signals. Policy is the
+authority.
 
 ## Evaluate Policy
 

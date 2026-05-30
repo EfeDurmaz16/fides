@@ -110,6 +110,10 @@ Last verified locally: 2026-05-30.
 - Public package README quality is now enforced by `pnpm package:hygiene` so
   publishable facade packages include installation, usage, status, and boundary
   guidance instead of placeholder package pages.
+- `pnpm docs:audit` verifies that the required inspection, primitive map,
+  architecture, protocol, ADR, threat-model, getting-started, API, CLI, SDK,
+  and adversarial simulation docs exist and preserve the hard FIDES v2
+  constraints.
 - OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
 - Core tests for issuer-bound `DelegationTokenV2` canonical signatures and
   payload-hash tamper detection.

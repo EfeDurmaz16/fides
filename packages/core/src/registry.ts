@@ -106,6 +106,14 @@ export function createRegistryPeerRecord(input: RegistryPeerRecordInput): Regist
   }
 }
 
+export function isRegistryIndexRecordExpired(record: RegistryIndexRecord, now: Date = new Date()): boolean {
+  return record.expires_at ? new Date(record.expires_at) <= now : false
+}
+
+export function isRegistryPeerRecordExpired(record: RegistryPeerRecord, now: Date = new Date()): boolean {
+  return record.expires_at ? new Date(record.expires_at) <= now : false
+}
+
 export function signRegistryIndexRecord(
   record: RegistryIndexRecord,
   privateKey: Uint8Array,

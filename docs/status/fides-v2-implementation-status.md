@@ -48,7 +48,8 @@ Last verified locally: 2026-05-30.
 - SQLite local-state snapshot and mirror-table persistence for local inspection.
 - Revocation, incident, kill switch, session, and evidence policy hooks.
 - SDK type coverage for the main root v2 API responses.
-- OpenAPI schemas for root `agentd` demo and simulation responses.
+- OpenAPI route audit and response-shape contract coverage for root `agentd`
+  demo and adversarial simulation responses.
 
 ## Working Prototype
 
@@ -255,6 +256,7 @@ pnpm --filter @fides/sdk build
 pnpm --filter @fides/sdk test
 pnpm --filter @fides/cli lint
 pnpm --filter @fides/agentd test
+pnpm --filter @fides/e2e-tests test -- agentd-openapi-contract.test.ts
 pnpm --filter @fides/cli build
 pnpm package:hygiene
 pnpm api:audit
@@ -318,6 +320,14 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `6c09690 test(api): lock demo response contracts`
+- `1b2276c docs: document sqlite local state mirrors`
+- `29df5d6 test(agentd): cover sqlite local state mirrors`
+- `9c2cbb3 test(sdk): cover root agentd endpoint helpers`
+- `2167309 test(api): audit documented endpoint summaries`
+- `8199a2e docs: record all-provider discovery smoke`
+- `e35d5ea test(agentd): smoke all-provider discovery`
+- `0500032 test(api): audit agentd openapi routes`
 - `416de6c docs(cli): note silent json mode for pnpm agentd`
 - `57fd72c chore(cli): add root agentd scripts`
 - `e0554eb docs(cli): fix workspace agentd invocation`

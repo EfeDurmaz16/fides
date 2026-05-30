@@ -660,14 +660,22 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Kill switch rule created; active rules override policy while enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalKillSwitchRuleResponse"
     get:
       operationId: listLocalKillSwitchRules
       tags: [Kill Switch]
       summary: List local kill switch rules
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local kill switch rules and active subset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalKillSwitchListResponse"
 
   /killswitch/{id}:
     delete:
@@ -680,7 +688,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Disabled kill switch rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalKillSwitchRuleResponse"
 
   /dht/start:
     post:
@@ -2087,6 +2099,73 @@ components:
         authorityGranted:
           type: boolean
           enum: [false]
+
+    KillSwitchRule:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - target_type
+        - target
+        - reason
+        - enabled
+        - created_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.kill_switch.rule.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        target_type:
+          type: string
+          enum: [agent, publisher, capability, session, principal, risk_class]
+        target:
+          type: string
+        reason:
+          type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalKillSwitchRuleResponse:
+      type: object
+      required: [rule]
+      properties:
+        rule:
+          $ref: "#/components/schemas/KillSwitchRule"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityOverride:
+          type: boolean
+          description: True when the rule is enabled and can override normal policy evaluation.
+        explanation:
+          type: string
+
+    LocalKillSwitchListResponse:
+      type: object
+      required: [rules, active]
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/KillSwitchRule"
+        active:
+          type: array
+          items:
+            $ref: "#/components/schemas/KillSwitchRule"
 
     EvidenceSubmitRequest:
       type: object

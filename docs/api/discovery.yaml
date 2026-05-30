@@ -610,7 +610,7 @@ components:
 
     RegisterAgentRequest:
       type: object
-      required: [did, name, url]
+      required: [did, name]
       properties:
         did:
           type: string
@@ -620,7 +620,7 @@ components:
           type: string
         url:
           type: string
-          format: uri
+          description: Optional transport URL. When omitted, the service stores a local://agents/<did> hint.
         version:
           type: string
         provider:
@@ -686,6 +686,14 @@ components:
         updatedAt:
           type: string
           format: date-time
+        urlRequired:
+          type: boolean
+          enum: [false]
+          description: Agent registration and discovery do not require an HTTP URL.
+        authorityGranted:
+          type: boolean
+          enum: [false]
+          description: Discovery records are candidates only and never grant invocation authority.
 
     DiscoveryDocument:
       type: object

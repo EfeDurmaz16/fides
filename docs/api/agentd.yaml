@@ -536,14 +536,22 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Evidence event appended to the local hash chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalEvidenceAppendResponse"
     get:
       operationId: listLocalEvidence
       tags: [Evidence]
       summary: List local evidence events
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local evidence ledger state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalEvidenceListResponse"
 
   /evidence/{id}:
     get:
@@ -554,7 +562,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local evidence event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalEvidenceEventResponse"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -567,7 +579,11 @@ paths:
         - ApiKeyAuth: []
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local evidence hash-chain verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalEvidenceVerificationResponse"
 
   /evidence/export:
     post:
@@ -580,7 +596,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Privacy-aware local evidence export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalEvidenceExportResponse"
 
   /revocations:
     post:
@@ -2532,6 +2552,179 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/IncidentRecordV2"
+
+    EvidenceEventV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - event_id
+        - issuer
+        - type
+        - actor
+        - privacy_mode
+        - issued_at
+        - timestamp
+        - prev_event_hash
+        - payload_hash
+        - event_hash
+        - signature
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.evidence_event.v1]
+        id:
+          type: string
+        event_id:
+          type: string
+        issuer:
+          type: string
+        type:
+          type: string
+          enum:
+            - agent.registered
+            - agent.updated
+            - agent.revoked
+            - discovery.performed
+            - trust.computed
+            - policy.evaluated
+            - approval.requested
+            - approval.granted
+            - approval.denied
+            - session.requested
+            - session.granted
+            - session.denied
+            - capability.invoked
+            - capability.completed
+            - capability.failed
+            - attestation.issued
+            - attestation.verified
+            - attestation.failed
+            - revocation.recorded
+            - incident.reported
+            - kill_switch.triggered
+        actor:
+          type: string
+        subject:
+          type: string
+        principal:
+          type: string
+        capability:
+          type: string
+        input_hash:
+          type: string
+        output_hash:
+          type: string
+        policy_hash:
+          type: string
+        decision:
+          type: string
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        privacy_mode:
+          type: string
+          enum: [public, private, redacted, hash_only]
+        issued_at:
+          type: string
+          format: date-time
+        timestamp:
+          type: string
+          format: date-time
+        prev_event_hash:
+          type: string
+        payload_hash:
+          type: string
+        event_hash:
+          type: string
+        signature:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    LocalEvidenceAppendResponse:
+      type: object
+      required: [accepted, event, authorityGranted]
+      properties:
+        accepted:
+          type: boolean
+        event:
+          $ref: "#/components/schemas/EvidenceEventV2"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalEvidenceEventResponse:
+      type: object
+      required: [event, authorityGranted]
+      properties:
+        event:
+          $ref: "#/components/schemas/EvidenceEventV2"
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalEvidenceListResponse:
+      type: object
+      required: [events, count, valid, lastHash, authorityGranted]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceEventV2"
+        count:
+          type: integer
+        valid:
+          type: boolean
+        lastHash:
+          type: string
+          nullable: true
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
+    LocalEvidenceVerificationResponse:
+      type: object
+      required: [valid, count, lastHash, scope, checkedAt]
+      properties:
+        valid:
+          type: boolean
+        count:
+          type: integer
+        lastHash:
+          type: string
+          nullable: true
+        scope:
+          type: string
+          enum: [root-local-evidence-ledger]
+        checkedAt:
+          type: string
+          format: date-time
+
+    LocalEvidenceExportResponse:
+      type: object
+      required: [format, exportedAt, valid, count, privacyMode, includeMetadata, events]
+      properties:
+        format:
+          type: string
+          enum: [json]
+        exportedAt:
+          type: string
+          format: date-time
+        valid:
+          type: boolean
+        count:
+          type: integer
+        privacyMode:
+          type: string
+        includeMetadata:
+          type: boolean
+          nullable: true
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceEventV2"
 
     EvidenceSubmitRequest:
       type: object

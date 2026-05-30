@@ -1917,6 +1917,7 @@ describe('Agentd Service Routes', () => {
           capability: 'invoice.reconcile',
           input: { invoiceId: 'inv_123', secret: 'do-not-store' },
           decision: 'allow',
+          metadata: { rawPrompt: 'also-do-not-export' },
         }),
       })
       expect(appended.status).toBe(201)
@@ -1943,14 +1944,29 @@ describe('Agentd Service Routes', () => {
       expect(verified.valid).toBe(true)
       expect(verified.count).toBeGreaterThanOrEqual(1)
 
-      const exported = await app.request('/evidence/export', { method: 'POST' })
+      const exported = await app.request('/evidence/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ privacy_mode: 'private', include_metadata: false }),
+      })
       expect(exported.status).toBe(200)
       const exportedData = await exported.json()
       expect(exportedData.format).toBe('json')
       expect(exportedData.valid).toBe(true)
-      expect(exportedData.events).toEqual(expect.arrayContaining([
-        expect.objectContaining({ event_id: appendedData.event.event_id }),
-      ]))
+      expect(exportedData.privacyMode).toBe('private')
+      const exportedEvent = exportedData.events.find((event: any) => event.event_id === appendedData.event.event_id)
+      expect(exportedEvent).toBeDefined()
+      expect(exportedEvent.input_hash).toBeUndefined()
+      expect(exportedEvent.decision).toBeUndefined()
+      expect(exportedEvent.metadata).toBeUndefined()
+      expect(JSON.stringify(exportedData)).not.toContain('also-do-not-export')
+
+      const invalidExport = await app.request('/evidence/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ privacy_mode: 'raw' }),
+      })
+      expect(invalidExport.status).toBe(400)
     })
   })
 

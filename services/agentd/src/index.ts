@@ -16,6 +16,7 @@ import {
   appendEvidenceEventV2,
   createEvidenceChain,
   createEvidenceEventV2,
+  exportEvidenceEventsV2,
   normalizeEvidenceEventsV2,
   verifyEvidenceChain,
   verifyEvidenceEventsV2,
@@ -2802,13 +2803,35 @@ app.post('/evidence/verify', (c) => {
   })
 })
 
-app.post('/evidence/export', (c) => {
+app.post('/evidence/export', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const privacyMode = body.privacy_mode ?? body.privacyMode
+  if (
+    privacyMode !== undefined &&
+    privacyMode !== 'public' &&
+    privacyMode !== 'private' &&
+    privacyMode !== 'redacted' &&
+    privacyMode !== 'hash_only'
+  ) {
+    return c.json({ error: 'privacy_mode must be public, private, redacted, or hash_only' }, 400)
+  }
+  const includeMetadata = typeof body.include_metadata === 'boolean'
+    ? body.include_metadata
+    : typeof body.includeMetadata === 'boolean'
+      ? body.includeMetadata
+      : undefined
+  const events = exportEvidenceEventsV2(localEvidenceEvents, {
+    ...(privacyMode !== undefined && { privacy_mode: privacyMode }),
+    ...(includeMetadata !== undefined && { include_metadata: includeMetadata }),
+  })
   return c.json({
     format: 'json',
     exportedAt: new Date().toISOString(),
     valid: verifyEvidenceEventsV2(localEvidenceEvents),
     count: localEvidenceEvents.length,
-    events: localEvidenceEvents,
+    privacyMode: privacyMode ?? 'event_default',
+    includeMetadata: includeMetadata ?? null,
+    events,
   })
 })
 

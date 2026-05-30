@@ -2097,6 +2097,35 @@ describe('CLI Commands', () => {
       );
     });
 
+    it('prints typed agentd error codes for root v2 HTTP failures', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+          severity: 'error',
+          retryable: false,
+          message: 'agentCardId is required',
+          details: { field: 'agentCardId' },
+        },
+        authorityGranted: false,
+      }), { status: 400, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRegistryCommand } = await import('../src/commands/registry.js');
+      const cmd = createRegistryCommand();
+
+      await cmd.parseAsync([
+        'publish',
+        'card_1',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(console.error).toHaveBeenCalledWith('Error:', '[REQUEST_INVALID] agentCardId is required');
+      expect(process.exitCode).toBe(1);
+    });
+
     it('dht publish supports signed local pointer inputs without an AgentCard URL', async () => {
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({
         accepted: true,

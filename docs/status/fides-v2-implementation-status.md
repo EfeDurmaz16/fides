@@ -58,6 +58,7 @@ Last verified locally: 2026-05-30.
 - SQLite local-state snapshot and mirror-table persistence for local inspection.
 - Revocation, incident, kill switch, session, and evidence policy hooks.
 - SDK type coverage for the main root v2 API responses.
+- CLI HTTP helpers preserve root v2 `ErrorEnvelope` codes in command output.
 - OpenAPI route audit and response-shape contract coverage for root `agentd`
   demo, adversarial simulation, and non-authoritative discovery write
   responses.

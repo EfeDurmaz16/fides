@@ -66,3 +66,7 @@ payload belongs to a more specific protocol family, such as `INCIDENT_INVALID`
 or `EVIDENCE_PRIVACY_MODE_INVALID`. Missing root local resources use the
 resource-specific `*_NOT_FOUND` codes so SDKs and CLI clients do not need to
 parse human-readable strings.
+
+The CLI preserves typed root `agentd` failures when an HTTP response includes
+an `ErrorEnvelope`, printing the stable code with the message, for example
+`[POLICY_DENIED] Policy denied the request`.

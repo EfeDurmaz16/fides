@@ -383,14 +383,22 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Created approval request; no invocation authority is granted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalApprovalRequestResponse"
     get:
       operationId: listLocalApprovals
       tags: [Policy]
       summary: List local approval requests
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local approval requests and decisions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalApprovalListResponse"
 
   /approvals/{id}/approve:
     post:
@@ -405,7 +413,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Approval decision recorded; no invocation authority is granted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalApprovalDecisionResponse"
 
   /approvals/{id}/deny:
     post:
@@ -420,7 +432,11 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Approval decision recorded; no invocation authority is granted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalApprovalDecisionResponse"
 
   /delegations:
     post:
@@ -1914,6 +1930,163 @@ components:
           type: boolean
         explanation:
           type: string
+
+    ApprovalRequest:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - requester_agent_id
+        - target_agent_id
+        - principal_id
+        - capability
+        - requested_scopes
+        - risk_level
+        - evidence_refs
+        - status
+        - created_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.approval.request.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        requester_agent_id:
+          type: string
+        target_agent_id:
+          type: string
+        principal_id:
+          type: string
+        capability:
+          type: string
+        requested_scopes:
+          type: array
+          items:
+            type: string
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        policy_decision_hash:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [pending, approved, denied, expired]
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    ApprovalDecision:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - approval_request_id
+        - approver_id
+        - decision
+        - reason
+        - constraints
+        - evidence_refs
+        - decided_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.approval.decision.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        approval_request_id:
+          type: string
+        approver_id:
+          type: string
+        decision:
+          type: string
+          enum: [approved, denied]
+        reason:
+          type: string
+        constraints:
+          type: object
+          additionalProperties: true
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        decided_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalApprovalRequestResponse:
+      type: object
+      required: [approval, evidenceRefs, authorityGranted]
+      properties:
+        approval:
+          $ref: "#/components/schemas/ApprovalRequest"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        explanation:
+          type: string
+
+    LocalApprovalDecisionResponse:
+      type: object
+      required: [approval, decision, evidenceRefs, authorityGranted]
+      properties:
+        approval:
+          $ref: "#/components/schemas/ApprovalRequest"
+        decision:
+          $ref: "#/components/schemas/ApprovalDecision"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+        explanation:
+          type: string
+
+    LocalApprovalListResponse:
+      type: object
+      required: [approvals, decisions, authorityGranted]
+      properties:
+        approvals:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalRequest"
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalDecision"
+        authorityGranted:
+          type: boolean
+          enum: [false]
 
     EvidenceSubmitRequest:
       type: object

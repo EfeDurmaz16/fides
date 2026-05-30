@@ -115,6 +115,55 @@ describe('FidesClient', () => {
     expect(approved.authorityGranted).toBe(false)
   })
 
+  it('types root kill switch responses as policy overrides', async () => {
+    const rule = {
+      schema_version: 'fides.kill_switch.rule.v1',
+      id: 'ks_1',
+      issuer: 'did:fides:operator',
+      target_type: 'capability',
+      target: 'payments.prepare',
+      reason: 'incident response',
+      enabled: true,
+      created_at: '2026-05-30T00:00:00.000Z',
+      payload_hash: 'sha256:killswitch',
+    }
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).endsWith('/killswitch/ks_1') && init?.method === 'DELETE') {
+        return new Response(JSON.stringify({
+          rule: { ...rule, enabled: false },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/killswitch') && init?.method === 'GET') {
+        return new Response(JSON.stringify({
+          rules: [rule],
+          active: [rule],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({
+        rule,
+        evidenceRefs: ['evt_kill_switch'],
+        authorityOverride: true,
+        explanation: 'Kill switch rules override normal trust and policy evaluation while active.',
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const enabled = await client.killSwitch.enable({
+      targetType: 'capability',
+      target: 'payments.prepare',
+      reason: 'incident response',
+    })
+    expect(enabled.rule.enabled).toBe(true)
+    expect(enabled.authorityOverride).toBe(true)
+
+    const listed = await client.killSwitch.list()
+    expect(listed.active[0]?.target).toBe('payments.prepare')
+
+    const disabled = await client.killSwitch.disable('ks_1')
+    expect(disabled.rule.enabled).toBe(false)
+  })
+
   it('exposes promise-based identity, card, discovery, trust, session, and invocation namespaces', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {

@@ -3,6 +3,7 @@ import {
   type ApprovalDecision,
   type ApprovalRequest,
   type CapabilityControl,
+  type KillSwitchRule,
   type PrincipalIdentity,
   type PublisherIdentity,
   type TrustResult,
@@ -285,6 +286,20 @@ export interface FidesApprovalListResponse {
   [key: string]: unknown
 }
 
+export interface FidesKillSwitchRuleResponse {
+  rule: KillSwitchRule
+  evidenceRefs?: string[]
+  authorityOverride?: boolean
+  explanation?: string
+  [key: string]: unknown
+}
+
+export interface FidesKillSwitchListResponse {
+  rules: KillSwitchRule[]
+  active: KillSwitchRule[]
+  [key: string]: unknown
+}
+
 export interface FidesSessionResponse {
   authorized: boolean
   authorityGranted: boolean
@@ -403,9 +418,13 @@ export class FidesClient {
   }
 
   readonly killSwitch = {
-    enable: (body: Record<string, unknown>) => this.post('/killswitch', body),
-    list: () => this.get('/killswitch'),
-    disable: (ruleId: string) => this.delete(`/killswitch/${encodeURIComponent(ruleId)}`),
+    enable: (body: Record<string, unknown>): Promise<FidesKillSwitchRuleResponse> => (
+      this.post('/killswitch', body) as Promise<FidesKillSwitchRuleResponse>
+    ),
+    list: (): Promise<FidesKillSwitchListResponse> => this.get('/killswitch') as Promise<FidesKillSwitchListResponse>,
+    disable: (ruleId: string): Promise<FidesKillSwitchRuleResponse> => (
+      this.delete(`/killswitch/${encodeURIComponent(ruleId)}`) as Promise<FidesKillSwitchRuleResponse>
+    ),
   }
 
   readonly revocations = {

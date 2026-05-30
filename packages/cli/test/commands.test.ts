@@ -168,6 +168,7 @@ describe('CLI Commands', () => {
       const { createAgentsCommand, createRegisterCommand } = await import('../src/commands/agents.js');
       const { createApprovalCommand } = await import('../src/commands/approval.js');
       const { createReputationCommand } = await import('../src/commands/reputation.js');
+      const { createGraphCommand } = await import('../src/commands/graph.js');
       const { createDhtCommand } = await import('../src/commands/dht.js');
       const { createEvidenceCommand } = await import('../src/commands/evidence.js');
       const { createAttestCommand } = await import('../src/commands/attest.js');
@@ -180,12 +181,45 @@ describe('CLI Commands', () => {
       expect(createAgentsCommand().name()).toBe('agents');
       expect(createApprovalCommand().name()).toBe('approval');
       expect(createReputationCommand().name()).toBe('reputation');
+      expect(createGraphCommand().name()).toBe('graph');
       expect(createDhtCommand().name()).toBe('dht');
       expect(createEvidenceCommand().name()).toBe('evidence');
       expect(createAttestCommand().name()).toBe('attest');
       expect(createDemoCommand().name()).toBe('demo');
       expect(createSimulateCommand().name()).toBe('simulate');
       expect(createInvokeCommand().name()).toBe('invoke');
+    });
+
+    it('graph inspect reads the local trust graph view without granting authority', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        agentId: 'did:fides:agent',
+        trust: [{ capability: 'invoice.reconcile', score: 0.73, band: 'medium' }],
+        authorityGranted: false,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createGraphCommand } = await import('../src/commands/graph.js');
+      const cmd = createGraphCommand();
+
+      await cmd.parseAsync([
+        'inspect',
+        'did:fides:agent',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/trust/did%3Afides%3Aagent',
+        expect.objectContaining({ method: 'GET' })
+      );
+      const output = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0] as string);
+      expect(output.agentId).toBe('did:fides:agent');
+      expect(output.authorityGranted).toBe(false);
+      expect(output.graphView.trust[0].capability).toBe('invoice.reconcile');
     });
   });
 

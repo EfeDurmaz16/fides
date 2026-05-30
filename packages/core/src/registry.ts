@@ -126,6 +126,10 @@ export function verifySignedRegistryIndexRecord(signed: SignedRegistryIndexRecor
   return verifyObject(signed)
 }
 
+export async function verifySignedRegistryIndexRecordIssuer(signed: SignedRegistryIndexRecord): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedRegistryIndexRecord(signed)
+}
+
 export function signRegistryPeerRecord(
   record: RegistryPeerRecord,
   privateKey: Uint8Array,
@@ -136,4 +140,8 @@ export function signRegistryPeerRecord(
 
 export function verifySignedRegistryPeerRecord(signed: SignedRegistryPeerRecord): Promise<boolean> {
   return verifyObject(signed)
+}
+
+export async function verifySignedRegistryPeerRecordIssuer(signed: SignedRegistryPeerRecord): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedRegistryPeerRecord(signed)
 }

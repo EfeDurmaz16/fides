@@ -32,10 +32,15 @@ record includes:
 
 Search and discovery verify signed local registry index records before returning
 them. A valid registry index record still does not grant invocation authority.
+Authority-safe ingestion should use `verifySignedRegistryIndexRecordIssuer`,
+which verifies both the canonical Ed25519 proof and that
+`proof.verificationMethod` equals the record `issuer`.
 
 Federation peering records are adapter-ready and should not imply trust. Peers
 provide discovery and propagation surfaces; FIDES still verifies identity,
 signatures, revocations, incidents, trust, and policy.
+Authority-safe peering ingestion should use `verifySignedRegistryPeerRecordIssuer`
+for the same issuer-bound proof check.
 
 `LocalFederationDiscoveryProvider` is the local mock federation implementation.
 It accepts signed `RegistryPeerRecord` values plus peer discovery providers,

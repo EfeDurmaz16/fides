@@ -8,7 +8,9 @@ import {
   signRegistryIndexRecord,
   signRegistryPeerRecord,
   verifySignedRegistryIndexRecord,
+  verifySignedRegistryIndexRecordIssuer,
   verifySignedRegistryPeerRecord,
+  verifySignedRegistryPeerRecordIssuer,
 } from '../src/registry.js'
 
 describe('registry and federation records', () => {
@@ -36,6 +38,7 @@ describe('registry and federation records', () => {
 
     const signed = await signRegistryIndexRecord(record, issuer.privateKey, issuer.did)
     expect(await verifySignedRegistryIndexRecord(signed)).toBe(true)
+    expect(await verifySignedRegistryIndexRecordIssuer(signed)).toBe(true)
   })
 
   it('creates and verifies signed federation peer records', async () => {
@@ -59,6 +62,38 @@ describe('registry and federation records', () => {
 
     const signed = await signRegistryPeerRecord(record, issuer.privateKey, issuer.did)
     expect(await verifySignedRegistryPeerRecord(signed)).toBe(true)
+    expect(await verifySignedRegistryPeerRecordIssuer(signed)).toBe(true)
+  })
+
+  it('rejects registry proofs whose verification method is not the issuer', async () => {
+    const issuer = await createIdentityKeyPair()
+    const attacker = await createIdentityKeyPair()
+    const index = createRegistryIndexRecord({
+      issuer: issuer.did,
+      mode: 'public',
+      agentCardId: 'card_123',
+      agentId: 'did:fides:agent',
+      capabilityIds: ['invoice.reconcile'],
+      agentCardHash: 'sha256:card',
+      registryUrl: 'https://registry.example',
+      supportedVersions: ['fides.v2.0'],
+    })
+    const peer = createRegistryPeerRecord({
+      issuer: issuer.did,
+      peerId: 'peer_1',
+      registryUrl: 'https://peer.example',
+      peeringMode: 'federated',
+      supportedVersions: ['fides.v2.0'],
+      capabilities: ['registry_search'],
+    })
+
+    const signedIndex = await signRegistryIndexRecord(index, attacker.privateKey, attacker.did)
+    const signedPeer = await signRegistryPeerRecord(peer, attacker.privateKey, attacker.did)
+
+    expect(await verifySignedRegistryIndexRecord(signedIndex)).toBe(true)
+    expect(await verifySignedRegistryIndexRecordIssuer(signedIndex)).toBe(false)
+    expect(await verifySignedRegistryPeerRecord(signedPeer)).toBe(true)
+    expect(await verifySignedRegistryPeerRecordIssuer(signedPeer)).toBe(false)
   })
 
   it('detects expired registry and federation records', async () => {

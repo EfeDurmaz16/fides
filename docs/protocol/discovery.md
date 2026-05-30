@@ -67,7 +67,13 @@ negotiation. Incompatible provider or legacy DID-resolution candidates are
 filtered before ranking and compatible candidates carry a
 `versionNegotiation` record. Every returned `DiscoveryCandidate` is explicitly
 marked `authority: candidate_only` and carries `evidence_refs` for audit links.
-Trust/policy/evidence integration remains an incremental hardening area.
+Root `agentd` discovery endpoints also append a hash-only
+`discovery.performed` evidence event and return the event id in both
+`evidenceRefs` and `evidence_refs`. The event records provider, capability,
+candidate/rejection counts, protocol constraints, and `authorityGranted: false`
+metadata without storing raw inputs or outputs by default. Trust/policy
+integration remains an incremental hardening area for cross-provider ranking,
+but evidence is now produced for the root discovery flow.
 
 Root `agentd` local, well-known, registry, relay, locally resolvable DHT, and
 local mock federation discovery now apply protocol version negotiation before

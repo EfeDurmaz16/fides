@@ -27,6 +27,8 @@ Last verified locally: 2026-05-30.
 - Discovery publish and presence writes explicitly return `authorityGranted:
   false`; publishing to registry, relay, or DHT never grants invocation
   authority.
+- Root discovery endpoints append hash-only `discovery.performed` evidence
+  events and return `evidenceRefs`/`evidence_refs` without granting authority.
 - Capability-specific trust and reputation scoring with explainability.
 - Policy-before-execution with approval, dry-run, revocation, incident, runtime
   attestation, and kill switch inputs.
@@ -54,6 +56,7 @@ Last verified locally: 2026-05-30.
 - OpenAPI route audit and response-shape contract coverage for root `agentd`
   demo, adversarial simulation, and non-authoritative discovery write
   responses.
+- OpenAPI contract coverage for evidence-producing discovery responses.
 
 ## Working Prototype
 
@@ -292,6 +295,8 @@ Observed manual smoke results:
 - all-provider discovery returned `authorityGranted: false`.
 - registry publish, relay register, and DHT publish responses return top-level
   `authorityGranted: false`.
+- root discovery responses return `evidenceRefs` and `evidence_refs` for the
+  appended `discovery.performed` event.
 - adversarial simulation returned `status: "detected"`.
 - adversarial simulation detected 10 scenarios.
 - adversarial simulation returned `rootChainValid: true`.
@@ -328,6 +333,7 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `55653a8 docs: record non-authoritative discovery writes`
 - `ffd0874 test(sdk): expose non-authoritative discovery writes`
 - `fd17264 feat(agentd): mark discovery writes non-authoritative`
 - `6c09690 test(api): lock demo response contracts`

@@ -192,6 +192,98 @@ export interface FidesEvidenceExportRequest {
   include_metadata?: boolean
 }
 
+export type FidesEvidenceEventType =
+  | 'agent.registered'
+  | 'agent.updated'
+  | 'agent.revoked'
+  | 'discovery.performed'
+  | 'trust.computed'
+  | 'policy.evaluated'
+  | 'approval.requested'
+  | 'approval.granted'
+  | 'approval.denied'
+  | 'session.requested'
+  | 'session.granted'
+  | 'session.denied'
+  | 'capability.invoked'
+  | 'capability.completed'
+  | 'capability.failed'
+  | 'attestation.issued'
+  | 'attestation.verified'
+  | 'attestation.failed'
+  | 'revocation.recorded'
+  | 'incident.reported'
+  | 'kill_switch.triggered'
+
+export type FidesEvidencePrivacyMode = 'public' | 'private' | 'redacted' | 'hash_only'
+
+export interface FidesEvidenceEventV2 {
+  schema_version: 'fides.evidence_event.v1'
+  id: string
+  event_id: string
+  issuer: string
+  type: FidesEvidenceEventType
+  actor: string
+  subject?: string
+  principal?: string
+  capability?: string
+  input_hash?: string
+  output_hash?: string
+  policy_hash?: string
+  decision?: string
+  risk_level?: 'low' | 'medium' | 'high' | 'critical'
+  privacy_mode: FidesEvidencePrivacyMode
+  issued_at: string
+  timestamp: string
+  prev_event_hash: string
+  payload_hash: string
+  event_hash: string
+  signature: string
+  metadata?: Record<string, unknown>
+}
+
+export interface FidesEvidenceAppendResponse {
+  accepted: boolean
+  event: FidesEvidenceEventV2
+  authorityGranted: false
+  [key: string]: unknown
+}
+
+export interface FidesEvidenceEventResponse {
+  event: FidesEvidenceEventV2
+  authorityGranted: false
+  [key: string]: unknown
+}
+
+export interface FidesEvidenceListResponse {
+  events: FidesEvidenceEventV2[]
+  count: number
+  valid: boolean
+  lastHash: string | null
+  authorityGranted: false
+  [key: string]: unknown
+}
+
+export interface FidesEvidenceVerificationResponse {
+  valid: boolean
+  count: number
+  lastHash: string | null
+  scope: 'root-local-evidence-ledger'
+  checkedAt: string
+  [key: string]: unknown
+}
+
+export interface FidesEvidenceExportResponse {
+  format: 'json'
+  exportedAt: string
+  valid: boolean
+  count: number
+  privacyMode: FidesEvidencePrivacyMode | 'event_default'
+  includeMetadata: boolean | null
+  events: FidesEvidenceEventV2[]
+  [key: string]: unknown
+}
+
 export interface FidesIdentityAttestationRequest {
   identity: string
 }
@@ -586,11 +678,19 @@ export class FidesClient {
   }
 
   readonly evidence = {
-    append: (body: Record<string, unknown>) => this.post('/evidence', body),
-    list: () => this.get('/evidence'),
-    inspect: (eventId: string) => this.get(`/evidence/${encodeURIComponent(eventId)}`),
-    verify: () => this.post('/evidence/verify', {}),
-    export: (body: FidesEvidenceExportRequest = {}) => this.post('/evidence/export', body),
+    append: (body: Record<string, unknown>): Promise<FidesEvidenceAppendResponse> => (
+      this.post('/evidence', body) as Promise<FidesEvidenceAppendResponse>
+    ),
+    list: (): Promise<FidesEvidenceListResponse> => this.get('/evidence') as Promise<FidesEvidenceListResponse>,
+    inspect: (eventId: string): Promise<FidesEvidenceEventResponse> => (
+      this.get(`/evidence/${encodeURIComponent(eventId)}`) as Promise<FidesEvidenceEventResponse>
+    ),
+    verify: (): Promise<FidesEvidenceVerificationResponse> => (
+      this.post('/evidence/verify', {}) as Promise<FidesEvidenceVerificationResponse>
+    ),
+    export: (body: FidesEvidenceExportRequest = {}): Promise<FidesEvidenceExportResponse> => (
+      this.post('/evidence/export', body) as Promise<FidesEvidenceExportResponse>
+    ),
   }
 
   readonly demo = {

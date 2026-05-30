@@ -782,6 +782,100 @@ describe('FidesClient', () => {
     expect(verified.authorityGranted).toBe(false)
   })
 
+  it('types root evidence ledger responses as non-authorizing audit records', async () => {
+    const event = {
+      schema_version: 'fides.evidence_event.v1',
+      id: 'evt_1',
+      event_id: 'evt_1',
+      issuer: 'did:fides:agentd:local',
+      type: 'capability.invoked',
+      actor: 'did:fides:agent',
+      subject: 'did:fides:target',
+      capability: 'invoice.reconcile',
+      input_hash: 'sha256:input',
+      output_hash: 'sha256:output',
+      decision: 'dry_run',
+      risk_level: 'medium',
+      privacy_mode: 'hash_only',
+      issued_at: '2026-05-30T00:00:00.000Z',
+      timestamp: '2026-05-30T00:00:00.000Z',
+      prev_event_hash: '0',
+      payload_hash: 'sha256:payload',
+      event_hash: 'sha256:event',
+      signature: 'local-evidence-signature',
+      metadata: { source: 'test' },
+    }
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).endsWith('/evidence/export')) {
+        return new Response(JSON.stringify({
+          format: 'json',
+          exportedAt: '2026-05-30T00:01:00.000Z',
+          valid: true,
+          count: 1,
+          privacyMode: 'hash_only',
+          includeMetadata: false,
+          events: [event],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/evidence/verify')) {
+        return new Response(JSON.stringify({
+          valid: true,
+          count: 1,
+          lastHash: 'sha256:event',
+          scope: 'root-local-evidence-ledger',
+          checkedAt: '2026-05-30T00:01:00.000Z',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/evidence/evt_1')) {
+        return new Response(JSON.stringify({
+          event,
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/evidence') && init?.method === 'GET') {
+        return new Response(JSON.stringify({
+          events: [event],
+          count: 1,
+          valid: true,
+          lastHash: 'sha256:event',
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({
+        accepted: true,
+        event,
+        authorityGranted: false,
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const appended = await client.evidence.append({
+      type: 'capability.invoked',
+      actor: 'did:fides:agent',
+      privacyMode: 'hash_only',
+    })
+    expect(appended.accepted).toBe(true)
+    expect(appended.authorityGranted).toBe(false)
+    expect(appended.event.privacy_mode).toBe('hash_only')
+
+    const listed = await client.evidence.list()
+    expect(listed.valid).toBe(true)
+    expect(listed.events[0]?.event_hash).toBe('sha256:event')
+
+    const inspected = await client.evidence.inspect('evt_1')
+    expect(inspected.event.type).toBe('capability.invoked')
+    expect(inspected.authorityGranted).toBe(false)
+
+    const verified = await client.evidence.verify()
+    expect(verified.scope).toBe('root-local-evidence-ledger')
+    expect(verified.lastHash).toBe('sha256:event')
+
+    const exported = await client.evidence.export({ privacy_mode: 'hash_only', include_metadata: false })
+    expect(exported.privacyMode).toBe('hash_only')
+    expect(exported.events).toHaveLength(1)
+  })
+
   it('creates and submits signed invocation requests from a session grant', async () => {
     const requester = await createAgentIdentity()
     const sessionGrant: SessionGrantV2 = {

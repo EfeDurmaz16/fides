@@ -245,6 +245,7 @@ Recently verified commands:
 
 ```bash
 pnpm verify
+pnpm examples:typecheck
 pnpm --filter @fides/sdk build
 pnpm --filter @fides/sdk test
 pnpm --filter @fides/cli lint

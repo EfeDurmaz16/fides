@@ -320,6 +320,7 @@ pnpm build
 | `pnpm test` | Run test suite |
 | `pnpm lint` | Lint codebase |
 | `pnpm typecheck` | Type-check TypeScript |
+| `pnpm examples:typecheck` | Type-check example agents and demo manifests |
 | `pnpm dev` | Start services in watch mode |
 | `pnpm clean` | Clean build artifacts |
 | `pnpm demo` | Run the primitive-level v2 demo |

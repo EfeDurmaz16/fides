@@ -26,6 +26,12 @@ pnpm demo
 npx tsx examples/demo.ts
 ```
 
+Type-check every example agent and demo contract:
+
+```bash
+pnpm examples:typecheck
+```
+
 ## Example Agents
 
 Each example is a self-contained script that demonstrates specific FIDES concepts.

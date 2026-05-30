@@ -238,6 +238,13 @@ pnpm --filter @fides/cli fides daemon stop
 
 `daemon start` launches the configured command in the background, writes a pid file to `~/.fides/agentd.pid`, and appends logs to `~/.fides/agentd.log`. Use `--sqlite-path`, `--local-state memory`, and `--authority-store-path` to isolate demo state. Use `--command`, `--args`, `--pid-file`, and `--log-file` when running outside the pnpm workspace layout.
 
+To smoke test the actual local daemon plus CLI demo/simulation path with
+isolated state:
+
+```bash
+pnpm smoke:agentd
+```
+
 For production agentd mutations through the CLI, export the same API key used by the service:
 
 ```bash

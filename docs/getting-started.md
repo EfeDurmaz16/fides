@@ -63,6 +63,14 @@ pnpm agentd daemon start --port 7345 --sqlite-path /tmp/fides-demo.sqlite
 pnpm agentd daemon start --port 7345 --local-state memory
 ```
 
+For a repeatable local DX check that starts an isolated daemon, runs the full
+demo, runs the adversarial simulation, and verifies the main authority
+invariants:
+
+```bash
+pnpm smoke:agentd
+```
+
 ## Create Local Identities
 
 Create a principal, publisher, requester agent, and target agent.

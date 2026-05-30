@@ -252,11 +252,15 @@ pnpm --filter @fides/cli lint
 pnpm --filter @fides/agentd test
 pnpm --filter @fides/cli build
 pnpm package:hygiene
+pnpm smoke:agentd
 ```
 
 Manual DX smoke:
 
 ```bash
+pnpm smoke:agentd
+
+# Equivalent manual flow:
 AGENTD_LOCAL_STATE=memory AGENTD_PORT=7486 pnpm agentd:dev
 pnpm --silent agentd demo run --agentd-url http://localhost:7486 --json
 pnpm --silent agentd simulate adversarial --agentd-url http://localhost:7486 --json

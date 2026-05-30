@@ -30,6 +30,7 @@
     "demo": "tsx examples/demo.ts",
     "demo:authority": "tsx scripts/authority-path-demo.ts",
     "demo:authority:processes": "tsx scripts/multiprocess-authority-demo.ts",
+    "smoke:agentd": "tsx scripts/agentd-dx-smoke.ts",
     "smoke:docker": "tsx scripts/docker-compose-smoke.ts"
   },
   "dependencies": {

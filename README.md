@@ -236,7 +236,7 @@ pnpm --filter @fides/cli fides daemon status --agentd-url http://localhost:7345 
 pnpm --filter @fides/cli fides daemon stop
 ```
 
-`daemon start` launches the configured command in the background, writes a pid file to `~/.fides/agentd.pid`, and appends logs to `~/.fides/agentd.log`. Use `--command`, `--args`, `--pid-file`, and `--log-file` when running outside the pnpm workspace layout.
+`daemon start` launches the configured command in the background, writes a pid file to `~/.fides/agentd.pid`, and appends logs to `~/.fides/agentd.log`. Use `--sqlite-path`, `--local-state memory`, and `--authority-store-path` to isolate demo state. Use `--command`, `--args`, `--pid-file`, and `--log-file` when running outside the pnpm workspace layout.
 
 For production agentd mutations through the CLI, export the same API key used by the service:
 

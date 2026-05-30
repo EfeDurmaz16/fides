@@ -212,3 +212,6 @@ metadata fields. `hash-only` is accepted as a CLI alias for `hash_only`.
 `daemon status` calls `GET /health` and prints upstream checks, the authority
 store, and the root v2 local state store. When SQLite local state is enabled,
 the status output includes the SQLite path used for the daemon snapshot.
+`daemon start` accepts `--sqlite-path`, `--local-state memory|sqlite`, and
+`--authority-store-path` so demo and manual DX runs can isolate local daemon
+state instead of writing to the default `~/.fides` files.

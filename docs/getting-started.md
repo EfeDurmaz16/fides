@@ -56,6 +56,13 @@ Local daemon state is stored in `~/.fides/fides.sqlite` by default. Use
 `AGENTD_SQLITE_PATH=/path/to/fides.sqlite` for a specific database file or
 `AGENTD_LOCAL_STATE=memory` for an ephemeral run.
 
+The CLI daemon launcher exposes the same controls:
+
+```bash
+pnpm agentd daemon start --port 7345 --sqlite-path /tmp/fides-demo.sqlite
+pnpm agentd daemon start --port 7345 --local-state memory
+```
+
 ## Create Local Identities
 
 Create a principal, publisher, requester agent, and target agent.

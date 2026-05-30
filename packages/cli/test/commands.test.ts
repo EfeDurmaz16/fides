@@ -914,6 +914,12 @@ describe('CLI Commands', () => {
         'start',
         '--port',
         '7444',
+        '--sqlite-path',
+        '/tmp/fides.sqlite',
+        '--local-state',
+        'sqlite',
+        '--authority-store-path',
+        '/tmp/authority-store.json',
         '--pid-file',
         '/tmp/fides-agentd.pid',
         '--log-file',
@@ -923,9 +929,37 @@ describe('CLI Commands', () => {
       expect(childProcess.spawn).toHaveBeenCalledWith('pnpm', ['--filter', '@fides/agentd', 'dev'], expect.objectContaining({
         detached: true,
         stdio: ['ignore', 1, 1],
-        env: expect.objectContaining({ AGENTD_PORT: '7444' }),
+        env: expect.objectContaining({
+          AGENTD_PORT: '7444',
+          AGENTD_SQLITE_PATH: '/tmp/fides.sqlite',
+          AGENTD_LOCAL_STATE: 'sqlite',
+          AGENTD_STATE_STORE_PATH: '/tmp/authority-store.json',
+        }),
       }));
       expect(fs.default.writeFileSync).toHaveBeenCalledWith('/tmp/fides-agentd.pid', '12345', 'utf-8');
+    });
+
+    it('rejects invalid local daemon state modes before spawning agentd', async () => {
+      const fs = await import('node:fs');
+      const childProcess = await import('node:child_process');
+      vi.mocked(fs.default.existsSync).mockReturnValue(false);
+
+      const { createDaemonCommand } = await import('../src/commands/daemon.js');
+      const cmd = createDaemonCommand();
+
+      await cmd.parseAsync([
+        'start',
+        '--local-state',
+        'file',
+        '--pid-file',
+        '/tmp/fides-agentd.pid',
+        '--log-file',
+        '/tmp/fides-agentd.log',
+      ], { from: 'user' });
+
+      expect(childProcess.spawn).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
+      expect(console.error).toHaveBeenCalledWith('Error:', '--local-state must be sqlite or memory');
     });
 
     it('should stop agentd from the pid file', async () => {

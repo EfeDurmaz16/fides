@@ -163,10 +163,11 @@ describe('CLI Commands', () => {
   });
 
   describe('v2 command surface', () => {
-    it('exposes registry, agents, approval, dht, evidence, attest, demo, simulate, and invoke commands', async () => {
+    it('exposes registry, agents, approval, reputation, dht, evidence, attest, demo, simulate, and invoke commands', async () => {
       const { createRegistryCommand } = await import('../src/commands/registry.js');
       const { createAgentsCommand, createRegisterCommand } = await import('../src/commands/agents.js');
       const { createApprovalCommand } = await import('../src/commands/approval.js');
+      const { createReputationCommand } = await import('../src/commands/reputation.js');
       const { createDhtCommand } = await import('../src/commands/dht.js');
       const { createEvidenceCommand } = await import('../src/commands/evidence.js');
       const { createAttestCommand } = await import('../src/commands/attest.js');
@@ -178,6 +179,7 @@ describe('CLI Commands', () => {
       expect(createRegisterCommand().name()).toBe('register');
       expect(createAgentsCommand().name()).toBe('agents');
       expect(createApprovalCommand().name()).toBe('approval');
+      expect(createReputationCommand().name()).toBe('reputation');
       expect(createDhtCommand().name()).toBe('dht');
       expect(createEvidenceCommand().name()).toBe('evidence');
       expect(createAttestCommand().name()).toBe('attest');
@@ -1331,6 +1333,80 @@ describe('CLI Commands', () => {
           }),
         })
       );
+    });
+
+    it('trust and reputation commands should use root v2 evaluation APIs', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        trust: { agent_id: 'did:fides:agent', capability: 'invoice.reconcile' },
+        reputation: { agent_id: 'did:fides:agent', capability: 'invoice.reconcile' },
+        reputations: [],
+        authorityGranted: false,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createTrustCommand } = await import('../src/commands/trust.js');
+      const { createReputationCommand } = await import('../src/commands/reputation.js');
+      const trustEvaluate = createTrustCommand();
+      const trustGet = createTrustCommand();
+      const reputation = createReputationCommand();
+
+      await trustEvaluate.parseAsync([
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await trustGet.parseAsync(['did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await reputation.parseAsync([
+        'update',
+        '--agent',
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--successful-invocations',
+        '5',
+        '--failed-invocations',
+        '1',
+        '--incident-count',
+        '0',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await reputation.parseAsync(['get', 'did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/trust/evaluate',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            capability: 'invoice.reconcile',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://agentd.test/trust/did%3Afides%3Aagent', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/reputation/update',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            capability: 'invoice.reconcile',
+            successfulInvocations: 5,
+            failedInvocations: 1,
+            incidentCount: 0,
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(4, 'http://agentd.test/reputation/did%3Afides%3Aagent', expect.objectContaining({ method: 'GET' }));
     });
 
     it('incident report should call agentd incidents', async () => {

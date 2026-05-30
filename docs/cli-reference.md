@@ -69,6 +69,9 @@ agentd dht find --capability invoice.reconcile
 agentd invoke did:fides:... --capability invoice.reconcile --input invoice.json --requested-scopes invoice:read
 agentd invoke --session-id sess_... --input invoice.json
 agentd invoke --dry-run did:fides:... --capability payments.prepare --input payment.json
+agentd trust did:fides:... --capability invoice.reconcile --agentd-url http://localhost:7345
+agentd reputation update --agent did:fides:... --capability invoice.reconcile --successful-invocations 5
+agentd reputation get did:fides:...
 agentd approval request --agent did:fides:... --capability payments.prepare --requested-scopes payments:prepare --risk-level high
 agentd approval list
 agentd approval approve appr_... --reason "human approved"
@@ -134,6 +137,12 @@ policy-checked `SessionGrant` from `POST /sessions`, then invokes that session.
 Input defaults to `{}` and can be supplied with `--input` or `--input-json`.
 Use `--dry-run` to request dry-run execution; discovery is never treated as
 authority by this command.
+
+`trust <agent-id> --capability --agentd-url` evaluates root v2
+capability-specific trust. Without `--agentd-url`, `trust` keeps the legacy
+trust-attestation behavior. `reputation update/get` manages root v2
+capability-specific reputation records. Trust and reputation remain signals;
+policy is the authority.
 
 `approval request/list/approve/deny` use root v2 approval endpoints. Approval
 records human authorization intent and evidence, but does not grant authority

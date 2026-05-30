@@ -67,6 +67,13 @@ agentd incident resolve inc_...
 agentd killswitch enable --capability payments.prepare --reason "incident response"
 agentd killswitch list
 agentd killswitch disable ks_...
+agentd revoke agent did:fides:... --reason "disabled"
+agentd revoke key key_... --reason "rotated"
+agentd revoke card card_... --reason "expired"
+agentd revoke session sess_... --reason "replay risk"
+agentd revoke attestation att_... --reason "expired attestation"
+agentd revoke list
+agentd revoke inspect rev_...
 agentd evidence verify
 agentd evidence export --privacy-mode hash_only --no-metadata
 agentd daemon status
@@ -113,6 +120,11 @@ path available for compatibility with existing authority records.
 `engage`, `disengage`, and `status` commands are local-file controls kept for
 legacy demos; use the root v2 commands when testing policy-before-execution in
 agentd.
+
+`revoke agent/key/identity/card/capability/session/attestation/publisher`,
+`revoke list`, and `revoke inspect` use root v2 revocation records. Passing
+`--private-key-hex` to `revoke agent` keeps the legacy signed `/v1/revocations`
+path available for compatibility.
 
 `evidence export` defaults to the daemon's privacy-aware export behavior. Use
 `--privacy-mode public`, `private`, `redacted`, or `hash_only` to request a

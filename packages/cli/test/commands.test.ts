@@ -953,6 +953,71 @@ describe('CLI Commands', () => {
       expect(body.revokerPublicKey).toMatch(/^[0-9a-f]{64}$/);
     });
 
+    it('root revoke commands should record and inspect v2 revocations', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        record: { id: 'rev_1' },
+        records: [{ id: 'rev_1' }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRevokeCommand } = await import('../src/commands/revoke.js');
+      const cmd = createRevokeCommand();
+
+      await cmd.parseAsync([
+        'agent',
+        'did:fides:agent',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--issuer',
+        'did:fides:operator',
+        '--reason',
+        'disabled',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync([
+        'session',
+        'sess_1',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--reason',
+        'replay risk',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['inspect', 'rev_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/revocations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            targetType: 'agent',
+            targetId: 'did:fides:agent',
+            reason: 'disabled',
+            issuer: 'did:fides:operator',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/revocations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            targetType: 'session',
+            targetId: 'sess_1',
+            reason: 'replay risk',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(3, 'http://agentd.test/revocations', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(4, 'http://agentd.test/revocations/rev_1', expect.objectContaining({ method: 'GET' }));
+    });
+
     it('incident report should call agentd incidents', async () => {
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({ recorded: true }), {
         status: 201,

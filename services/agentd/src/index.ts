@@ -71,6 +71,7 @@ import {
   verifyDelegationTokenSignature,
   verifyDomainDid,
   evaluateInvocationPreflight,
+  validateInvocationRequestAgainstSessionGrant,
   validateJsonSchemaValue,
   verifyIncidentRecord,
   verifyRevocationRecord,
@@ -1636,20 +1637,20 @@ app.post('/invoke', async (c) => {
     const signedPayload = candidateSignedRequest.payload
     const expectedInputHash = hashProtocolPayload(body.input ?? {})
     const expectedDryRun = typeof body.dryRun === 'boolean' ? body.dryRun : false
-    const payloadMatchesSession = signedPayload.session_id === record.session.session_id &&
-      signedPayload.requester_agent_id === record.session.requester_agent_id &&
-      signedPayload.target_agent_id === record.session.target_agent_id &&
-      signedPayload.principal_id === record.session.principal_id &&
-      signedPayload.capability === record.session.capability &&
-      signedPayload.input_hash === expectedInputHash &&
+    const grantValidation = validateInvocationRequestAgainstSessionGrant({
+      request: signedPayload,
+      sessionGrant: record.session,
+    })
+    const payloadMatchesInput = signedPayload.input_hash === expectedInputHash &&
       signedPayload.dry_run === expectedDryRun
 
-    if (!signedRequestVerified || !payloadMatchesSession) {
+    if (!signedRequestVerified || !grantValidation.valid || !payloadMatchesInput) {
       return c.json({ error: createErrorEnvelope('IDENTITY_INVALID_SIGNATURE', {
         message: 'Signed invocation request failed verification or does not match the session and input',
         details: {
           signedRequestVerified,
-          payloadMatchesSession,
+          grantValidation,
+          payloadMatchesInput,
           sessionId,
           request_id: signedPayload.id,
         },

@@ -52,6 +52,11 @@ outside the grant. This keeps discovery, trust, and policy separate from actual
 authority: invocation authority is the scoped `SessionGrant`, not the discovered
 AgentCard or DHT/registry pointer.
 
+The root `/invoke` daemon endpoint applies this validator to caller-supplied
+signed invocation requests before policy preflight. The signed request must also
+match the submitted input hash and dry-run mode, so a valid requester signature
+cannot widen scopes or replay authority over different invocation input.
+
 The daemon validates the request body against the capability input schema before
 execution and validates generated outputs against the capability output schema
 before returning a successful result. The daemon then emits hash-only evidence

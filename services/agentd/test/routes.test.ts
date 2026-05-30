@@ -49,6 +49,7 @@ import {
   createIncidentRecord,
   createInvocationRequest,
   createRevocationRecord,
+  hashProtocolPayload,
   signDelegationToken,
   signIncidentRecord,
   signInvocationRequest,
@@ -983,6 +984,80 @@ describe('Agentd Service Routes', () => {
           category: 'identity',
         },
       })
+    })
+
+    it('rejects signed invocation requests that exceed SessionGrant scopes', async () => {
+      const requester = await createIdentityKeyPair()
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Scoped Invoice Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{
+            id: 'invoice.scoped_reconcile',
+            riskLevel: 'medium',
+            requiredScopes: ['invoice:read'],
+          }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const session = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: requester.did,
+          agentId: identity.did,
+          capability: 'invoice.scoped_reconcile',
+          requestedScopes: ['invoice:read'],
+        }),
+      })
+      expect(session.status).toBe(201)
+      const sessionData = await session.json()
+      const input = { invoiceId: 'inv_scoped' }
+      const request = createInvocationRequest({
+        issuer: requester.did,
+        sessionGrant: sessionData.session,
+        input,
+      })
+      const elevatedPayload = {
+        ...request,
+        scopes: ['invoice:read', 'payments:execute'],
+      }
+      const { payload_hash: _oldPayloadHash, ...payloadForHash } = elevatedPayload
+      const signedRequest = await signInvocationRequest({
+        ...elevatedPayload,
+        payload_hash: hashProtocolPayload(payloadForHash),
+      }, requester.privateKey, requester.did)
+
+      const rejected = await app.request('/invoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: sessionData.session.session_id,
+          input,
+          signedRequest,
+        }),
+      })
+      expect(rejected.status).toBe(401)
+      const rejectedData = await rejected.json()
+      expect(rejectedData.authorityGranted).toBe(false)
+      expect(rejectedData.error.code).toBe('IDENTITY_INVALID_SIGNATURE')
+      expect(rejectedData.error.details.grantValidation.errors).toContain(
+        'InvocationRequest.scope payments:execute is not granted by SessionGrant',
+      )
     })
 
     it('rejects invocation inputs and outputs that do not satisfy capability schemas', async () => {

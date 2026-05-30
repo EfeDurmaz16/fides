@@ -205,6 +205,68 @@ export interface FidesDhtPublishRequest {
   expiresAt?: string
 }
 
+export interface FidesDiscoveryInfrastructureStartResponse {
+  started: boolean
+  mode: string
+  records?: number
+  pointers?: number
+  authorityGranted?: false
+  [key: string]: unknown
+}
+
+export interface FidesDiscoveryInfrastructurePublishResponse {
+  accepted: boolean
+  record?: FidesProviderRecord
+  pointer?: FidesProviderRecord
+  [key: string]: unknown
+}
+
+export interface FidesRegistryIndexResponse {
+  mode: 'local_mock_registry' | string
+  records: FidesProviderRecord[]
+  rejectedRecords: FidesProviderRecord[]
+  authorityGranted: false
+  [key: string]: unknown
+}
+
+export interface FidesDhtFindResponse {
+  capability: string | null
+  pointers: FidesProviderRecord[]
+  rejectedPointers: FidesProviderRecord[]
+  [key: string]: unknown
+}
+
+export interface FidesWellKnownFidesResponse {
+  schema_version: 'fides.well_known.v1'
+  protocol: 'fides.v2'
+  supported_versions: string[]
+  endpoints: Record<string, string>
+  [key: string]: unknown
+}
+
+export interface FidesWellKnownAgentSummary {
+  agentId: string
+  cardId: string
+  signed: boolean
+  cardUrl: string
+  authorityGranted: false
+  [key: string]: unknown
+}
+
+export interface FidesWellKnownAgentsResponse {
+  schema_version: 'fides.well_known.agents.v1'
+  agents: FidesWellKnownAgentSummary[]
+  [key: string]: unknown
+}
+
+export interface FidesWellKnownAgentResponse {
+  agentId: string
+  card: AgentCard
+  signed?: SignedAgentCard | null
+  authorityGranted: false
+  [key: string]: unknown
+}
+
 export interface FidesInvocationRequest {
   sessionId?: string
   session_id?: string
@@ -743,28 +805,48 @@ export class FidesClient {
   }
 
   readonly registry = {
-    start: () => this.post('/registry/start', {}),
-    publish: (body: FidesRegistryPublishRequest) => this.post('/registry/publish', body),
+    start: (): Promise<FidesDiscoveryInfrastructureStartResponse> => (
+      this.post('/registry/start', {}) as Promise<FidesDiscoveryInfrastructureStartResponse>
+    ),
+    publish: (body: FidesRegistryPublishRequest): Promise<FidesDiscoveryInfrastructurePublishResponse> => (
+      this.post('/registry/publish', body) as Promise<FidesDiscoveryInfrastructurePublishResponse>
+    ),
     search: (body: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/registry/search', body) as Promise<FidesDiscoveryResponse>,
-    index: () => this.get('/registry/index'),
+    index: (): Promise<FidesRegistryIndexResponse> => this.get('/registry/index') as Promise<FidesRegistryIndexResponse>,
   }
 
   readonly relay = {
-    start: () => this.post('/relay/start', {}),
-    register: (body: FidesRelayRegisterRequest) => this.post('/relay/register', body),
+    start: (): Promise<FidesDiscoveryInfrastructureStartResponse> => (
+      this.post('/relay/start', {}) as Promise<FidesDiscoveryInfrastructureStartResponse>
+    ),
+    register: (body: FidesRelayRegisterRequest): Promise<FidesDiscoveryInfrastructurePublishResponse> => (
+      this.post('/relay/register', body) as Promise<FidesDiscoveryInfrastructurePublishResponse>
+    ),
     discover: (body: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/relay/discover', body) as Promise<FidesDiscoveryResponse>,
   }
 
   readonly dht = {
-    start: () => this.post('/dht/start', {}),
-    publish: (body: FidesDhtPublishRequest) => this.post('/dht/publish', body),
-    find: (body: Pick<FidesDiscoveryQuery, 'capability'>) => this.post('/dht/find', body),
+    start: (): Promise<FidesDiscoveryInfrastructureStartResponse> => (
+      this.post('/dht/start', {}) as Promise<FidesDiscoveryInfrastructureStartResponse>
+    ),
+    publish: (body: FidesDhtPublishRequest): Promise<FidesDiscoveryInfrastructurePublishResponse> => (
+      this.post('/dht/publish', body) as Promise<FidesDiscoveryInfrastructurePublishResponse>
+    ),
+    find: (body: Pick<FidesDiscoveryQuery, 'capability'>): Promise<FidesDhtFindResponse> => (
+      this.post('/dht/find', body) as Promise<FidesDhtFindResponse>
+    ),
   }
 
   readonly wellKnown = {
-    fides: () => this.get('/.well-known/fides.json'),
-    agents: () => this.get('/.well-known/agents.json'),
-    agent: (agentId: string) => this.get(`/.well-known/agents/${encodeURIComponent(agentId)}.json`),
+    fides: (): Promise<FidesWellKnownFidesResponse> => (
+      this.get('/.well-known/fides.json') as Promise<FidesWellKnownFidesResponse>
+    ),
+    agents: (): Promise<FidesWellKnownAgentsResponse> => (
+      this.get('/.well-known/agents.json') as Promise<FidesWellKnownAgentsResponse>
+    ),
+    agent: (agentId: string): Promise<FidesWellKnownAgentResponse> => (
+      this.get(`/.well-known/agents/${encodeURIComponent(agentId)}.json`) as Promise<FidesWellKnownAgentResponse>
+    ),
   }
 
   readonly evidence = {

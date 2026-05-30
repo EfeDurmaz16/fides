@@ -989,6 +989,160 @@ describe('FidesClient', () => {
     expect(delegation.authorityGranted).toBe(false)
   })
 
+  it('types local discovery infrastructure responses as candidate-only records', async () => {
+    const record = {
+      id: 'reg_1',
+      agentId: 'did:fides:agent',
+      cardId: 'card_1',
+      capabilities: ['invoice.reconcile'],
+      authorityGranted: false,
+      reasons: ['registry_record_candidate_only'],
+    }
+    const pointer = {
+      id: 'ptr_1',
+      capability: 'invoice.reconcile',
+      agentId: 'did:fides:agent',
+      agentCardUrl: 'local://agent-cards/card_1',
+      signed: true,
+      authorityGranted: false,
+    }
+    const card = {
+      schema_version: 'fides.agent_card.v1',
+      id: 'card_1',
+      agent_id: 'did:fides:agent',
+      identity: { did: 'did:fides:agent', publicKey: new Uint8Array(32) },
+      capabilities: [],
+      endpoints: [],
+      policies: [{ requiresRuntimeAttestation: false, requiresApproval: false }],
+      createdAt: '2026-05-30T00:00:00.000Z',
+      updatedAt: '2026-05-30T00:00:00.000Z',
+    }
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => {
+      const target = String(url)
+      if (target.endsWith('/registry/start')) {
+        return new Response(JSON.stringify({
+          started: true,
+          mode: 'local_mock_registry',
+          records: 1,
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (target.endsWith('/registry/publish')) {
+        return new Response(JSON.stringify({ accepted: true, record }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (target.endsWith('/registry/index')) {
+        return new Response(JSON.stringify({
+          mode: 'local_mock_registry',
+          records: [record],
+          rejectedRecords: [],
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (target.endsWith('/relay/start')) {
+        return new Response(JSON.stringify({
+          started: true,
+          mode: 'local_mock_relay',
+          records: 1,
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (target.endsWith('/relay/register')) {
+        return new Response(JSON.stringify({ accepted: true, record }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (target.endsWith('/dht/start')) {
+        return new Response(JSON.stringify({
+          started: true,
+          mode: 'in_memory_simulator',
+          pointers: 1,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (target.endsWith('/dht/publish')) {
+        return new Response(JSON.stringify({ accepted: true, pointer }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (target.endsWith('/dht/find')) {
+        return new Response(JSON.stringify({
+          capability: 'invoice.reconcile',
+          pointers: [pointer],
+          rejectedPointers: [],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (target.endsWith('/.well-known/fides.json')) {
+        return new Response(JSON.stringify({
+          schema_version: 'fides.well_known.v1',
+          protocol: 'fides.v2',
+          supported_versions: ['fides.v2.0'],
+          endpoints: { agents: '/.well-known/agents.json' },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (target.endsWith('/.well-known/agents.json')) {
+        return new Response(JSON.stringify({
+          schema_version: 'fides.well_known.agents.v1',
+          agents: [{
+            agentId: 'did:fides:agent',
+            cardId: 'card_1',
+            signed: true,
+            cardUrl: '/.well-known/agents/did%3Afides%3Aagent.json',
+            authorityGranted: false,
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({
+        agentId: 'did:fides:agent',
+        card,
+        signed: null,
+        authorityGranted: false,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const registryStarted = await client.registry.start()
+    expect(registryStarted.mode).toBe('local_mock_registry')
+    expect(registryStarted.authorityGranted).toBe(false)
+
+    const registryPublished = await client.registry.publish({ agentCardId: 'card_1' })
+    expect(registryPublished.accepted).toBe(true)
+    expect(registryPublished.record?.authorityGranted).toBe(false)
+
+    const registryIndex = await client.registry.index()
+    expect(registryIndex.records[0]?.agentId).toBe('did:fides:agent')
+    expect(registryIndex.authorityGranted).toBe(false)
+
+    const relayStarted = await client.relay.start()
+    expect(relayStarted.mode).toBe('local_mock_relay')
+    expect(relayStarted.authorityGranted).toBe(false)
+
+    const relayRegistered = await client.relay.register({ agentId: 'did:fides:agent' })
+    expect(relayRegistered.record?.authorityGranted).toBe(false)
+
+    const dhtStarted = await client.dht.start()
+    expect(dhtStarted.mode).toBe('in_memory_simulator')
+
+    const dhtPublished = await client.dht.publish({ capability: 'invoice.reconcile', agentId: 'did:fides:agent' })
+    expect(dhtPublished.pointer?.authorityGranted).toBe(false)
+
+    const dhtFind = await client.dht.find({ capability: 'invoice.reconcile' })
+    expect(dhtFind.pointers[0]?.capability).toBe('invoice.reconcile')
+
+    const fidesWellKnown = await client.wellKnown.fides()
+    expect(fidesWellKnown.protocol).toBe('fides.v2')
+
+    const agentsWellKnown = await client.wellKnown.agents()
+    expect(agentsWellKnown.agents[0]?.authorityGranted).toBe(false)
+
+    const agentWellKnown = await client.wellKnown.agent('did:fides:agent')
+    expect(agentWellKnown.authorityGranted).toBe(false)
+  })
+
   it('creates and submits signed invocation requests from a session grant', async () => {
     const requester = await createAgentIdentity()
     const sessionGrant: SessionGrantV2 = {

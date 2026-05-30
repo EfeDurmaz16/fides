@@ -388,6 +388,7 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `cb14b16 test(examples): enforce target agent layout`
 - `86c719e feat(packages): publish guard and adapters surfaces`
 - `33a6de8 feat(packages): add daemon and runtime effect boundaries`
 - `99d40b2 test(examples): enforce v2 capability names`

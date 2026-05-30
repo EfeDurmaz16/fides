@@ -53,71 +53,81 @@ pnpm install
 pnpm build
 ```
 
-### Basic Usage
+### Start agentd
+
+```bash
+pnpm --filter @fides/agentd dev
+curl http://localhost:7345/health
+```
+
+### CLI authority path
+
+The examples below assume the `agentd` binary is on your `PATH`. From the
+monorepo, use `pnpm --filter @fides/cli agentd -- <command>`.
+Replace placeholder DIDs with the IDs returned by `identity create`.
+
+```bash
+agentd identity create --type principal --name "Demo Principal" --agentd-url http://localhost:7345
+agentd identity create --type publisher --name "Demo Publisher" --agentd-url http://localhost:7345
+agentd identity create --type agent --name "Invoice Agent" --agentd-url http://localhost:7345
+
+agentd card create --did did:fides:invoice-agent --name "Invoice Agent" --capabilities '[{"id":"invoice.reconcile","riskLevel":"medium","requiredScopes":["invoice:read"]}]' --agentd-url http://localhost:7345
+agentd card sign did:fides:invoice-agent --agentd-url http://localhost:7345
+agentd register did:fides:invoice-agent --agentd-url http://localhost:7345
+
+agentd discover --capability invoice.reconcile --provider local --agentd-url http://localhost:7345
+agentd trust did:fides:invoice-agent --capability invoice.reconcile --agentd-url http://localhost:7345
+agentd policy evaluate --agent did:fides:invoice-agent --capability invoice.reconcile --requested-scopes invoice:read --agentd-url http://localhost:7345
+agentd session request did:fides:invoice-agent --capability invoice.reconcile --requested-scopes invoice:read --agentd-url http://localhost:7345
+agentd invoke --session-id sess_... --input invoice.json --agentd-url http://localhost:7345
+agentd evidence verify --agentd-url http://localhost:7345
+```
+
+Discovery returns candidates only. Policy and scoped SessionGrants are the
+authority path.
+
+### TypeScript SDK
 
 ```typescript
-import {
-  createAgentIdentity,
-  createPrincipalIdentity,
-  classifyCapabilityRisk,
-  createDelegationToken,
-  signDelegationToken,
-} from '@fides/core'
-import { evaluatePolicy } from '@fides/policy'
-import { evaluateGuard, createTrustContext } from '@fides/guard'
-import { createEvidenceChain, appendEvidenceEvent, hashEvidenceValue } from '@fides/evidence'
-import { MockTEEProvider, InMemoryKillSwitch } from '@fides/runtime'
+import { FidesClient } from '@fides/sdk'
 
-// Create agent identities
-const { identity: alice } = await createAgentIdentity()
-alice.metadata = { name: 'Alice Assistant' }
-const { identity: charlie, privateKey: charliePrivateKey } = await createPrincipalIdentity({
-  type: 'individual',
-  displayName: 'Charlie User',
+const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+
+const principal = await client.identity.createPrincipal({ name: 'Demo Principal' })
+const requester = await client.identity.createAgent({ name: 'Requester Agent' })
+const target = await client.identity.createAgent({ name: 'Invoice Agent' })
+
+const card = await client.cards.create({
+  agentId: target.did,
+  name: 'Invoice Agent',
+  capabilities: [{ id: 'invoice.reconcile', riskLevel: 'medium', requiredScopes: ['invoice:read'] }],
 })
 
-// Classify capability risk
-const risk = classifyCapabilityRisk('email:send')  // 'high'
+await client.cards.sign({ id: card.card.id })
+await client.agents.register({ agentCardId: card.card.id })
 
-// Delegate capabilities with constraints
-const token = await signDelegationToken(createDelegationToken({
-  delegator: charlie.did,
-  delegatee: alice.did,
-  capabilities: ['email:send', 'calendar:create'],
-  constraints: { maxActions: 10, maxSpend: '10.00', allowedContexts: ['work'] },
-  expiresAt: new Date(Date.now() + 3600000).toISOString(),
-}), charliePrivateKey)
+const candidates = await client.discovery.local({ capability: 'invoice.reconcile' })
+console.log(candidates.authorityGranted) // false
 
-// Evaluate policy
-const policy = {
-  id: 'default', version: '1.0.0',
-  rules: [
-    { id: 'trust', condition: { operator: 'gte', field: 'reputationScore', value: 0.8 }, action: 'allow', explanation: 'High trust' },
-  ],
-  defaultAction: 'deny',
-}
-const result = evaluatePolicy(policy, { reputationScore: 0.9 })
-
-// Build evidence chain
-let chain = createEvidenceChain()
-const event = {
-  id: 'e1', type: 'invoke', timestamp: new Date().toISOString(),
-  actor: alice.did, action: 'email:send', payload: {},
-  privacy: { level: 'redacted' },
-}
-chain = appendEvidenceEvent(chain, event, `local-evidence:${hashEvidenceValue(event).slice('sha256:'.length)}`)
-
-// Run guard decision
-const trust = createTrustContext({
-  reputationScore: 0.9, capabilityScore: 0.95,
-  attestation: await new MockTEEProvider().attest(alice.did),
-  evidenceChain: chain, killSwitchEngaged: false, recentIncidents: 0,
+await client.trust.evaluate({ agentId: target.did, capability: 'invoice.reconcile' })
+await client.policy.evaluate({
+  principalId: principal.did,
+  requesterAgentId: requester.did,
+  agentId: target.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
 })
-const decision = await evaluateGuard({
-  agentDid: alice.did, capabilityId: 'email:send',
-  policy, context: { requestCount: 10 }, trust,
+
+const session = await client.sessions.request({
+  principalId: principal.did,
+  requesterAgentId: requester.did,
+  agentId: target.did,
+  capability: 'invoice.reconcile',
+  requestedScopes: ['invoice:read'],
 })
-// decision.decision → 'allow' | 'deny' | 'approve-required' | 'dry-run'
+
+await client.invoke({ sessionId: session.session.session_id, input: { invoiceId: 'inv_123' } })
+await client.evidence.verify()
 ```
 
 ---
@@ -125,49 +135,38 @@ const decision = await evaluateGuard({
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                              AI Agent                                   │
-│                                                                         │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────────────────┐ │
-│  │ @fides/    │ │ @fides/    │ │ @fides/    │ │ @fides/              │ │
-│  │ core       │ │ policy     │ │ guard      │ │ evidence             │ │
-│  │            │ │            │ │            │ │                      │ │
-│  │ Identity   │ │ Policy     │ │ Decision   │ │ Hash-chain           │ │
-│  │ Signing    │ │ Rules      │ │ Pipeline   │ │ Merkle root          │ │
-│  │ AgentCard  │ │ Expressions│ │ KillSwitch │ │ Privacy levels       │ │
-│  │ DelegationToken evaluation │ │ Attestation│ │ Event log            │ │
-│  └─────┬──────┘ └─────┬──────┘ └─────┬──────┘ └──────────┬───────────┘ │
-│        │              │              │                   │             │
-│  ┌─────┴──────────────┴──────────────┴───────────────────┴──────────┐ │
-│  │                    @fides/discovery                               │ │
-│  │         well-known · registry · relay · DHT · local               │ │
-│  └──────────────────────────────┬────────────────────────────────────┘ │
-│  ┌──────────────────────────────┴────────────────────────────────────┐ │
-│  │                    @fides/runtime                                 │ │
-│  │         TEE Attestation · Kill Switch · Runtime verification      │ │
-│  └───────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────┘
-                                 │
-         ┌───────────────────────┼───────────────────────┐
-         ▼                       ▼                       ▼
-┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│ @fides/         │   │ @fides/         │   │ @fides/         │
-│ discovery-svc   │   │ trust-graph     │   │ registry-svc    │
-│                 │   │                 │   │                 │
-│ AgentCard       │   │ Trust edges     │   │ Agent           │
-│ resolution      │   │ Reputation      │   │ registration    │
-│ .well-known     │   │ BFS scoring     │   │ Capability pub  │
-└─────────────────┘   └────────┬────────┘   └────────┬────────┘
-                               │                     │
-                    ┌──────────┴─────────────────────┴──────────┐
-                    ▼                     ▼                     ▼
-           ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-           │ @fides/         │  │ @fides/         │  │ @fides/         │
-           │ relay-svc       │  │ agentd          │  │ platform-api    │
-           │                 │  │                 │  │                 │
-           │ NAT traversal   │  │ Agent daemon    │  │ REST/gRPC       │
-           │ Message relay   │  │ Lifecycle mgmt  │  │ Admin API       │
-           └─────────────────┘  └─────────────────┘  └─────────────────┘
+intent/capability + constraints
+        │
+        ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Discovery providers                                          │
+│ local · well-known · registry · relay · DHT · federation     │
+│ Output: verified candidates only, never authority            │
+└──────────────────────────────┬───────────────────────────────┘
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Verification and scoring                                     │
+│ signed AgentCards · protocol versions · trust anchors        │
+│ capability-specific trust · reputation · incidents           │
+│ revocations · runtime attestations                           │
+└──────────────────────────────┬───────────────────────────────┘
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Policy-before-execution                                      │
+│ allow · deny · require_approval · dry_run_only               │
+│ scope_limit · risk_limit · kill switch override              │
+└──────────────────────────────┬───────────────────────────────┘
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Scoped authority                                             │
+│ DelegationToken · SessionGrant · nonce · expiry · audience   │
+└──────────────────────────────┬───────────────────────────────┘
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│ Invocation and evidence                                      │
+│ validate input/output · execute or dry-run · signed result   │
+│ hash-chained EvidenceEvents · redacted/hash-only by default  │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---

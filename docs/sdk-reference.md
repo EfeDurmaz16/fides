@@ -204,3 +204,30 @@ from daemon-side verification.
 Advanced authority flows can use `AgentdClient`. `AgentdClient.health()` reads
 `GET /health` and returns typed authority-store and local-state-store status,
 including the SQLite snapshot path when the daemon exposes it.
+
+## AGIT / Rust Primitive Bridge
+
+`AgitPrimitiveBridge` gives the SDK an adapter-ready boundary for future
+AGIT/Rust primitives without requiring Rust in the first working FIDES v2
+runtime.
+
+```ts
+import { AgitPrimitiveBridge } from '@fides/sdk'
+
+const bridge = new AgitPrimitiveBridge()
+
+const canonical = await bridge.canonicalizeJson({ b: 2, a: 1 })
+const hash = await bridge.hashObject({ event_id: 'evt_1' })
+const chained = await bridge.appendEvidenceHash({
+  previousEventHash: '0',
+  eventPayload: { event_id: 'evt_1', type: 'policy.evaluated' },
+})
+const proof = await bridge.createMerkleProof({
+  leaves: [hash, chained.eventHash],
+  leaf: chained.eventHash,
+})
+```
+
+The bridge delegates to a supplied `RustPrimitiveAdapter` when present.
+Otherwise it uses TypeScript canonical JSON and SHA-256 fallbacks. Public SDK
+APIs remain Promise-based, and protocol objects stay FIDES-native JSON.

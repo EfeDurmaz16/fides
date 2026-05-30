@@ -163,6 +163,30 @@ attestations that can satisfy high-risk session policy when passed as an
 individual events, verify the root hash chain, and export the current local
 ledger.
 
+## AGIT / Rust Primitive Bridge
+
+```typescript
+import { AgitPrimitiveBridge } from '@fides/sdk'
+
+const bridge = new AgitPrimitiveBridge()
+
+const canonical = await bridge.canonicalizeJson({ b: 2, a: 1 })
+const objectHash = await bridge.hashObject({ event_id: 'evt_1' })
+const chained = await bridge.appendEvidenceHash({
+  previousEventHash: '0',
+  eventPayload: { event_id: 'evt_1', type: 'policy.evaluated' },
+})
+const proof = await bridge.createMerkleProof({
+  leaves: [objectHash, chained.eventHash],
+  leaf: chained.eventHash,
+})
+```
+
+`AgitPrimitiveBridge` is TS-first and works without Rust. A future AGIT/Rust
+adapter can be supplied for canonical JSON, hashing, evidence hash-chain,
+Merkle, and DAG primitives while preserving FIDES protocol objects and the
+Promise-based SDK surface.
+
 ```typescript
 import { AgentdClient } from '@fides/sdk'
 

@@ -152,8 +152,15 @@ export {
 
 // Integration exports
 export {
+  AgitPrimitiveBridge,
   AgitCommitSigner,
   TrustGatedAccess,
+  type AgitEvidenceHashChainInput,
+  type AgitEvidenceHashChainResult,
+  type AgitMerkleProofInput,
+  type AgitMerkleProofResult,
+  type AgitPrimitiveBridgeOptions,
+  type AgitRustPrimitiveAdapter,
   type CommitSignature,
   type CommitVerification,
   type TrustGateResult,

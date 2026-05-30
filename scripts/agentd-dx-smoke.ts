@@ -1,8 +1,14 @@
 import { spawn, execFile } from 'node:child_process'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import {
+  createAgentIdentity,
+  createDelegationTokenV2,
+  createPrincipalIdentity,
+  signDelegationTokenV2,
+} from '@fides/core'
 
 const execFileAsync = promisify(execFile)
 
@@ -38,6 +44,88 @@ async function main() {
     assert(demo.authority?.policyBeforeExecution === true, 'demo must enforce policy before execution')
     assert(demo.verification?.evidenceHashChainValid === true, 'demo evidence hash chain must verify')
     console.log('ok agentd demo run')
+
+    const requester = await createAgentIdentity()
+    const requesterPrivateKeyHex = Buffer.from(requester.privateKey).toString('hex')
+    const requesterKeyPath = join(workdir, 'requester.key')
+    await writeFile(requesterKeyPath, requesterPrivateKeyHex, { mode: 0o600 })
+
+    const invoiceSession = await runAgentdJson([
+      'session',
+      'request',
+      String(demo.identities?.invoice),
+      '--capability',
+      'invoice.reconcile',
+      '--requested-scopes',
+      'invoice:read',
+      '--principal-id',
+      String(demo.identities?.principal),
+      '--requester-agent-id',
+      requester.identity.did,
+      '--agentd-url',
+      baseUrl,
+      '--json',
+    ])
+    const invoiceSessionId = assertString(invoiceSession.session?.session_id, 'signed invoke smoke session id')
+    assert(invoiceSession.authorityGranted === true, 'signed invoke smoke session must grant execution authority')
+
+    const signedInvocation = await runAgentdJson([
+      'invoke',
+      '--session-id',
+      invoiceSessionId,
+      '--input-json',
+      '{"invoiceId":"inv_smoke_signed"}',
+      '--sign',
+      '--requester-private-key-file',
+      requesterKeyPath,
+      '--agentd-url',
+      baseUrl,
+      '--json',
+    ])
+    assert(signedInvocation.signedRequestVerified === true, 'signed invocation request must verify')
+    assert(signedInvocation.signedResultVerified === true, 'signed invocation result must verify')
+    assert(signedInvocation.authorityGranted === true, 'signed invocation must preserve execution authority')
+    assert(signedInvocation.result?.status === 'completed', 'signed invocation must complete')
+    assert(
+      signedInvocation.signedRequest?.payload?.issuer === requester.identity.did,
+      'signed invocation issuer must be the requester DID',
+    )
+    console.log('ok signed invocation CLI authority path')
+
+    const delegator = await createPrincipalIdentity({
+      type: 'individual',
+      displayName: 'Smoke Delegator',
+      verificationMethod: 'self_signed',
+      verified: false,
+    })
+    const signedDelegationToken = await signDelegationTokenV2(
+      createDelegationTokenV2({
+        delegator: delegator.identity.did,
+        delegatee: String(demo.identities?.invoice),
+        capabilities: ['invoice.reconcile'],
+        audience: ['agentd'],
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      }),
+      delegator.privateKey,
+      delegator.identity.did,
+    )
+    const signedTokenPath = join(workdir, 'signed-delegation-token-v2.json')
+    await writeFile(signedTokenPath, JSON.stringify(signedDelegationToken, null, 2))
+    const delegatedSession = await runAgentdJson([
+      'session',
+      'create',
+      '--capability',
+      'invoice.reconcile',
+      '--token-file',
+      signedTokenPath,
+      '--agentd-url',
+      baseUrl,
+      '--json',
+    ])
+    assert(delegatedSession.authorized === true, 'canonical signed delegation token must authorize a session')
+    assert(delegatedSession.signedDelegationVerified === true, 'canonical signed delegation token must verify')
+    assert(delegatedSession.session?.id, 'canonical signed delegation session must include an id')
+    console.log('ok signed delegation token CLI authority path')
 
     const discovery = await runAgentdJson(['discover', '--capability', 'invoice.reconcile', '--all-providers', '--json'])
     assert(discovery.authorityGranted === false, 'all-provider discovery must not grant authority')
@@ -127,6 +215,11 @@ async function runAgentdJson(args: string[]): Promise<Record<string, any>> {
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
+}
+
+function assertString(value: unknown, label: string): string {
+  assert(typeof value === 'string' && value.length > 0, `${label} must be a non-empty string`)
+  return value
 }
 
 function assertNoAuthorityGrantedTrue(value: unknown, label: string): void {

@@ -109,6 +109,10 @@ Last verified locally: 2026-05-30.
 - CLI tests cover canonical signed delegation-token submission to `/v1/sessions`.
 - CLI tests cover canonical signed invocation request submission and issuer
   proof verification.
+- `pnpm smoke:agentd` starts an isolated local daemon and exercises root
+  `pnpm agentd` CLI flows for demo, signed invocation, canonical signed
+  delegation-token session creation, all-provider discovery, and adversarial
+  simulation.
 - Canonical example catalog audit for the requested demo agents and
   capability/risk contracts.
 - Example audit coverage rejects legacy standalone example capability names so
@@ -357,6 +361,9 @@ pnpm smoke:agentd
 # Equivalent manual flow:
 AGENTD_LOCAL_STATE=memory AGENTD_PORT=7486 pnpm agentd:dev
 pnpm --silent agentd demo run --agentd-url http://localhost:7486 --json
+pnpm --silent agentd session request <invoice-agent-did> --capability invoice.reconcile --requested-scopes invoice:read --principal-id <principal-did> --requester-agent-id <requester-did> --agentd-url http://localhost:7486 --json
+pnpm --silent agentd invoke --session-id <session-id> --input-json '{"invoiceId":"inv_smoke_signed"}' --sign --requester-private-key-file requester.key --agentd-url http://localhost:7486 --json
+pnpm --silent agentd session create --capability invoice.reconcile --token-file signed-delegation-token-v2.json --agentd-url http://localhost:7486 --json
 pnpm --silent agentd discover --capability invoice.reconcile --all-providers --agentd-url http://localhost:7486 --json
 pnpm --silent agentd simulate adversarial --agentd-url http://localhost:7486 --json
 ```
@@ -368,6 +375,10 @@ Observed manual smoke results:
 - demo returned `evidenceHashChainValid: true`.
 - demo returned `discoveryGrantsAuthority: false`.
 - demo returned `payments: "dry_run_only"`.
+- signed invocation returned `signedRequestVerified: true`.
+- signed invocation returned `signedResultVerified: true`.
+- canonical signed delegation-token session creation returned
+  `signedDelegationVerified: true`.
 - all-provider discovery queried local, well-known, registry, relay, DHT, and federation providers.
 - all-provider discovery returned `authorityGranted: false`.
 - registry publish, relay register, and DHT publish responses return top-level
@@ -404,7 +415,6 @@ Observed manual smoke results:
 - Add real DHT, relay, registry, and federation adapters.
 - Add production TEE/build/container attestation providers.
 - Harden local key storage beyond prototype snapshot material.
-- Expand CLI end-to-end tests around root `pnpm agentd` scripts.
 - Add full release notes and contribution guidance for external OSS users.
 
 ## Commit History Summary

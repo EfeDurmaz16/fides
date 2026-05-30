@@ -20,7 +20,7 @@ npm install -g @fides/cli
 From the monorepo checkout:
 
 ```bash
-pnpm --filter @fides/cli agentd <command>
+pnpm agentd <command>
 ```
 
 ## Usage

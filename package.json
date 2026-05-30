@@ -23,6 +23,8 @@
     "verify:quick": "pnpm lint && pnpm test",
     "ci:local": "pnpm verify",
     "dev": "turbo run dev --parallel",
+    "agentd": "pnpm --filter @fides/cli agentd",
+    "agentd:dev": "pnpm --filter @fides/agentd dev",
     "clean": "turbo run clean",
     "demo": "tsx examples/demo.ts",
     "demo:authority": "tsx scripts/authority-path-demo.ts",

@@ -29,10 +29,10 @@ pnpm build
 ```
 
 The examples below assume the `agentd` binary is on your `PATH`. From a fresh
-checkout, you can run the same commands through the workspace package:
+checkout, you can run the same commands through the root workspace script:
 
 ```bash
-pnpm --filter @fides/cli agentd <command>
+pnpm agentd <command>
 ```
 
 ## Start The Local Daemon
@@ -40,7 +40,7 @@ pnpm --filter @fides/cli agentd <command>
 The root v2 API is served by `agentd` on `http://localhost:7345`.
 
 ```bash
-pnpm --filter @fides/agentd dev
+pnpm agentd:dev
 ```
 
 In another shell:

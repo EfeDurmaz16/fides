@@ -264,6 +264,7 @@ pnpm smoke:agentd
 # Equivalent manual flow:
 AGENTD_LOCAL_STATE=memory AGENTD_PORT=7486 pnpm agentd:dev
 pnpm --silent agentd demo run --agentd-url http://localhost:7486 --json
+pnpm --silent agentd discover --capability invoice.reconcile --all-providers --agentd-url http://localhost:7486 --json
 pnpm --silent agentd simulate adversarial --agentd-url http://localhost:7486 --json
 ```
 
@@ -274,6 +275,8 @@ Observed manual smoke results:
 - demo returned `evidenceHashChainValid: true`.
 - demo returned `discoveryGrantsAuthority: false`.
 - demo returned `payments: "dry_run_only"`.
+- all-provider discovery queried local, well-known, registry, relay, DHT, and federation providers.
+- all-provider discovery returned `authorityGranted: false`.
 - adversarial simulation returned `status: "detected"`.
 - adversarial simulation detected 10 scenarios.
 - adversarial simulation returned `rootChainValid: true`.

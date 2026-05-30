@@ -174,6 +174,8 @@ export class AgentDiscoveryClient {
         const text = await response.text()
         throw new DiscoveryError(`Heartbeat failed: ${response.status} ${text}`)
       }
+
+      this.clearCache()
     } catch (error) {
       if (error instanceof DiscoveryError) throw error
       throw new DiscoveryError(

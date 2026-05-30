@@ -413,6 +413,45 @@ describe('AgentDiscoveryClient', () => {
       .resolves.toEqual([newAgent])
     expect(mockFetch).toHaveBeenCalledTimes(3)
   })
+
+  it('invalidates cached discovery results after heartbeat', async () => {
+    const offlineAgent = {
+      did: 'did:fides:agent',
+      name: 'Agent',
+      url: 'local://agents/did%3Afides%3Aagent',
+      version: '1.0.0',
+      publicKey: '00'.repeat(32),
+      algorithm: 'ed25519',
+      skills: [{ id: 'invoice.reconcile', name: 'Invoice Reconcile' }],
+      status: 'offline',
+      createdAt: '2026-05-30T00:00:00.000Z',
+      updatedAt: '2026-05-30T00:00:00.000Z',
+    }
+    const onlineAgent = {
+      ...offlineAgent,
+      status: 'online',
+      updatedAt: '2026-05-30T00:01:00.000Z',
+    }
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [offlineAgent],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'online', heartbeatAt: '2026-05-30T00:01:00.000Z' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [onlineAgent],
+      })
+
+    await expect(client.discoverAgents({ capability: 'invoice.reconcile' })).resolves.toEqual([offlineAgent])
+    await client.heartbeat(offlineAgent.did)
+    await expect(client.discoverAgents({ capability: 'invoice.reconcile' })).resolves.toEqual([onlineAgent])
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+  })
 })
 
 describe('IdentityResolver', () => {

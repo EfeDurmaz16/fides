@@ -58,7 +58,8 @@ Last verified locally: 2026-05-30.
 - SQLite local-state snapshot and mirror-table persistence for local inspection.
 - Revocation, incident, kill switch, session, and evidence policy hooks.
 - SDK type coverage for the main root v2 API responses.
-- CLI HTTP helpers preserve root v2 `ErrorEnvelope` codes in command output.
+- CLI HTTP helpers preserve root v2 `ErrorEnvelope` codes in command output,
+  and the CLI entrypoint catches async command failures with stable formatting.
 - OpenAPI route audit and response-shape contract coverage for root `agentd`
   demo, adversarial simulation, and non-authoritative discovery write
   responses.
@@ -341,6 +342,7 @@ Observed manual smoke results:
 Recent v2 status/DX commits:
 
 - `2d4eb41 feat(delegation): bind session grants to protocol versions`
+- `8b472a0 feat(cli): surface typed agentd errors`
 - `2ccaa52 test(agentd): cover provider discovery evidence refs`
 - `7c60719 docs: document discovery evidence events`
 - `22cd792 feat(agentd): emit discovery evidence events`

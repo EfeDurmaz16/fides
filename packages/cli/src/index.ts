@@ -74,4 +74,9 @@ program.addCommand(createDemoCommand());
 program.addCommand(createSimulateCommand());
 program.addCommand(createInvokeCommand());
 
-program.parse();
+try {
+  await program.parseAsync(process.argv);
+} catch (error) {
+  console.error('Error:', error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+}

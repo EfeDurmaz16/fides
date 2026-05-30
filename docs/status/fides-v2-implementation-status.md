@@ -30,7 +30,11 @@ Last verified locally: 2026-05-30.
 - Scoped SessionGrants and invocation preflight.
 - Hash-chained EvidenceEvents with verification and export.
 - Runtime attestation schema and local MockTEE provider.
-- Local SQLite daemon snapshot store for v2 local state.
+- Local SQLite daemon snapshot store for v2 local state, with mirror tables for
+  identities, trust anchors, attestations, AgentCards, agents, capabilities,
+  discovery records, DHT records, registry records, relay records, trust
+  results, reputation records, policy decisions, approvals, delegations,
+  sessions, evidence events, revocations, incidents, and kill switch rules.
 - Full local demo and adversarial simulation endpoints.
 - Public docs refreshed around `agentd`, `FidesClient`, candidate-only
   discovery, and authority-via-policy/session.
@@ -41,6 +45,7 @@ Last verified locally: 2026-05-30.
 - Typed error vocabulary and `ErrorEnvelope` response shape.
 - `agentd` scoped API key enforcement on protected mutation routes.
 - Postgres authority-store migration and health-check path for `agentd`.
+- SQLite local-state snapshot and mirror-table persistence for local inspection.
 - Revocation, incident, kill switch, session, and evidence policy hooks.
 - SDK type coverage for the main root v2 API responses.
 - OpenAPI schemas for root `agentd` demo and simulation responses.

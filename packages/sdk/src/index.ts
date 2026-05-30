@@ -140,6 +140,7 @@ export {
   FidesClient,
   FidesClientError,
   type FidesClientOptions,
+  type FidesHealthResponse,
   type FidesDiscoveryQuery,
   type FidesDiscoveryResponse,
   type FidesProviderRecord,

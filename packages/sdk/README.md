@@ -21,6 +21,7 @@ pnpm add @fides/sdk
 import { FidesClient } from '@fides/sdk'
 
 const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+const health = await client.health()
 
 const principal = await client.identity.createPrincipal({ name: 'Demo Principal' })
 const requester = await client.identity.createAgent({ name: 'Requester Agent' })

@@ -26,6 +26,9 @@ import {
   type SignedInvocationRequest,
   type SignedInvocationResult,
 } from '@fides/core'
+import type { AgentdHealthResponse } from './agentd/client.js'
+
+export type { AgentdHealthResponse as FidesHealthResponse } from './agentd/client.js'
 
 export interface FidesClientOptions {
   daemonUrl: string
@@ -943,6 +946,10 @@ export class FidesClient {
   }
 
   constructor(private readonly options: FidesClientOptions) {}
+
+  health(): Promise<AgentdHealthResponse> {
+    return this.get('/health') as Promise<AgentdHealthResponse>
+  }
 
   invoke(body: FidesInvocationRequest): Promise<FidesInvocationResponse> {
     return this.post('/invoke', body) as Promise<FidesInvocationResponse>

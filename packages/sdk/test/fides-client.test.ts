@@ -7,6 +7,30 @@ afterEach(() => {
 })
 
 describe('FidesClient', () => {
+  it('reads root daemon health from the public v2 facade', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      status: 'degraded',
+      service: 'agentd',
+      authorityStore: { kind: 'file', ok: true },
+      localStateStore: { kind: 'sqlite', ok: true, path: '/tmp/fides.sqlite' },
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const health = await client.health()
+
+    expect(health.status).toBe('degraded')
+    expect(health.service).toBe('agentd')
+    expect(health.authorityStore?.kind).toBe('file')
+    expect(health.localStateStore?.kind).toBe('sqlite')
+    expect(fetch).toHaveBeenCalledWith('http://localhost:7345/health', {
+      method: 'GET',
+      headers: new Headers(),
+    })
+  })
+
   it('types root policy evaluation responses with v2 decisions', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       policy: {

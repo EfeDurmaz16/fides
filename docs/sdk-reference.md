@@ -14,6 +14,11 @@ import { FidesClient } from '@fides/sdk'
 
 const client = new FidesClient({ daemonUrl: 'http://localhost:4817' })
 
+const health = await client.health()
+if (health.status !== 'healthy') {
+  console.warn('agentd is reachable but degraded', health.checks)
+}
+
 const identity = await client.identity.createAgent({ name: 'Invoice Agent' })
 const identities = await client.identity.list()
 const sameIdentity = await client.identity.show(identity.identity.did)

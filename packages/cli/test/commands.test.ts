@@ -332,6 +332,65 @@ describe('CLI Commands', () => {
         name: 'Agent',
       }, null, 2));
     });
+
+    it('uses the root AgentCard API for local create, sign, inspect, and verify', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        card: { id: 'did:fides:agent' },
+        signed: { payload: { id: 'did:fides:agent' } },
+        valid: true,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createCardCommand } = await import('../src/commands/card.js');
+      const cmd = createCardCommand();
+
+      await cmd.parseAsync([
+        'create',
+        '--did',
+        'did:fides:agent',
+        '--name',
+        'Invoice Agent',
+        '--capabilities',
+        '[{"id":"invoice.reconcile"}]',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['sign', 'did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['inspect', 'did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['verify', 'did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/agent-cards',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            agentId: 'did:fides:agent',
+            name: 'Invoice Agent',
+            capabilities: [{ id: 'invoice.reconcile' }],
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/agent-cards/did%3Afides%3Aagent/sign',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/agent-cards/did%3Afides%3Aagent',
+        expect.objectContaining({ method: 'GET' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        4,
+        'http://agentd.test/agent-cards/did%3Afides%3Aagent/verify',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
   });
 
   describe('sign command', () => {

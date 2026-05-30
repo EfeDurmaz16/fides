@@ -19,6 +19,11 @@ Current implementation anchor:
 
 Incidents carry severity, evidence refs, resolution status, trust penalty, and reputation penalty.
 
+`IncidentRecordV2` uses the shared protocol object envelope: `id`, `issuer`,
+`subject`, timestamps, and `payload_hash`. `issuer` is the reporter and
+`subject` is the affected agent id. Resolution changes recompute the payload
+hash so trust and policy can cite the exact incident state they evaluated.
+
 ## Evidence
 
 The local root daemon appends a hash-only `incident.reported` event when an

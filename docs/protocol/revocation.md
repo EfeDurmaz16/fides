@@ -19,6 +19,10 @@ Current implementation anchor:
 
 Revocation must be checked before trust, policy, session, and invocation flows complete.
 
+`RevocationRecordV2` uses the shared protocol object envelope: `id`, `issuer`,
+`subject`, timestamps, and `payload_hash`. The subject is the revoked target id,
+so policy and evidence can bind to the exact authority surface being disabled.
+
 ## Evidence
 
 The local root daemon appends a hash-only `revocation.recorded` event when a

@@ -34,6 +34,7 @@ export interface RevocationRecordV2 {
   schema_version: 'fides.revocation.record.v1'
   id: string
   issuer: string
+  subject: string
   target_type: RevocationTargetType
   target_id: string
   reason: string
@@ -47,6 +48,8 @@ export interface RevocationRecordV2 {
 export interface IncidentRecordV2 {
   schema_version: 'fides.incident.record.v1'
   id: string
+  issuer: string
+  subject: string
   reporter: string
   target_agent_id: string
   severity: 'low' | 'medium' | 'high' | 'critical'
@@ -144,6 +147,7 @@ export function createRevocationRecordV2(input: RevocationInputV2): RevocationRe
     schema_version: 'fides.revocation.record.v1' as const,
     id: crypto.randomUUID(),
     issuer: input.issuer,
+    subject: input.targetId,
     target_type: input.targetType,
     target_id: input.targetId,
     reason: input.reason,
@@ -163,6 +167,8 @@ export function createIncidentRecordV2(input: IncidentInputV2): IncidentRecordV2
   const payload = {
     schema_version: 'fides.incident.record.v1' as const,
     id: crypto.randomUUID(),
+    issuer: input.reporter,
+    subject: input.targetAgentId,
     reporter: input.reporter,
     target_agent_id: input.targetAgentId,
     severity: input.severity,

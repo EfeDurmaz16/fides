@@ -365,6 +365,54 @@ describe('AgentDiscoveryClient', () => {
     expect(discovered[0].reasons).toContain('standalone_discovery_candidate')
     expect(fetched?.reasons).toContain('signed_agent_card_not_verified_by_discovery_service')
   })
+
+  it('invalidates cached discovery results after registering an agent', async () => {
+    const oldAgent = {
+      did: 'did:fides:old',
+      name: 'Old Agent',
+      url: 'local://agents/did%3Afides%3Aold',
+      version: '1.0.0',
+      publicKey: '00'.repeat(32),
+      algorithm: 'ed25519',
+      skills: [{ id: 'invoice.reconcile', name: 'Invoice Reconcile' }],
+      status: 'online',
+      createdAt: '2026-05-30T00:00:00.000Z',
+      updatedAt: '2026-05-30T00:00:00.000Z',
+    }
+    const newAgent = {
+      did: 'did:fides:new',
+      name: 'New Agent',
+      url: 'local://agents/did%3Afides%3Anew',
+      version: '1.0.0',
+      publicKey: '11'.repeat(32),
+      algorithm: 'ed25519',
+      skills: [{ id: 'invoice.reconcile', name: 'Invoice Reconcile' }],
+      status: 'online',
+      createdAt: '2026-05-30T00:00:00.000Z',
+      updatedAt: '2026-05-30T00:00:00.000Z',
+    }
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [oldAgent],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => newAgent,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [newAgent],
+      })
+
+    await expect(client.discoverAgents({ capability: 'invoice.reconcile' }))
+      .resolves.toEqual([oldAgent])
+    await client.registerAgent({ did: newAgent.did, name: newAgent.name })
+    await expect(client.discoverAgents({ capability: 'invoice.reconcile' }))
+      .resolves.toEqual([newAgent])
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+  })
 })
 
 describe('IdentityResolver', () => {

@@ -51,7 +51,9 @@ export class AgentDiscoveryClient {
         throw new DiscoveryError(`Failed to register agent: ${response.status} ${text}`)
       }
 
-      return await response.json()
+      const agent: AgentCard = await response.json()
+      this.clearCache()
+      return agent
     } catch (error) {
       if (error instanceof DiscoveryError) throw error
       throw new DiscoveryError(

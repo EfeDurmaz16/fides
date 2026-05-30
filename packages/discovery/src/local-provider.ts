@@ -1,6 +1,7 @@
 import {
   cardSupportsCapability,
   createDiscoveryCandidate,
+  verifySignedAgentCardIdentity,
   type AgentCard,
   type DiscoveryCandidate,
   type DiscoveryQuery,
@@ -51,6 +52,9 @@ export class LocalDiscoveryProvider implements DiscoveryProvider {
   }
 
   async register(card: SignedAgentCard): Promise<void> {
+    if (!await verifySignedAgentCardIdentity(card)) {
+      throw new Error('Local registration requires an identity-bound signed AgentCard')
+    }
     const store = this.loadStore()
     const did = card.payload.id
     store.set(did, card.payload as AgentCard)

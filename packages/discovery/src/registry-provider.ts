@@ -1,4 +1,4 @@
-import type { AgentCard, SignedAgentCard } from '@fides/core'
+import { verifySignedAgentCardIdentity, type AgentCard, type SignedAgentCard } from '@fides/core'
 import { DiscoveryProvider } from './provider.js'
 
 /**
@@ -25,6 +25,9 @@ export class RegistryDiscoveryProvider implements DiscoveryProvider {
   }
 
   async register(card: SignedAgentCard): Promise<void> {
+    if (!await verifySignedAgentCardIdentity(card)) {
+      throw new Error('Registry registration requires an identity-bound signed AgentCard')
+    }
     const response = await fetch(`${this.options.baseUrl}/v1/cards`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -33,6 +33,13 @@ Current implementation anchors:
 FIDES discovery does not require every candidate to already expose an HTTP URL.
 An endpoint URL is transport metadata, not identity, trust, or authority.
 
+All package-level discovery providers that accept `SignedAgentCard` registration
+must require identity-bound AgentCard proofs. Local, registry, relay, and DHT
+registration paths verify that the AgentCard proof verification method matches
+the advertised `identity.did` before storing, publishing, or relaying the card.
+Direct `registerCard` helpers remain local mock/test utilities and do not imply
+the card is signed or trusted.
+
 Current support:
 
 - Local discovery can resolve from daemon-held AgentCards without endpoint URLs.

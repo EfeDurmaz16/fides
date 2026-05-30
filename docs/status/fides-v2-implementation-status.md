@@ -17,6 +17,8 @@ Last verified locally: 2026-05-30.
 - `agentd` CLI command surface, plus root workspace scripts:
   - `pnpm agentd <command>`
   - `pnpm agentd:dev`
+- CLI surface audit for the requested `agentd` command groups and critical
+  options.
 - Canonical signing model for signed protocol objects.
 - Typed error envelopes on root v2 identity, AgentCard, discovery, trust,
   reputation, policy, session, invocation, approval, kill switch, revocation,
@@ -47,6 +49,8 @@ Last verified locally: 2026-05-30.
 - Public target-structure facade packages for crypto, identity, attestations,
   cards, trust, reputation, delegation, invocation, DHT, relay, registry,
   revocation, and incidents.
+- Public facade packages include export contract tests and no longer depend on
+  empty-test fallback behavior.
 - Full local demo and adversarial simulation endpoints.
 - Public docs refreshed around `agentd`, `FidesClient`, candidate-only
   discovery, and authority-via-policy/session.
@@ -66,8 +70,11 @@ Last verified locally: 2026-05-30.
 - OpenAPI route audit and response-shape contract coverage for root `agentd`
   demo, adversarial simulation, and non-authoritative discovery write
   responses.
+- CLI command-surface audit for the requested root command groups.
 - OpenAPI contract coverage for evidence-producing discovery responses.
 - OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
+- CI and npm publish workflows use the same full `pnpm verify` gate used
+  locally.
 
 ## Working Prototype
 
@@ -293,6 +300,7 @@ pnpm --filter @fides/e2e-tests test -- agentd-openapi-contract.test.ts
 pnpm --filter @fides/cli build
 pnpm package:hygiene
 pnpm api:audit
+pnpm cli:audit
 pnpm smoke:agentd
 ```
 
@@ -358,6 +366,12 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `d719687 test(cli): audit agentd command surface`
+- `2e0bbdf ci: use full verify gate`
+- `c2ca6b7 test(services): require existing test suites`
+- `b9b6967 test(packages): cover protocol facade exports`
+- `25bb2f6 feat(packages): add protocol domain facades`
+- `18a52f0 docs: refresh fides v2 dx status commits`
 - `292055d fix(cli): catch async entrypoint failures`
 - `8b472a0 feat(cli): surface typed agentd errors`
 - `2d4eb41 feat(delegation): bind session grants to protocol versions`

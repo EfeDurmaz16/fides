@@ -11,6 +11,7 @@ export type FidesErrorCategory =
   | 'dht'
   | 'evidence'
   | 'revocation'
+  | 'incident'
   | 'kill_switch'
   | 'version'
   | 'internal'
@@ -23,6 +24,18 @@ export const FIDES_ERROR_CODES = {
     severity: 'error',
     retryable: false,
     message: 'Identity signature is invalid',
+  },
+  IDENTITY_KEY_UNBOUND: {
+    category: 'identity',
+    severity: 'critical',
+    retryable: false,
+    message: 'Identity DID is not bound to the advertised public key',
+  },
+  AGENT_CARD_INVALID_SIGNATURE: {
+    category: 'agent_card',
+    severity: 'error',
+    retryable: false,
+    message: 'AgentCard signature is invalid',
   },
   AGENT_CARD_EXPIRED: {
     category: 'agent_card',
@@ -119,6 +132,18 @@ export const FIDES_ERROR_CODES = {
     severity: 'critical',
     retryable: false,
     message: 'An active revocation blocks this action',
+  },
+  INCIDENT_ACTIVE: {
+    category: 'incident',
+    severity: 'critical',
+    retryable: false,
+    message: 'An active incident requires review before execution',
+  },
+  INCIDENT_INVALID: {
+    category: 'incident',
+    severity: 'error',
+    retryable: false,
+    message: 'Incident record is invalid',
   },
   KILL_SWITCH_ACTIVE: {
     category: 'kill_switch',

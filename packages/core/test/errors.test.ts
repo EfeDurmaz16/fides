@@ -37,4 +37,22 @@ describe('error envelopes', () => {
     expect(isErrorEnvelope({ code: 'NOPE' })).toBe(false)
     expect(isErrorEnvelope(null)).toBe(false)
   })
+
+  it('covers incident and key-binding failures as stable protocol errors', () => {
+    expect(createErrorEnvelope('IDENTITY_KEY_UNBOUND')).toMatchObject({
+      code: 'IDENTITY_KEY_UNBOUND',
+      category: 'identity',
+      severity: 'critical',
+      retryable: false,
+    })
+    expect(createErrorEnvelope('AGENT_CARD_INVALID_SIGNATURE')).toMatchObject({
+      code: 'AGENT_CARD_INVALID_SIGNATURE',
+      category: 'agent_card',
+    })
+    expect(createErrorEnvelope('INCIDENT_ACTIVE')).toMatchObject({
+      code: 'INCIDENT_ACTIVE',
+      category: 'incident',
+      severity: 'critical',
+    })
+  })
 })

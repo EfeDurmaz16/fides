@@ -19,11 +19,15 @@ Each error includes:
 
 ## Required Codes
 
-The core vocabulary includes identity, AgentCard, capability, trust, policy, approval, session, attestation, DHT, evidence, revocation, kill switch, and version errors.
+The core vocabulary includes identity, AgentCard, capability, trust, policy,
+approval, session, attestation, DHT, evidence, revocation, incident, kill
+switch, and version errors.
 
 Examples:
 
 - `IDENTITY_INVALID_SIGNATURE`
+- `IDENTITY_KEY_UNBOUND`
+- `AGENT_CARD_INVALID_SIGNATURE`
 - `AGENT_CARD_EXPIRED`
 - `CAPABILITY_NOT_FOUND`
 - `TRUST_BELOW_THRESHOLD`
@@ -35,6 +39,7 @@ Examples:
 - `DHT_POINTER_TAMPERED`
 - `EVIDENCE_CHAIN_BROKEN`
 - `REVOCATION_ACTIVE`
+- `INCIDENT_ACTIVE`
 - `KILL_SWITCH_ACTIVE`
 - `VERSION_INCOMPATIBLE`
 

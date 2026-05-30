@@ -177,6 +177,70 @@ export interface AdapterCoverageReport {
   missing: AdapterProtocolSurface[]
 }
 
+export const RUST_PRIMITIVE_SURFACES = [
+  'canonical_json',
+  'hashing',
+  'object_signing',
+  'signature_verification',
+  'evidence_hash_chain',
+  'merkle_proofs',
+  'dag_primitives',
+] as const
+
+export type RustPrimitiveSurface = typeof RUST_PRIMITIVE_SURFACES[number]
+
+export interface RustPrimitiveAdapterManifest {
+  schema_version: 'fides.rust_primitive_adapter.manifest.v1'
+  id: string
+  name: string
+  version: string
+  surfaces: RustPrimitiveSurface[]
+  runtime_dependency_required: false
+  created_at: string
+}
+
+export interface CanonicalObjectSigningInput {
+  object: Record<string, unknown>
+  issuer: string
+  privateKeyRef: string
+}
+
+export interface CanonicalObjectVerificationInput {
+  signedObject: Record<string, unknown>
+  publicKeyRef: string
+}
+
+export interface EvidenceHashChainInput {
+  previousEventHash?: string
+  eventPayload: Record<string, unknown>
+}
+
+export interface EvidenceHashChainResult {
+  eventHash: string
+  previousEventHash?: string
+}
+
+export interface MerkleProofInput {
+  leaves: string[]
+  leaf: string
+}
+
+export interface MerkleProofResult {
+  root: string
+  leaf: string
+  proof: string[]
+}
+
+export interface RustPrimitiveAdapter {
+  readonly manifest: RustPrimitiveAdapterManifest
+  canonicalizeJson?(value: unknown): Promise<string> | string
+  hashBytes?(bytes: Uint8Array, algorithm?: 'sha256'): Promise<string> | string
+  signCanonicalObject?(input: CanonicalObjectSigningInput): Promise<Record<string, unknown>> | Record<string, unknown>
+  verifyCanonicalObject?(input: CanonicalObjectVerificationInput): Promise<boolean> | boolean
+  appendEvidenceHash?(input: EvidenceHashChainInput): Promise<EvidenceHashChainResult> | EvidenceHashChainResult
+  createMerkleProof?(input: MerkleProofInput): Promise<MerkleProofResult> | MerkleProofResult
+}
+
 export interface FidesInteropAdapter<TExternal = unknown> {
   readonly kind: AdapterKind
   readonly manifest: AdapterManifest
@@ -287,6 +351,35 @@ export function validateAdapterCoverage(
   manifest: AdapterManifest,
   requiredSurfaces: AdapterProtocolSurface[]
 ): AdapterCoverageReport {
+  const provided = new Set(manifest.surfaces)
+  const missing = requiredSurfaces.filter(surface => !provided.has(surface))
+  return {
+    valid: missing.length === 0,
+    missing,
+  }
+}
+
+export function createRustPrimitiveAdapterManifest(input: {
+  name: string
+  version?: string
+  surfaces?: RustPrimitiveSurface[]
+  createdAt?: string
+}): RustPrimitiveAdapterManifest {
+  return {
+    schema_version: 'fides.rust_primitive_adapter.manifest.v1',
+    id: crypto.randomUUID(),
+    name: input.name,
+    version: input.version ?? '0.1.0',
+    surfaces: input.surfaces ?? [...RUST_PRIMITIVE_SURFACES],
+    runtime_dependency_required: false,
+    created_at: input.createdAt ?? new Date().toISOString(),
+  }
+}
+
+export function validateRustPrimitiveAdapterCoverage(
+  manifest: RustPrimitiveAdapterManifest,
+  requiredSurfaces: RustPrimitiveSurface[]
+): { valid: boolean; missing: RustPrimitiveSurface[] } {
   const provided = new Set(manifest.surfaces)
   const missing = requiredSurfaces.filter(surface => !provided.has(surface))
   return {

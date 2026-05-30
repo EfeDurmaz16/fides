@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   ADAPTER_KINDS,
   ADAPTER_PROTOCOL_SURFACES,
+  RUST_PRIMITIVE_SURFACES,
   createAdapterManifest,
   createAdapterMapping,
   createInteropMappingSet,
+  createRustPrimitiveAdapterManifest,
   defaultSurfacesForAdapter,
   isAdapterProtocolSurface,
   isPaymentAdapterKind,
   validateAdapterCoverage,
+  validateRustPrimitiveAdapterCoverage,
 } from '../src/index.js'
 
 describe('FIDES interop adapter interfaces', () => {
@@ -172,6 +175,43 @@ describe('FIDES interop adapter interfaces', () => {
     expect(report).toEqual({
       valid: false,
       missing: ['revocation'],
+    })
+  })
+
+  it('declares Rust primitive adapter surfaces without making Rust a runtime dependency', () => {
+    expect(RUST_PRIMITIVE_SURFACES).toEqual([
+      'canonical_json',
+      'hashing',
+      'object_signing',
+      'signature_verification',
+      'evidence_hash_chain',
+      'merkle_proofs',
+      'dag_primitives',
+    ])
+
+    const manifest = createRustPrimitiveAdapterManifest({
+      name: 'AGIT Rust primitive adapter',
+      version: '0.1.0',
+      surfaces: ['canonical_json', 'hashing', 'evidence_hash_chain'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+
+    expect(manifest).toMatchObject({
+      schema_version: 'fides.rust_primitive_adapter.manifest.v1',
+      name: 'AGIT Rust primitive adapter',
+      version: '0.1.0',
+      surfaces: ['canonical_json', 'hashing', 'evidence_hash_chain'],
+      runtime_dependency_required: false,
+      created_at: '2026-01-01T00:00:00.000Z',
+    })
+
+    expect(validateRustPrimitiveAdapterCoverage(manifest, [
+      'canonical_json',
+      'hashing',
+      'merkle_proofs',
+    ])).toEqual({
+      valid: false,
+      missing: ['merkle_proofs'],
     })
   })
 })

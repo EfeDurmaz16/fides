@@ -383,6 +383,73 @@ export interface FidesEvidenceExportResponse {
   [key: string]: unknown
 }
 
+export interface FidesDemoAuthoritySummary {
+  discoveryGrantsAuthority: false
+  identityEqualsTrust?: false
+  trustScoreEqualsPermission?: false
+  policyBeforeExecution: boolean
+  evidenceProduced: boolean
+  [key: string]: unknown
+}
+
+export interface FidesDemoRunResponse {
+  status: 'executed'
+  mode: 'local-first'
+  steps: string[]
+  identities: Record<string, string>
+  discovery: Record<string, unknown>
+  verification: {
+    agentCardsVerified: boolean
+    evidenceHashChainValid: boolean
+    evidenceEventCount: number
+    evidenceExport: Record<string, unknown>
+    [key: string]: unknown
+  }
+  trust?: Record<string, unknown>
+  reputation?: Record<string, unknown>
+  policy?: Record<string, unknown>
+  sessions?: Record<string, unknown>
+  invocation?: Record<string, unknown>
+  governance?: Record<string, unknown>
+  authority: FidesDemoAuthoritySummary
+  surfaces: Record<string, unknown>
+  limitations: string[]
+  [key: string]: unknown
+}
+
+export interface FidesAdversarialScenario {
+  name: string
+  detected: boolean
+  outcome: string
+  evidenceRef: string
+  policy?: Record<string, unknown>
+  trust?: Record<string, unknown>
+  reputation?: Record<string, unknown>
+  errors?: string[]
+  [key: string]: unknown
+}
+
+export interface FidesAdversarialSimulationResponse {
+  status: 'detected' | 'partial'
+  mode: 'local-first'
+  detections: string[]
+  scenarios: FidesAdversarialScenario[]
+  incident?: IncidentRecordV2
+  revocation?: RevocationRecordV2
+  preflight?: Record<string, unknown>
+  evidence: {
+    scenarioEvents: Record<string, string>
+    incidentEvidenceRef: string
+    rootChainValid: boolean
+    rootEventCount: number
+    brokenEvidenceChainValid: boolean
+    [key: string]: unknown
+  }
+  authority: FidesDemoAuthoritySummary
+  limitations: string[]
+  [key: string]: unknown
+}
+
 export interface FidesIdentityAttestationRequest {
   identity: string
 }
@@ -866,11 +933,13 @@ export class FidesClient {
   }
 
   readonly demo = {
-    run: () => this.post('/demo/run', {}),
+    run: (): Promise<FidesDemoRunResponse> => this.post('/demo/run', {}) as Promise<FidesDemoRunResponse>,
   }
 
   readonly simulate = {
-    adversarial: () => this.post('/simulate/adversarial', {}),
+    adversarial: (): Promise<FidesAdversarialSimulationResponse> => (
+      this.post('/simulate/adversarial', {}) as Promise<FidesAdversarialSimulationResponse>
+    ),
   }
 
   constructor(private readonly options: FidesClientOptions) {}

@@ -1143,6 +1143,93 @@ describe('FidesClient', () => {
     expect(agentWellKnown.authorityGranted).toBe(false)
   })
 
+  it('types demo and adversarial simulation responses with authority invariants', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => {
+      if (String(url).endsWith('/simulate/adversarial')) {
+        return new Response(JSON.stringify({
+          status: 'detected',
+          mode: 'local-first',
+          detections: ['fake_agent', 'broken_evidence_chain'],
+          scenarios: [
+            {
+              name: 'fake_agent',
+              detected: true,
+              outcome: 'policy_limited',
+              evidenceRef: 'evt_fake_agent',
+            },
+            {
+              name: 'broken_evidence_chain',
+              detected: true,
+              outcome: 'evidence_verification_failed',
+              evidenceRef: 'evt_broken_chain',
+            },
+          ],
+          evidence: {
+            scenarioEvents: {
+              fake_agent: 'evt_fake_agent',
+              broken_evidence_chain: 'evt_broken_chain',
+            },
+            incidentEvidenceRef: 'evt_incident',
+            rootChainValid: true,
+            rootEventCount: 3,
+            brokenEvidenceChainValid: false,
+          },
+          authority: {
+            discoveryGrantsAuthority: false,
+            policyBeforeExecution: true,
+            evidenceProduced: true,
+          },
+          limitations: ['local mock simulation'],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({
+        status: 'executed',
+        mode: 'local-first',
+        steps: ['Create principal identity', 'Verify evidence hash chain'],
+        identities: {
+          principal: 'did:fides:principal',
+          invoice: 'did:fides:invoice',
+        },
+        discovery: {
+          registry: { authorityGranted: false },
+          dht: { authorityGranted: false },
+        },
+        verification: {
+          agentCardsVerified: true,
+          evidenceHashChainValid: true,
+          evidenceEventCount: 12,
+          evidenceExport: { format: 'json', lastHash: 'sha256:last' },
+        },
+        authority: {
+          discoveryGrantsAuthority: false,
+          identityEqualsTrust: false,
+          trustScoreEqualsPermission: false,
+          policyBeforeExecution: true,
+          evidenceProduced: true,
+        },
+        surfaces: {
+          registry: 'local_mock',
+          dht: 'in_memory_pointer_records',
+          payments: 'dry_run_only',
+        },
+        limitations: ['local mock demo'],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const demo = await client.demo.run()
+    expect(demo.status).toBe('executed')
+    expect(demo.verification.evidenceHashChainValid).toBe(true)
+    expect(demo.authority.discoveryGrantsAuthority).toBe(false)
+    expect(demo.authority.policyBeforeExecution).toBe(true)
+
+    const simulation = await client.simulate.adversarial()
+    expect(simulation.status).toBe('detected')
+    expect(simulation.scenarios.every(scenario => scenario.detected)).toBe(true)
+    expect(simulation.evidence.brokenEvidenceChainValid).toBe(false)
+    expect(simulation.authority.discoveryGrantsAuthority).toBe(false)
+  })
+
   it('creates and submits signed invocation requests from a session grant', async () => {
     const requester = await createAgentIdentity()
     const sessionGrant: SessionGrantV2 = {

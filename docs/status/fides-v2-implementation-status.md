@@ -57,9 +57,13 @@ Last verified locally: 2026-05-30.
 - Canonical v2 example agent catalog for calendar, invoice, payment, requester,
   and malicious agents, with audited capability IDs, risk classes, required
   scopes, and authority notes.
+- Example agents now have target-structure directories with runnable
+  `index.ts` entrypoints and per-agent READMEs; legacy top-level
+  `examples/<agent>.ts` wrappers remain for compatibility.
 - Standalone example scripts use dot-separated v2 capability IDs for calendar,
   invoice, payment, and email flows; the example audit rejects the legacy
-  `namespace:action` IDs that previously remained in examples.
+  `namespace:action` IDs that previously remained in examples and verifies the
+  target example-agent directories exist.
 - Full local demo and adversarial simulation endpoints.
 - Public docs refreshed around `agentd`, `FidesClient`, candidate-only
   discovery, and authority-via-policy/session.

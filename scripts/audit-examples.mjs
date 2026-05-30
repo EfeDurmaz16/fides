@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
-import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -33,6 +33,14 @@ const required = {
 }
 
 for (const [agentId, capabilities] of Object.entries(required)) {
+  const agentDir = resolve(root, 'examples', agentId)
+  if (!existsSync(join(agentDir, 'index.ts'))) {
+    errors.push(`${agentId} is missing examples/${agentId}/index.ts`)
+  }
+  if (!existsSync(join(agentDir, 'README.md'))) {
+    errors.push(`${agentId} is missing examples/${agentId}/README.md`)
+  }
+
   const agent = agents.find(entry => entry.id === agentId)
   if (!agent) {
     errors.push(`example catalog is missing ${agentId}`)
@@ -88,15 +96,14 @@ const forbiddenLegacyCapabilities = [
   'payment:status',
   'email:send',
 ]
-const exampleSourceFiles = readdirSync(resolve(root, 'examples'))
-  .filter(file => file.endsWith('.ts'))
-  .filter(file => file !== 'agent-catalog.ts')
+const exampleSourceFiles = findExampleSourceFiles(resolve(root, 'examples'))
+  .filter(file => !file.endsWith('agent-catalog.ts'))
 
 for (const file of exampleSourceFiles) {
-  const source = readFileSync(resolve(root, 'examples', file), 'utf8')
+  const source = readFileSync(file, 'utf8')
   for (const capability of forbiddenLegacyCapabilities) {
     if (source.includes(capability)) {
-      errors.push(`${file} still references legacy capability ${capability}`)
+      errors.push(`${relativeToExamples(file)} still references legacy capability ${capability}`)
     }
   }
 }
@@ -107,3 +114,18 @@ if (errors.length > 0) {
 }
 
 console.log(`Example catalog audit passed for ${agents.length} agents.`)
+
+function findExampleSourceFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const absolutePath = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules') return []
+      return findExampleSourceFiles(absolutePath)
+    }
+    return entry.isFile() && entry.name.endsWith('.ts') ? [absolutePath] : []
+  })
+}
+
+function relativeToExamples(file) {
+  return file.slice(resolve(root, 'examples').length + 1)
+}

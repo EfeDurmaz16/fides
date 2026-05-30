@@ -663,6 +663,50 @@ describe('CLI Commands', () => {
       );
       expect(mockFetch).toHaveBeenCalledTimes(6);
     });
+
+    it('keeps all-provider discovery results when one provider fails', async () => {
+      const mockFetch = vi.fn(async (url: string | URL | Request) => {
+        if (String(url).endsWith('/discover/relay')) {
+          return new Response(JSON.stringify({
+            error: { code: 'RELAY_UNAVAILABLE' },
+          }), { status: 503, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response(JSON.stringify({
+          provider: String(url).split('/').at(-1),
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDiscoverCommand } = await import('../src/commands/discover.js');
+      const cmd = createDiscoverCommand();
+
+      await cmd.parseAsync([
+        '--capability',
+        'calendar.schedule',
+        '--all-providers',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledTimes(6);
+      const output = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0] as string);
+      expect(output.authorityGranted).toBe(false);
+      expect(output.results).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          provider: 'relay',
+          ok: false,
+          authorityGranted: false,
+          error: expect.stringContaining('HTTP 503'),
+        }),
+        expect.objectContaining({
+          provider: 'local',
+          ok: true,
+          result: expect.objectContaining({ authorityGranted: false }),
+        }),
+      ]));
+    });
   });
 
   describe('identity domain commands', () => {

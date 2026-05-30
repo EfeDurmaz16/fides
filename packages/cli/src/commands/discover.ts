@@ -56,6 +56,7 @@ async function discoverCapability(
   const providers = options.allProviders || options.provider === 'all'
     ? DISCOVERY_PROVIDERS
     : [normalizeProvider(options.provider ?? 'local')]
+  const tolerateProviderFailures = providers.length > 1
   const constraints = options.constraints ? parseObject(options.constraints, '--constraints') : undefined
   const query = {
     ...(intent ? { intent } : {}),
@@ -66,9 +67,22 @@ async function discoverCapability(
   }
   const results = await Promise.all(providers.map(async (provider) => {
     const path = provider === 'local' ? '/discover/local' : `/discover/${provider}`
-    return {
-      provider,
-      result: await postJson(`${baseUrl(options.agentdUrl)}${path}`, query),
+    try {
+      return {
+        provider,
+        ok: true,
+        result: await postJson(`${baseUrl(options.agentdUrl)}${path}`, query),
+      }
+    } catch (err) {
+      if (!tolerateProviderFailures) {
+        throw err
+      }
+      return {
+        provider,
+        ok: false,
+        authorityGranted: false,
+        error: err instanceof Error ? err.message : String(err),
+      }
     }
   }))
 

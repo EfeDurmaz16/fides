@@ -193,6 +193,53 @@ describe('Agentd OpenAPI contract', () => {
     }
   })
 
+  it('documents demo and adversarial simulation response invariants', () => {
+    expect(extractSchemaRequired(openApi, 'LocalDemoRunResponse')).toEqual([
+      'status',
+      'mode',
+      'steps',
+      'identities',
+      'discovery',
+      'verification',
+      'authority',
+      'surfaces',
+      'limitations',
+    ])
+    expect(extractSchemaRequired(openApi, 'LocalDemoAuthoritySummary')).toEqual([
+      'discoveryGrantsAuthority',
+      'policyBeforeExecution',
+      'evidenceProduced',
+    ])
+    expect(extractNestedRequired(openApi, 'LocalDemoRunResponse', 'verification')).toEqual([
+      'agentCardsVerified',
+      'evidenceHashChainValid',
+      'evidenceEventCount',
+      'evidenceExport',
+    ])
+    expect(extractSchemaRequired(openApi, 'LocalAdversarialScenario')).toEqual([
+      'name',
+      'detected',
+      'outcome',
+      'evidenceRef',
+    ])
+    expect(extractSchemaRequired(openApi, 'LocalAdversarialSimulationResponse')).toEqual([
+      'status',
+      'mode',
+      'detections',
+      'scenarios',
+      'evidence',
+      'authority',
+      'limitations',
+    ])
+    expect(extractNestedRequired(openApi, 'LocalAdversarialSimulationResponse', 'evidence')).toEqual([
+      'scenarioEvents',
+      'incidentEvidenceRef',
+      'rootChainValid',
+      'rootEventCount',
+      'brokenEvidenceChainValid',
+    ])
+  })
+
   it('keeps root v2 runtime routes documented in OpenAPI', () => {
     const runtimeOperations = extractAgentdRuntimeRoutes(agentdSource)
       .filter(operation => operation.path.startsWith('/'))
@@ -323,4 +370,40 @@ function extractApiKeySecuredOperations(source: string): string[] {
   }
 
   return Array.from(secured)
+}
+
+function extractSchemaRequired(source: string, schemaName: string): string[] {
+  const schema = extractSchemaBlock(source, schemaName)
+  for (const line of schema.split('\n')) {
+    const match = line.match(/^ {6}required: \[(.*)\]$/)
+    if (match) return match[1].split(',').map(item => item.trim()).filter(Boolean)
+  }
+  throw new Error(`OpenAPI schema ${schemaName} does not define a top-level required array`)
+}
+
+function extractNestedRequired(source: string, schemaName: string, propertyName: string): string[] {
+  const schema = extractSchemaBlock(source, schemaName)
+  const lines = schema.split('\n')
+  const propertyStart = lines.findIndex(line => line === `        ${propertyName}:`)
+  if (propertyStart === -1) throw new Error(`OpenAPI schema ${schemaName} does not define ${propertyName}`)
+
+  for (const line of lines.slice(propertyStart + 1)) {
+    if (line.match(/^        [A-Za-z0-9_]+:$/)) break
+    const match = line.match(/^ {10}required: \[(.*)\]$/)
+    if (match) return match[1].split(',').map(item => item.trim()).filter(Boolean)
+  }
+  throw new Error(`OpenAPI schema ${schemaName}.${propertyName} does not define a required array`)
+}
+
+function extractSchemaBlock(source: string, schemaName: string): string {
+  const lines = source.split('\n')
+  const schemaStart = lines.findIndex(line => line === `    ${schemaName}:`)
+  if (schemaStart === -1) throw new Error(`OpenAPI schema ${schemaName} was not found`)
+
+  const schemaLines = []
+  for (const line of lines.slice(schemaStart + 1)) {
+    if (line.match(/^    [A-Za-z0-9_]+:$/)) break
+    schemaLines.push(line)
+  }
+  return schemaLines.join('\n')
 }

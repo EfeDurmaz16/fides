@@ -78,7 +78,9 @@ returning provider results. A query can send `supported_versions` and
 active result set and returned in `rejectedCandidates`, `rejectedRecords`, or
 `rejectedPointers` with a `VERSION_INCOMPATIBLE` error envelope. This keeps
 discovery useful for explainability without treating an incompatible candidate
-as invokable.
+as invokable. Provider records that cannot be resolved back to a local
+AgentCard are also rejected; discovery cannot treat an unresolved pointer or
+presence record as an unchecked candidate.
 
 Federation discovery is deliberately candidate-only. The local mock federation
 provider verifies signed `RegistryPeerRecord` metadata and ignores expired or

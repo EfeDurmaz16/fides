@@ -1852,8 +1852,16 @@ describe('Agentd Service Routes', () => {
       expect(await discoverDht.json()).toMatchObject({
         provider: 'dht',
         authorityGranted: false,
-        pointers: expect.arrayContaining([
-          expect.objectContaining({ agentId: 'did:fides:agent' }),
+        pointers: [],
+        rejectedPointers: expect.arrayContaining([
+          expect.objectContaining({
+            agentId: 'did:fides:agent',
+            protocolCompatibility: 'card_unresolved',
+            reasons: expect.arrayContaining([
+              'provider_record_card_unresolved',
+              'discovery_does_not_grant_authority',
+            ]),
+          }),
         ]),
       })
     })
@@ -2049,6 +2057,7 @@ describe('Agentd Service Routes', () => {
       expect(search.status).toBe(200)
       const searchData = await search.json()
       expect(searchData.authorityGranted).toBe(false)
+      expect(searchData.rejectedRecords).toEqual([])
       expect(searchData.records).toEqual(expect.arrayContaining([
         expect.objectContaining({
           agentId: identity.did,
@@ -2063,9 +2072,11 @@ describe('Agentd Service Routes', () => {
         body: JSON.stringify({ capability: 'calendar.schedule' }),
       })
       expect(discoverRegistry.status).toBe(200)
-      expect(await discoverRegistry.json()).toMatchObject({
+      const discoverRegistryData = await discoverRegistry.json()
+      expect(discoverRegistryData).toMatchObject({
         provider: 'registry',
         authorityGranted: false,
+        rejectedRecords: [],
         records: expect.arrayContaining([
           expect.objectContaining({
             agentId: identity.did,
@@ -2077,7 +2088,9 @@ describe('Agentd Service Routes', () => {
 
       const index = await app.request('/registry/index')
       expect(index.status).toBe(200)
-      expect((await index.json()).records).toEqual(expect.arrayContaining([
+      const indexData = await index.json()
+      expect(indexData.rejectedRecords).toEqual([])
+      expect(indexData.records).toEqual(expect.arrayContaining([
         expect.objectContaining({
           agentId: identity.did,
           registryIndexVerified: true,

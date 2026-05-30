@@ -1109,7 +1109,15 @@ function filterVersionCompatibleProviderRecords(
   for (const record of records) {
     const card = localCardForProviderRecord(record)
     if (!card) {
-      compatible.push({ ...record, protocolCompatibility: 'not_checked_card_unresolved' })
+      rejected.push({
+        ...record,
+        authorityGranted: false,
+        protocolCompatibility: 'card_unresolved',
+        reasons: [
+          'provider_record_card_unresolved',
+          'discovery_does_not_grant_authority',
+        ],
+      })
       continue
     }
 
@@ -2731,7 +2739,15 @@ async function filterVerifiedLocalRegistryRecords(records: Array<Record<string, 
   for (const record of records) {
     const signed = signedRegistryIndexFor(record)
     if (!signed) {
-      verifiedRecords.push({ ...record, registryIndexVerification: 'not_checked_unsigned_record' })
+      rejectedRecords.push({
+        ...record,
+        authorityGranted: false,
+        registryIndexVerification: 'missing_signed_registry_index',
+        reasons: [
+          'registry_index_signature_required',
+          'discovery_does_not_grant_authority',
+        ],
+      })
       continue
     }
     const valid = await verifySignedRegistryIndexRecord(signed)
@@ -2892,10 +2908,12 @@ app.post('/discover/federation', async (c) => {
   })
 })
 
-app.get('/registry/index', (c) => {
+app.get('/registry/index', async (c) => {
+  const verified = await filterVerifiedLocalRegistryRecords(Array.from(localRegistryRecords.values()))
   return c.json({
     mode: 'local_mock_registry',
-    records: Array.from(localRegistryRecords.values()),
+    records: verified.records,
+    rejectedRecords: verified.rejectedRecords,
     authorityGranted: false,
   })
 })

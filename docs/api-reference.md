@@ -109,7 +109,8 @@ local inspection and future normalized migrations.
 Registry records for locally signed AgentCards include `agentCardUrl`,
 `agentCardHash`, `registryIndexRecord`, `registryIndexProof`, and
 `registryIndexVerified`; search and discovery verify signed local registry index
-records before returning them.
+records before returning them. Records without a signed registry index proof are
+returned under `rejectedRecords`, not as active candidates.
 `POST /relay/start`, `POST /relay/register`, and `POST /relay/discover` provide
 local mock relay presence and rendezvous. Relay records for locally signed
 AgentCards include `agentCardUrl`, `agentCardHash`, `signedAgentCard`, and
@@ -177,7 +178,9 @@ local registration to still have an identity-bound signed AgentCard before they
 emit registry or relay records.
 Discovery responses always include `authorityGranted: false`; discovery is
 candidate resolution only, and invocation authority still requires policy
-evaluation and scoped session grants. Local discovery does not require an
+evaluation and scoped session grants. Provider records that cannot be resolved
+back to a local AgentCard are rejected instead of being treated as unchecked
+candidates. Local discovery does not require an
 endpoint URL; daemon-held AgentCards can resolve by capability with
 `resolution.urlRequired: false`. Endpoint URLs remain optional transport
 metadata, not authority. DHT discovery also does not require an HTTP URL when a

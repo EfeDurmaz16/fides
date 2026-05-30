@@ -31,7 +31,9 @@ record includes:
 - `registryIndexVerified`, the daemon's local verification result
 
 Search and discovery verify signed local registry index records before returning
-them. A valid registry index record still does not grant invocation authority.
+them. Unsigned local registry records are reported as rejected records, not
+active candidates. A valid registry index record still does not grant
+invocation authority.
 Authority-safe ingestion should use `verifySignedRegistryIndexRecordIssuer`,
 which verifies both the canonical Ed25519 proof and that
 `proof.verificationMethod` equals the record `issuer`.

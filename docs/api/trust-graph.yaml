@@ -5,6 +5,12 @@ info:
   description: |
     Trust edge management, reputation scoring, capability-level trust
     computation, and incident tracking for the FIDES v2 trust fabric.
+
+    This OpenAPI document describes the standalone trust-graph service. The
+    primary local FIDES v2 developer surface is agentd on
+    http://localhost:7345. Trust and reputation are capability-specific signals;
+    they do not grant permission. Authority requires policy evaluation and a
+    scoped SessionGrant through agentd.
   contact:
     name: FIDES Protocol
     url: https://github.com/EfeDurmaz16/fides

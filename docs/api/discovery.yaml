@@ -6,6 +6,12 @@ info:
     Identity registration, resolution, and agent discovery for the FIDES v2
     trust fabric. Supports DID-based identity persistence, agent capability
     registry, and well-known discovery endpoints.
+
+    This OpenAPI document describes the standalone discovery service. The
+    primary local FIDES v2 developer surface is agentd on
+    http://localhost:7345. Discovery records are candidates only and do not
+    grant invocation authority. Authority requires policy evaluation and a
+    scoped SessionGrant through agentd.
   contact:
     name: FIDES Protocol
     url: https://github.com/EfeDurmaz16/fides

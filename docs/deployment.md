@@ -1,13 +1,41 @@
 # FIDES Deployment Guide
 
+## FIDES v2 Deployment Status
+
+The primary FIDES v2 runtime surface is the local-first `agentd` API on port
+`7345`. It hosts the v2 trust-fabric path for identity, AgentCards, discovery,
+trust, reputation, policy, approvals, delegation, sessions, invocation,
+evidence, revocation, incidents, kill switch, registry, relay, DHT, demos, and
+adversarial simulation.
+
+For local FIDES v2 development, Postgres is optional. `agentd` persists local
+v2 state to SQLite at `~/.fides/fides.sqlite` by default and can run with:
+
+```bash
+pnpm --filter @fides/agentd dev
+curl http://localhost:7345/health
+```
+
+The standalone discovery, trust-graph, registry, relay, policy-engine, and
+platform-api services remain useful for compatibility, hosted deployments,
+durable backing stores, and migration work. They are not the v2 authority model
+by themselves. Discovery services return candidates; policy evaluation and
+scoped SessionGrants grant authority.
+
 ## Prerequisites
 
 - **Node.js** 22 or later
 - **pnpm** 10 (enabled via `corepack enable`)
 - **Docker** 24+ (for containerized deployment)
-- **PostgreSQL** 16 (for discovery, trust-graph, production registry storage, and production `agentd` authority storage)
+- **PostgreSQL** 16 for standalone services, hosted registry storage, or
+  production `agentd` authority storage. It is not required for the default
+  local v2 SQLite run.
 
 ## Services Overview
+
+`agentd` is the primary FIDES v2 local authority surface. The other services are
+standalone compatibility or hosted backing services unless a deployment
+explicitly composes them behind `agentd`.
 
 | Service      | Port  | Database       | Description                              |
 | ------------ | ----- | -------------- | ---------------------------------------- |

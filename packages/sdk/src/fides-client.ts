@@ -1,4 +1,6 @@
 import {
+  type CapabilityControl,
+  type TrustResult,
   createInvocationRequest,
   isErrorEnvelope,
   signInvocationRequest,
@@ -145,6 +147,43 @@ export interface FidesInvocationResponse {
   signedResultVerified?: boolean
 }
 
+export type FidesPolicyDecisionAction =
+  | 'allow'
+  | 'deny'
+  | 'require_approval'
+  | 'dry_run_only'
+  | 'scope_limit'
+  | 'risk_limit'
+
+export interface FidesPolicyDecision {
+  schema_version: 'fides.policy.decision.v1'
+  id: string
+  issuer: string
+  subject: string
+  decision: FidesPolicyDecisionAction
+  principal_id: string
+  requester_agent_id: string
+  target_agent_id: string
+  capability: string
+  reason_codes: string[]
+  machine_reasons: Array<Record<string, unknown>>
+  human_reasons: string[]
+  required_controls: CapabilityControl[]
+  evidence_refs: string[]
+  issued_at: string
+  evaluated_at: string
+  payload_hash: string
+  [key: string]: unknown
+}
+
+export interface FidesPolicyEvaluationResponse {
+  policy: FidesPolicyDecision
+  trust: TrustResult
+  authorityGranted: false
+  requiresSessionGrant: boolean
+  explanation: string
+}
+
 export class FidesClientError extends Error {
   readonly name = 'FidesClientError'
 
@@ -201,7 +240,9 @@ export class FidesClient {
   }
 
   readonly policy = {
-    evaluate: (body: Record<string, unknown>) => this.post('/policy/evaluate', body),
+    evaluate: (body: Record<string, unknown>): Promise<FidesPolicyEvaluationResponse> => (
+      this.post('/policy/evaluate', body) as Promise<FidesPolicyEvaluationResponse>
+    ),
   }
 
   readonly delegations = {

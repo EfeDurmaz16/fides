@@ -7,6 +7,44 @@ afterEach(() => {
 })
 
 describe('FidesClient', () => {
+  it('types root policy evaluation responses with v2 decisions', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      policy: {
+        schema_version: 'fides.policy.decision.v1',
+        id: 'poldec_1',
+        issuer: 'did:fides:agentd:local',
+        subject: 'did:fides:agent',
+        decision: 'require_approval',
+        principal_id: 'did:fides:principal',
+        requester_agent_id: 'did:fides:requester',
+        target_agent_id: 'did:fides:agent',
+        capability: 'payments.prepare',
+        reason_codes: ['HIGH_RISK_REQUIRES_APPROVAL'],
+        machine_reasons: [],
+        human_reasons: ['High-risk capability requires approval'],
+        required_controls: ['human_approval'],
+        evidence_refs: [],
+        issued_at: '2026-01-01T00:00:00.000Z',
+        evaluated_at: '2026-01-01T00:00:00.000Z',
+        payload_hash: 'sha256:test',
+      },
+      trust: { score: 0.7, band: 'medium' },
+      authorityGranted: false,
+      requiresSessionGrant: false,
+      explanation: 'Policy decisions do not execute capabilities.',
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:4817' })
+    const result = await client.policy.evaluate({ agentId: 'did:fides:agent', capability: 'payments.prepare' })
+
+    expect(result.policy.decision).toBe('require_approval')
+    expect(result.authorityGranted).toBe(false)
+    expect(result.requiresSessionGrant).toBe(false)
+  })
+
   it('exposes promise-based identity, card, discovery, trust, session, and invocation namespaces', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {

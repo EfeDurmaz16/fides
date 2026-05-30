@@ -177,7 +177,7 @@ export interface IncidentListResponse {
 }
 
 export interface AuthorizationDecision {
-  decision: 'allow' | 'deny'
+  decision: 'allow' | 'deny' | 'approve-required' | 'dry-run'
   explanation: string
   factors?: Array<Record<string, unknown>>
   session?: Record<string, unknown>

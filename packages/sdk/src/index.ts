@@ -148,6 +148,9 @@ export {
   type FidesDhtPublishRequest,
   type FidesInvocationRequest,
   type FidesInvocationResponse,
+  type FidesPolicyDecision,
+  type FidesPolicyDecisionAction,
+  type FidesPolicyEvaluationResponse,
 } from './fides-client.js'
 
 // Integration exports

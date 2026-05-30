@@ -85,6 +85,9 @@ const policy = await client.policy.evaluate({
   capability: 'invoice.reconcile',
   requestedScopes: ['invoice:read'],
 })
+// policy.policy.decision is one of:
+// allow, deny, require_approval, dry_run_only, scope_limit, risk_limit.
+// A policy response never grants invocation authority by itself.
 const approval = await client.approvals.create({
   principalId: 'did:fides:principal',
   requesterAgentId: 'did:fides:requester',

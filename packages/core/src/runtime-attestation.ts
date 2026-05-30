@@ -2,6 +2,9 @@ import { hashProtocolPayload } from './protocol.js'
 
 export interface RuntimeAttestation {
   schema_version: 'fides.runtime_attestation.v1'
+  id: string
+  issuer: string
+  subject: string
   attestation_id: string
   agent_id: string
   provider: 'mock-tee' | 'null' | 'aws-nitro' | 'intel-sgx' | 'amd-sev' | 'container-image' | 'reproducible-build' | string
@@ -11,6 +14,7 @@ export interface RuntimeAttestation {
   enclave_measurement?: string
   issued_at: string
   expires_at: string
+  payload_hash: string
   signature: string
 }
 
@@ -41,12 +45,17 @@ export function isRuntimeAttestationExpired(attestation: RuntimeAttestation, now
 
 export function createRuntimeAttestation(input: RuntimeAttestationIssueInput & {
   provider: RuntimeAttestation['provider']
+  issuer?: string
   signature: string
 }): RuntimeAttestation {
   const issuedAt = input.issuedAt ?? new Date().toISOString()
-  return {
+  const id = crypto.randomUUID()
+  const payload = {
     schema_version: 'fides.runtime_attestation.v1',
-    attestation_id: crypto.randomUUID(),
+    id,
+    issuer: input.issuer ?? input.provider,
+    subject: input.agentId,
+    attestation_id: id,
     agent_id: input.agentId,
     provider: input.provider,
     code_hash: input.codeHash,
@@ -62,6 +71,11 @@ export function createRuntimeAttestation(input: RuntimeAttestationIssueInput & {
     }),
     issued_at: issuedAt,
     expires_at: input.expiresAt ?? new Date(Date.now() + DEFAULT_ATTESTATION_TTL_MS).toISOString(),
+  } satisfies Omit<RuntimeAttestation, 'payload_hash' | 'signature'>
+
+  return {
+    ...payload,
+    payload_hash: hashProtocolPayload(payload),
     signature: input.signature,
   }
 }

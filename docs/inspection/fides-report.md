@@ -64,7 +64,7 @@ Local evidence:
 | Delegation tokens | Present | `packages/core/src/delegation.ts`. |
 | Session grants | Present, not v2-complete | `packages/core/src/delegation.ts`, `packages/core/src/session-store.ts`, `services/agentd/src/index.ts`. |
 | Capability invocation | Partial | Guard/agentd authorization exists; no generic signed InvocationRequest/InvocationResult protocol object found. |
-| Runtime attestation | Present | `packages/runtime/src/index.ts`. |
+| Runtime attestation | Present | `packages/core/src/runtime-attestation.ts` defines canonical-hashable v2 `RuntimeAttestation` objects; `packages/runtime/src/index.ts` provides MockTEE, HTTP TEE, build, container, package, and GitHub adapter-ready providers. |
 | TEE-ready attestation | Present as adapter boundary | `packages/runtime/src/index.ts`. |
 | MockTEE | Present | `packages/runtime/src/index.ts`. |
 | Evidence ledger | Present, package-level | `packages/evidence/src/index.ts`; persisted locally by agentd authority store. |

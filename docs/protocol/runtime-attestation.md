@@ -17,6 +17,31 @@ Current implementation anchors:
 - container image attestation adapter-ready
 - reproducible build attestation adapter-ready
 
+## RuntimeAttestation Object
+
+`packages/core/src/runtime-attestation.ts` emits
+`fides.runtime_attestation.v1` records with shared signed-object fields:
+
+- `id`
+- `issuer`
+- `subject`
+- `attestation_id`
+- `agent_id`
+- `provider`
+- `code_hash`
+- `runtime_hash`
+- `policy_hash`
+- `enclave_measurement`
+- `issued_at`
+- `expires_at`
+- `payload_hash`
+- `signature`
+
+`id` and `attestation_id` are the same identifier for compatibility with older
+call sites. `subject` is the attested agent id. `payload_hash` is computed with
+the shared canonical JSON digest before the provider-specific signature is
+attached.
+
 ## Policy Rule
 
 High-risk capabilities require valid runtime attestation or explicit approval. Missing attestation should not deny low-risk actions by default.

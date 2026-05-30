@@ -18,6 +18,9 @@ describe('runtime attestation v2', () => {
 
     expect(attestation).toMatchObject({
       schema_version: 'fides.runtime_attestation.v1',
+      id: expect.any(String),
+      issuer: 'mock-tee',
+      subject: 'did:fides:agent',
       agent_id: 'did:fides:agent',
       provider: 'mock-tee',
       code_hash: `sha256:${'a'.repeat(64)}`,
@@ -25,6 +28,8 @@ describe('runtime attestation v2', () => {
       policy_hash: `sha256:${'c'.repeat(64)}`,
       enclave_measurement: expect.stringMatching(/^sha256:/),
     })
+    expect(attestation.attestation_id).toBe(attestation.id)
+    expect(attestation.payload_hash).toMatch(/^sha256:/)
     expect(await provider.verify(attestation)).toBe(true)
     expect(await verifyRuntimeAttestation(attestation, provider)).toBe(true)
   })
@@ -53,6 +58,9 @@ describe('runtime attestation v2', () => {
     })
 
     expect(attestation.provider).toBe('null')
+    expect(attestation.issuer).toBe('null')
+    expect(attestation.subject).toBe('did:fides:agent')
+    expect(attestation.payload_hash).toMatch(/^sha256:/)
     expect(await provider.verify(attestation)).toBe(false)
   })
 })

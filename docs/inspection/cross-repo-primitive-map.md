@@ -51,7 +51,7 @@ This map reflects the current local inspection of:
 | Merkle proof | Merkle root + inclusion proof helpers | Merkle/state diff concepts | not found | not found | ledger anchor | FIDES + AGIT | extend existing |
 | Revocation | `packages/core/src/revocation.ts`, services | not core | docs/spec | revoke flow | identity/payment revocation | FIDES | extend existing |
 | Incident | `packages/core/src/revocation.ts`, services | not core | not found | not found | payment/trust context | FIDES | extend existing |
-| Runtime attestation | `packages/runtime` | not found | not found | not found | not generic | FIDES | extend existing |
+| Runtime attestation | `packages/core/src/runtime-attestation.ts`, `packages/runtime` | not found | not found | not found | not generic | FIDES | extend existing |
 | TEE | Mock/HTTP adapter boundary | not found | not found | not found | not found | FIDES | adapter-ready |
 | Privacy/redaction | evidence privacy modes | not found | credential encryption | profile/spec only | payment privacy primitives | FIDES + Sardis prior art | extend existing |
 | Error vocabulary | broad error classes | `AgitError` | error responses | error taxonomy | exception/reason codes | FIDES + OAPS | extend existing |

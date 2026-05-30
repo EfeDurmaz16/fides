@@ -78,11 +78,16 @@ EvidenceEvents.
 | `AGENTD_LOCAL_STATE` | `sqlite` outside tests, `memory` in tests | no | `sqlite` persists the root v2 local daemon snapshot. `memory` keeps the root v2 prototype ephemeral for local test runs. |
 | `AGENTD_SQLITE_PATH` | `~/.fides/fides.sqlite` | no | SQLite file path for the root v2 local daemon snapshot store. |
 
-The SQLite store currently writes a single schema-versioned snapshot row plus a
-local migration ledger. It is durable across daemon restarts, but it is not yet
-the final normalized table layout. Local identity private key material used for
-prototype signing is included in this snapshot and should be protected by local
-filesystem permissions; OS-backed encryption or hardware-backed key storage is a
+The SQLite store writes a schema-versioned root snapshot plus JSON index tables
+for the local FIDES v2 collections: identities, trust anchors, attestations,
+AgentCards, agents, capabilities, discovery/DHT/registry/relay records, trust
+and reputation results, policy decisions, approvals, delegations, sessions,
+evidence events, revocations, incidents, and kill switch rules. The snapshot is
+the source of truth for this local prototype; the index tables make the local
+database inspectable and migration-ready for the final normalized storage
+layout. Local identity private key material used for prototype signing is
+included in this snapshot and should be protected by local filesystem
+permissions; OS-backed encryption or hardware-backed key storage is a
 production hardening item.
 
 ### Registry Store

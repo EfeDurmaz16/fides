@@ -98,8 +98,11 @@ mock/local providers, and the root daemon persists its local v2 state through a
 SQLite-backed snapshot store by default outside tests. The default path is
 `~/.fides/fides.sqlite`; set `AGENTD_SQLITE_PATH` to override it or
 `AGENTD_LOCAL_STATE=memory` to disable persistence for ephemeral local runs.
-This store is a daemon snapshot, not the final normalized SQLite table model for
-production hardening.
+This store keeps a daemon snapshot as the source of truth and mirrors the local
+FIDES v2 collections into JSON index tables such as `identities`,
+`agent_cards`, `capabilities`, `discovery_records`, `sessions`,
+`evidence_events`, `revocations`, `incidents`, and `kill_switch_rules` for
+local inspection and future normalized migrations.
 
 `POST /registry/start`, `POST /registry/publish`, `POST /registry/search`, and
 `GET /registry/index` provide a local mock registry over registered AgentCards.

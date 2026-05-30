@@ -3550,6 +3550,7 @@ async function runLocalAdversarialSimulation() {
       schema_version: 'fides.invocation.request.v1',
       id: 'inv_req_malicious',
       issuer: requester.identity.did,
+      subject: malicious.card.identity.did,
       session_id: 'missing-session',
       requester_agent_id: requester.identity.did,
       target_agent_id: malicious.card.identity.did,

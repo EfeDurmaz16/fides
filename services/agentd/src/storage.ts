@@ -697,6 +697,7 @@ export class SqliteLocalDaemonStateStore implements LocalDaemonStateStore {
       VALUES (?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET snapshot = excluded.snapshot, updated_at = excluded.updated_at
     `).run('root', JSON.stringify(normalized), normalized.updatedAt)
+    mirrorLocalDaemonStateTables(db, normalized)
   }
 
   async healthCheck(): Promise<{ ok: boolean; kind: 'sqlite'; path: string; detail?: string }> {
@@ -747,9 +748,177 @@ export class SqliteLocalDaemonStateStore implements LocalDaemonStateStore {
       );
       INSERT OR IGNORE INTO agentd_local_state_migrations (id) VALUES ('001_local_state_snapshot');
     `)
+    ensureLocalDaemonStateIndexTables(db)
     this.db = db
     return db as Awaited<ReturnType<SqliteLocalDaemonStateStore['database']>>
   }
+}
+
+type SqliteDatabase = Awaited<ReturnType<SqliteLocalDaemonStateStore['database']>>
+
+const LOCAL_DAEMON_STATE_INDEX_TABLES = [
+  'identities',
+  'trust_anchors',
+  'attestations',
+  'agent_cards',
+  'agents',
+  'capabilities',
+  'discovery_records',
+  'dht_records',
+  'registry_records',
+  'relay_records',
+  'trust_results',
+  'reputation_records',
+  'policy_decisions',
+  'approvals',
+  'delegations',
+  'sessions',
+  'evidence_events',
+  'revocations',
+  'incidents',
+  'kill_switch_rules',
+] as const
+
+type LocalDaemonStateIndexTable = typeof LOCAL_DAEMON_STATE_INDEX_TABLES[number]
+
+function ensureLocalDaemonStateIndexTables(db: { exec(statement: string): void }): void {
+  for (const table of LOCAL_DAEMON_STATE_INDEX_TABLES) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ${table} (
+        id TEXT PRIMARY KEY,
+        record TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `)
+  }
+}
+
+function mirrorLocalDaemonStateTables(db: SqliteDatabase, snapshot: LocalDaemonStateSnapshot): void {
+  const collections: Record<LocalDaemonStateIndexTable, unknown[]> = {
+    identities: snapshot.identities,
+    trust_anchors: collectTrustAnchors(snapshot.agentCards),
+    attestations: snapshot.runtimeAttestations,
+    agent_cards: snapshot.agentCards,
+    agents: snapshot.agents,
+    capabilities: collectCapabilities(snapshot.agentCards),
+    discovery_records: collectDiscoveryRecords(snapshot),
+    dht_records: snapshot.dhtPointers,
+    registry_records: snapshot.registryRecords,
+    relay_records: snapshot.relayRecords,
+    trust_results: snapshot.trustResults,
+    reputation_records: snapshot.reputationRecords,
+    policy_decisions: collectPolicyDecisions(snapshot.sessionGrants),
+    approvals: [...snapshot.approvals, ...snapshot.approvalDecisions],
+    delegations: snapshot.delegationTokens,
+    sessions: snapshot.sessionGrants,
+    evidence_events: snapshot.evidenceEvents,
+    revocations: snapshot.revocationRecords,
+    incidents: snapshot.incidentRecords,
+    kill_switch_rules: snapshot.killSwitchRules,
+  }
+
+  for (const [table, rows] of Object.entries(collections) as Array<[LocalDaemonStateIndexTable, unknown[]]>) {
+    db.prepare(`DELETE FROM ${table}`).run()
+    const insert = db.prepare(`INSERT INTO ${table} (id, record, updated_at) VALUES (?, ?, ?)`)
+    rows.forEach((row, index) => {
+      insert.run(localStateRowId(table, row, index), JSON.stringify(row), snapshot.updatedAt)
+    })
+  }
+}
+
+function collectTrustAnchors(agentCards: unknown[]): unknown[] {
+  return agentCards.flatMap((card) => {
+    if (!card || typeof card !== 'object') return []
+    const anchors = (card as { trustAnchors?: unknown; trust_anchors?: unknown }).trustAnchors
+      ?? (card as { trustAnchors?: unknown; trust_anchors?: unknown }).trust_anchors
+    return Array.isArray(anchors) ? anchors : []
+  })
+}
+
+function collectCapabilities(agentCards: unknown[]): unknown[] {
+  return agentCards.flatMap((card) => {
+    if (!card || typeof card !== 'object') return []
+    const capabilities = (card as { capabilities?: unknown }).capabilities
+    if (!Array.isArray(capabilities)) return []
+    const cardId = (card as { id?: unknown }).id
+    return capabilities.map((capability) => ({
+      ...(capability && typeof capability === 'object' ? capability as Record<string, unknown> : { value: capability }),
+      agent_card_id: typeof cardId === 'string' ? cardId : undefined,
+    }))
+  })
+}
+
+function collectDiscoveryRecords(snapshot: LocalDaemonStateSnapshot): unknown[] {
+  return [
+    ...snapshot.dhtPointers.map(record => ({ provider: 'dht', ...objectRecord(record) })),
+    ...snapshot.registryRecords.map(record => ({ provider: 'registry', ...objectRecord(record) })),
+    ...snapshot.relayRecords.map(record => ({ provider: 'relay', ...objectRecord(record) })),
+  ]
+}
+
+function collectPolicyDecisions(sessionGrants: unknown[]): unknown[] {
+  return sessionGrants.flatMap((record) => {
+    if (!record || typeof record !== 'object') return []
+    const policy = (record as { policy?: unknown }).policy
+    if (!policy || typeof policy !== 'object') return []
+    const session = (record as { session?: { session_id?: unknown } }).session
+    return [{
+      ...(policy as Record<string, unknown>),
+      session_id: typeof session?.session_id === 'string' ? session.session_id : undefined,
+    }]
+  })
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : { value }
+}
+
+function localStateRowId(table: LocalDaemonStateIndexTable, row: unknown, index: number): string {
+  const record = objectRecord(row)
+  if (table === 'capabilities') {
+    const cardId = typeof record.agent_card_id === 'string' ? record.agent_card_id : 'unknown-card'
+    const capabilityId = typeof record.id === 'string'
+      ? record.id
+      : typeof record.capability_id === 'string'
+        ? record.capability_id
+        : `capability-${index}`
+    return `${cardId}:${capabilityId}`
+  }
+  if (table === 'discovery_records') {
+    const provider = typeof record.provider === 'string' ? record.provider : 'unknown-provider'
+    const agentId = typeof record.agent_id === 'string'
+      ? record.agent_id
+      : typeof record.agentId === 'string'
+        ? record.agentId
+        : `record-${index}`
+    const capability = typeof record.capability === 'string' ? record.capability : 'unknown-capability'
+    return `${provider}:${agentId}:${capability}:${index}`
+  }
+  if (table === 'trust_results' || table === 'reputation_records') {
+    const agentId = typeof record.agent_id === 'string'
+      ? record.agent_id
+      : typeof record.agentId === 'string'
+        ? record.agentId
+        : `agent-${index}`
+    const capability = typeof record.capability === 'string' ? record.capability : `capability-${index}`
+    return `${agentId}:${capability}`
+  }
+  for (const key of [
+    'id',
+    'did',
+    'agent_id',
+    'agentId',
+    'cardId',
+    'event_id',
+    'session_id',
+    'attestation_id',
+    'capability_id',
+    'capabilityId',
+  ]) {
+    const value = record[key]
+    if (typeof value === 'string' && value.length > 0) return value
+  }
+  return `${table}:${index}`
 }
 
 export function emptyLocalDaemonStateSnapshot(updatedAt = new Date().toISOString()): LocalDaemonStateSnapshot {

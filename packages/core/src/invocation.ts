@@ -15,6 +15,7 @@ export interface InvocationRequest {
   schema_version: 'fides.invocation.request.v1'
   id: string
   issuer: string
+  subject: string
   session_id: string
   requester_agent_id: string
   target_agent_id: string
@@ -33,6 +34,7 @@ export interface InvocationResult {
   schema_version: 'fides.invocation.result.v1'
   id: string
   issuer: string
+  subject: string
   invocation_request_id: string
   status: InvocationStatus
   output_hash?: string
@@ -92,6 +94,7 @@ export function createInvocationRequest(input: InvocationRequestInput): Invocati
     schema_version: 'fides.invocation.request.v1' as const,
     id: crypto.randomUUID(),
     issuer: input.issuer,
+    subject: input.sessionGrant.target_agent_id,
     session_id: input.sessionGrant.session_id,
     requester_agent_id: input.sessionGrant.requester_agent_id,
     target_agent_id: input.sessionGrant.target_agent_id,
@@ -116,6 +119,7 @@ export function createInvocationResult(input: InvocationResultInput): Invocation
     schema_version: 'fides.invocation.result.v1' as const,
     id: crypto.randomUUID(),
     issuer: input.issuer,
+    subject: input.invocationRequestId,
     invocation_request_id: input.invocationRequestId,
     status: input.status,
     output_hash: input.output === undefined ? undefined : hashProtocolPayload(input.output),

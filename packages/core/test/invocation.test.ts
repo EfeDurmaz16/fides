@@ -42,6 +42,9 @@ describe('invocation protocol objects', () => {
 
     expect(request.input_hash).toMatch(/^sha256:/)
     expect(request.output_schema_hash).toBeUndefined()
+    expect(request.issuer).toBe(requester.did)
+    expect(request.subject).toBe('did:fides:target')
+    expect(request.payload_hash).toMatch(/^sha256:/)
 
     const signed = await signInvocationRequest(request, requester.privateKey, requester.did)
     expect(await verifySignedInvocationRequest(signed)).toBe(true)
@@ -79,6 +82,9 @@ describe('invocation protocol objects', () => {
     })
 
     expect(result.output_hash).toMatch(/^sha256:/)
+    expect(result.issuer).toBe(target.did)
+    expect(result.subject).toBe('inv_req_1')
+    expect(result.payload_hash).toMatch(/^sha256:/)
     const signed = await signInvocationResult(result, target.privateKey, target.did)
     expect(await verifySignedInvocationResult(signed)).toBe(true)
   })

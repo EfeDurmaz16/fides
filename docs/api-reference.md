@@ -26,6 +26,7 @@ Current implementation anchors:
 - `POST /discover/registry`
 - `POST /discover/relay`
 - `POST /discover/dht`
+- `POST /discover/federation`
 - `POST /trust/evaluate`
 - `GET /trust/:agentId`
 - `POST /reputation/update`
@@ -152,8 +153,9 @@ storage to normalized identity/card tables.
 candidate. `GET /agents` and `GET /agents/:id` expose local registration state
 and the associated AgentCard. `POST /discover` and `POST /discover/local`
 search registered local agents by capability. `POST /discover/well-known`,
-`POST /discover/registry`, `POST /discover/relay`, and `POST /discover/dht`
-expose provider-specific discovery aliases over the daemon's local state.
+`POST /discover/registry`, `POST /discover/relay`, `POST /discover/dht`, and
+`POST /discover/federation` expose provider-specific discovery aliases over
+the daemon's local state.
 `POST /dht/publish` creates a signed DHT pointer when the referenced agent is
 registered locally; callers may omit `agentCardUrl`, in which case the daemon
 uses a `local://agent-cards/<card-id>` pointer and signs it with the local
@@ -172,6 +174,10 @@ discovery also negotiate protocol compatibility between query
 `protocolVersions`; incompatible candidates are omitted from provider results
 and reported under `rejectedCandidates`, `rejectedRecords`, or
 `rejectedPointers` with `VERSION_INCOMPATIBLE`.
+Federation discovery wraps verified local registry records with a signed
+`RegistryPeerRecord`, marks them as provider `federation`, and reports
+incompatible records under `rejectedRecords`. Federation expands discovery
+reach only; it is not a trust source and never grants authority.
 
 `POST /trust/evaluate` computes a local capability-scoped trust result for a
 registered candidate. `POST /reputation/update` stores capability-specific

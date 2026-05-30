@@ -40,6 +40,7 @@ await client.discovery.relay({
   supported_versions: ['fides.v2.0'],
 })
 await client.discovery.dht({ capability: 'invoice.reconcile' })
+await client.discovery.federation({ capability: 'invoice.reconcile' })
 const trust = await client.trust.evaluate({
   agentId: identity.identity.did,
   capability: 'invoice.reconcile',
@@ -163,13 +164,14 @@ controls, with kill switch rules overriding normal policy while active.
 Revocation and incident helpers expose local governance records that feed root
 session policy decisions. Runtime attestation helpers issue and verify local
 MockTEE attestations that can satisfy high-risk session policy when passed as
-an `attestationId`. Registry, relay, DHT, and well-known helpers expose the
-local mock discovery surfaces. They return candidate records or pointers only;
-they do not convert discovery into authority. Discovery, registry, and relay
-helpers accept `supported_versions` and `required_versions` so callers can
-request protocol compatibility filtering. `dht.publish` can publish a signed
-local pointer without an AgentCard URL when `agentId` or `agentCardId` refers to
-a registered local AgentCard. Failed SDK calls throw `FidesClientError`; when
+an `attestationId`. Registry, relay, DHT, federation, and well-known helpers
+expose the local mock discovery surfaces. They return candidate records or
+pointers only; they do not convert discovery into authority. Discovery,
+registry, relay, and federation helpers accept `supported_versions` and
+`required_versions` so callers can request protocol compatibility filtering.
+`dht.publish` can publish a signed local pointer without an AgentCard URL when
+`agentId` or `agentCardId` refers to a registered local AgentCard. Failed SDK
+calls throw `FidesClientError`; when
 the daemon returns a protocol `ErrorEnvelope`, the typed envelope is available
 on `error.error` with stable `code`, `category`, `severity`, `retryable`,
 `message`, and `details` fields.

@@ -43,6 +43,7 @@ agentd discover "reconcile invoices" --capability invoice.reconcile --provider l
 agentd discover --capability invoice.reconcile --provider registry --supported-versions fides.v2.0 --required-versions fides.v2.0
 agentd discover --capability invoice.reconcile --provider relay --supported-versions fides.v2.0
 agentd discover --capability invoice.reconcile --provider dht
+agentd discover --capability invoice.reconcile --provider federation
 agentd discover --capability invoice.reconcile --all-providers
 agentd demo run
 agentd simulate adversarial
@@ -67,7 +68,7 @@ Local identity files are stored under `~/.fides/identities` by default. Set
 inside the local identity file.
 
 `discover --capability` targets local `agentd` capability discovery. Use
-`--provider local`, `well-known`, `registry`, `relay`, `dht`, or
+`--provider local`, `well-known`, `registry`, `relay`, `dht`, `federation`, or
 `--all-providers` to choose the provider surface. These commands return
 candidates, registry records, relay presence records, or DHT pointers only;
 they do not grant invocation authority. Use `--supported-versions` and

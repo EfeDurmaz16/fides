@@ -42,6 +42,7 @@ import {
   createDHTPointerRecord,
   createErrorEnvelope,
   createRegistryIndexRecord,
+  createRegistryPeerRecord,
   createPrincipalIdentity,
   createPublisherIdentity,
   createRevocationRecordV2,
@@ -55,12 +56,14 @@ import {
   signAgentCard,
   signDHTPointerRecord,
   signRegistryIndexRecord,
+  signRegistryPeerRecord,
   verifySignedInvocationRequest,
   signInvocationResult,
   validateAgentCard,
   verifyDHTPointerRecord,
   verifySignedInvocationResult,
   verifySignedRegistryIndexRecord,
+  verifySignedRegistryPeerRecord,
   verifySignedAgentCard,
   verifyDelegationTokenSignature,
   verifyDomainDid,
@@ -87,6 +90,7 @@ import {
   type SessionGrantV2,
   type SignedInvocationRequest,
   type SignedRegistryIndexRecord,
+  type SignedRegistryPeerRecord,
   type SignedAgentCard,
   type TrustResult,
   type VersionNegotiationRecord,
@@ -2349,6 +2353,21 @@ async function filterVerifiedLocalRegistryRecords(records: Array<Record<string, 
   return { records: verifiedRecords, rejectedRecords }
 }
 
+async function localFederationPeerRecord(): Promise<{ signed: SignedRegistryPeerRecord | null; verified: boolean }> {
+  const identity = Array.from(localIdentities.values())[0]
+  const record = createRegistryPeerRecord({
+    issuer: identity?.identity.did ?? 'did:fides:agentd:local-registry',
+    peerId: 'local_registry_peer',
+    registryUrl: 'local://registry',
+    peeringMode: 'federated',
+    supportedVersions: ['fides.v2.0'],
+    capabilities: ['registry_search', 'revocation_propagation', 'incident_propagation'],
+  })
+  if (!identity) return { signed: null, verified: false }
+  const signed = await signRegistryPeerRecord(record, Buffer.from(identity.privateKeyHex, 'hex'), identity.identity.did)
+  return { signed, verified: await verifySignedRegistryPeerRecord(signed) }
+}
+
 function localRelayRecordFor(agentId: string, endpointHints: unknown[] = []) {
   const registered = localAgents.get(agentId)
   const card = registered ? localAgentCards.get(registered.cardId) : undefined
@@ -2428,6 +2447,46 @@ app.post('/discover/registry', async (c) => {
     ],
     authorityGranted: false,
     explanation: 'Registry discovery returns registry records only; registration does not grant invocation authority.',
+  })
+})
+
+app.post('/discover/federation', async (c) => {
+  const body = await c.req.json().catch(() => ({}))
+  const capability = typeof body.capability === 'string' ? body.capability : undefined
+  const matched = Array.from(localRegistryRecords.values()).filter((record) => (
+    !capability || (record.capabilities as string[] | undefined)?.includes(capability)
+  ))
+  const verified = await filterVerifiedLocalRegistryRecords(matched)
+  const filtered = filterVersionCompatibleProviderRecords(body, verified.records)
+  const peer = await localFederationPeerRecord()
+  const federatedRecords = filtered.records.map((record) => ({
+    ...record,
+    provider: 'federation',
+    federationPeerId: peer.signed?.payload.peer_id ?? 'local_registry_peer',
+    federationPeerRecord: peer.signed?.payload ?? null,
+    federationPeerProof: peer.signed?.proof ?? null,
+    federationPeerVerified: peer.verified,
+    authorityGranted: false,
+    reasons: [
+      ...(Array.isArray(record.reasons) ? record.reasons.map(String) : []),
+      'federation_peer_matched_capability',
+      'federation_does_not_grant_authority',
+    ],
+  }))
+  return c.json({
+    provider: 'federation',
+    mode: 'local_mock_federation',
+    capability: capability ?? null,
+    records: federatedRecords,
+    rejectedRecords: [
+      ...verified.rejectedRecords,
+      ...filtered.rejected,
+    ],
+    federationPeerRecord: peer.signed?.payload ?? null,
+    federationPeerProof: peer.signed?.proof ?? null,
+    federationPeerVerified: peer.verified,
+    authorityGranted: false,
+    explanation: 'Federation expands discovery to registry peers only; federated results are candidates and never invocation authority.',
   })
 })
 

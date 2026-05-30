@@ -552,7 +552,7 @@ describe('Agentd Service Routes', () => {
         }),
       })
 
-      for (const path of ['/registry/search', '/discover/registry', '/relay/discover', '/discover/relay']) {
+      for (const path of ['/registry/search', '/discover/registry', '/discover/federation', '/relay/discover', '/discover/relay']) {
         const response = await app.request(path, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -603,6 +603,62 @@ describe('Agentd Service Routes', () => {
         }),
       ]))
       expect(dhtData.authorityGranted).toBe(false)
+    })
+
+    it('returns federated registry candidates without granting authority', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Federated Invoice Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{ id: 'invoice.federated_reconcile', requiredScopes: ['invoice:read'] }],
+          endpoints: [],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+      await app.request('/registry/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const response = await app.request('/discover/federation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capability: 'invoice.federated_reconcile' }),
+      })
+
+      expect(response.status).toBe(200)
+      const data = await response.json()
+      expect(data).toMatchObject({
+        provider: 'federation',
+        mode: 'local_mock_federation',
+        authorityGranted: false,
+        federationPeerVerified: true,
+      })
+      expect(data.records).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          provider: 'federation',
+          agentId: identity.did,
+          federationPeerVerified: true,
+          authorityGranted: false,
+          reasons: expect.arrayContaining([
+            'federation_peer_matched_capability',
+            'federation_does_not_grant_authority',
+          ]),
+        }),
+      ]))
     })
 
     it('evaluates root trust, reputation, and policy for a registered local candidate', async () => {

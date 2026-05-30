@@ -36,6 +36,7 @@ describe('FidesClient', () => {
       supported_versions: ['fides.v2.0'],
     })
     await client.discovery.dht({ capability: 'invoice.reconcile' })
+    await client.discovery.federation({ capability: 'invoice.reconcile' })
     await client.trust.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.reputation.update({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.policy.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
@@ -104,6 +105,7 @@ describe('FidesClient', () => {
       'http://localhost:4817/discover/registry',
       'http://localhost:4817/discover/relay',
       'http://localhost:4817/discover/dht',
+      'http://localhost:4817/discover/federation',
       'http://localhost:4817/trust/evaluate',
       'http://localhost:4817/reputation/update',
       'http://localhost:4817/policy/evaluate',
@@ -166,6 +168,7 @@ describe('FidesClient', () => {
       'POST',
       'POST',
       'POST',
+      'POST',
       'GET',
       'POST',
       'POST',
@@ -212,12 +215,12 @@ describe('FidesClient', () => {
       supported_versions: ['fides.v2.0'],
       required_versions: ['fides.v2.0'],
     })
-    expect(JSON.parse(calls[36].init?.body as string)).toEqual({
+    expect(JSON.parse(calls[37].init?.body as string)).toEqual({
       capability: 'invoice.reconcile',
       supported_versions: ['fides.v2.0'],
       required_versions: ['fides.v2.0'],
     })
-    expect(JSON.parse(calls[42].init?.body as string)).toEqual({
+    expect(JSON.parse(calls[43].init?.body as string)).toEqual({
       capability: 'invoice.reconcile',
       agentId: 'did:fides:agent',
     })

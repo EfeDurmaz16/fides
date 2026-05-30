@@ -155,6 +155,7 @@ export class FidesClient {
     registry: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/registry', query) as Promise<FidesDiscoveryResponse>,
     relay: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/relay', query) as Promise<FidesDiscoveryResponse>,
     dht: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/dht', query) as Promise<FidesDiscoveryResponse>,
+    federation: (query: FidesDiscoveryQuery): Promise<FidesDiscoveryResponse> => this.post('/discover/federation', query) as Promise<FidesDiscoveryResponse>,
   }
 
   readonly trust = {

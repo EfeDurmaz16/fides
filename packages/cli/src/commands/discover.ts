@@ -4,7 +4,7 @@ import { loadConfig } from '../utils/config.js';
 import { error, info, formatScore } from '../utils/output.js';
 import { parseList, postJson, printResult } from './authority-utils.js';
 
-const DISCOVERY_PROVIDERS = ['local', 'well-known', 'registry', 'relay', 'dht'] as const
+const DISCOVERY_PROVIDERS = ['local', 'well-known', 'registry', 'relay', 'dht', 'federation'] as const
 type DiscoveryProviderName = typeof DISCOVERY_PROVIDERS[number]
 
 export function createDiscoverCommand(): Command {
@@ -14,7 +14,7 @@ export function createDiscoverCommand(): Command {
     .description('Discover agent identities or capability candidates')
     .argument('[agent-did-or-domain-or-intent]', 'DID/domain to resolve, or an intent when --capability is provided')
     .option('--capability <capability>', 'Capability to discover, e.g. invoice.reconcile')
-    .option('--provider <provider>', 'Discovery provider: local, well-known, registry, relay, dht, all', 'local')
+    .option('--provider <provider>', 'Discovery provider: local, well-known, registry, relay, dht, federation, all', 'local')
     .option('--all-providers', 'Query all local agentd discovery providers')
     .option('--constraints <json>', 'Discovery constraints as a JSON object')
     .option('--supported-versions <versions>', 'Comma-separated FIDES protocol versions supported by the requester')

@@ -1268,6 +1268,64 @@ describe('CLI Commands', () => {
           }),
         })
       );
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body as string)).toMatchObject({
+        token,
+        capabilityId: 'payments.execute',
+        audience: 'agentd',
+      });
+    });
+
+    it('session create should send canonical signed delegation tokens as signedToken', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        signedDelegationVerified: true,
+        session: { id: 'sess-1', sessionKey: 'redacted' },
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const signedToken = {
+        payload: {
+          schema_version: 'fides.delegation_token.v2',
+          id: 'dtok_1',
+          issuer: 'did:fides:principal',
+          subject: 'did:fides:agent',
+          capabilities: ['payments.execute'],
+          audience: ['agentd'],
+          issued_at: '2026-05-30T00:00:00.000Z',
+          expires_at: '2026-05-30T01:00:00.000Z',
+          nonce: 'nonce-1',
+          payload_hash: 'sha256:token',
+        },
+        proof: {
+          type: 'Ed25519Signature2024',
+          created: '2026-05-30T00:00:00.000Z',
+          verificationMethod: 'did:fides:principal',
+          proofPurpose: 'delegation',
+          canonicalizationAlgorithm: 'https://fides.dev/canonical-json/v1',
+          proofValue: 'proof',
+        },
+      };
+
+      const { createSessionCommand } = await import('../src/commands/session.js');
+      const cmd = createSessionCommand();
+
+      await cmd.parseAsync([
+        'create',
+        '--agentd-url',
+        'http://agentd.test',
+        '--capability',
+        'payments.execute',
+        '--token-json',
+        JSON.stringify(signedToken),
+        '--json',
+      ], { from: 'user' });
+
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body as string)).toEqual({
+        signedToken,
+        capabilityId: 'payments.execute',
+        audience: 'agentd',
+      });
     });
 
     it('session create should send a delegator public key when provided', async () => {

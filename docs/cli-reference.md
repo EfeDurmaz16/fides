@@ -184,8 +184,10 @@ invocation authority until policy produces a scoped `SessionGrant`.
 
 `session request`, `session show`, and `session verify` use the root v2 local
 agentd session endpoints. The older `session create` and `session revoke`
-commands remain available for the legacy signed `DelegationToken` `/v1`
-authority path.
+commands remain available for the `/v1` authority path. `session create`
+auto-detects canonical signed delegation-token input shaped as
+`{ payload, proof }` and sends it as `signedToken`; legacy `DelegationToken`
+input is still sent as `token` and may include `--delegator-public-key`.
 
 `attest github/email/domain/package/wallet` add local mock identity trust
 anchors to an existing identity and emit evidence. `attest runtime/show/verify`

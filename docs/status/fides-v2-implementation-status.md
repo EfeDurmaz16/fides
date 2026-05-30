@@ -41,6 +41,9 @@ Last verified locally: 2026-05-30.
 - `agentd` `/v1/sessions` accepts canonical `SignedDelegationTokenV2` payloads
   and verifies the issuer-bound proof without requiring an external
   `delegatorPublicKey`; legacy token sessions remain supported.
+- `agentd session create` auto-detects canonical signed delegation-token input
+  and sends it as `signedToken`; legacy token input remains available with
+  optional `--delegator-public-key`.
 - Scoped SessionGrants and invocation preflight.
 - `agentd invoke --sign` fetches or creates a SessionGrant, verifies the
   requester private key resolves to `requester_agent_id`, signs a canonical
@@ -103,6 +106,7 @@ Last verified locally: 2026-05-30.
   payload-hash tamper detection.
 - Core and agentd route tests cover canonical delegation-session creation,
   issuer mismatch rejection, and nonce replay protection.
+- CLI tests cover canonical signed delegation-token submission to `/v1/sessions`.
 - CLI tests cover canonical signed invocation request submission and issuer
   proof verification.
 - Canonical example catalog audit for the requested demo agents and

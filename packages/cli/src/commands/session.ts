@@ -79,11 +79,11 @@ export function createSessionCommand(): Command {
     .action(async (options) => {
       try {
         const token = parseTokenInput(options)
+        const tokenBody = createSessionTokenBody(token, options)
         const result = await postJson(`${options.agentdUrl.replace(/\/$/, '')}/v1/sessions`, {
-          token,
+          ...tokenBody,
           capabilityId: options.capability,
           audience: options.audience,
-          ...(options.delegatorPublicKey && { delegatorPublicKey: options.delegatorPublicKey }),
           ...(options.ttlMs && { ttlMs: Number(options.ttlMs) }),
         })
         printResult('Session created:', result, options)
@@ -116,4 +116,30 @@ export function createSessionCommand(): Command {
 
 function baseUrl(url: string): string {
   return url.replace(/\/+$/, '')
+}
+
+function createSessionTokenBody(
+  token: unknown,
+  options: { delegatorPublicKey?: string }
+): { token: unknown; delegatorPublicKey?: string } | { signedToken: unknown } {
+  if (isCanonicalSignedObject(token)) {
+    if (options.delegatorPublicKey) {
+      throw new Error('--delegator-public-key is only valid for legacy DelegationToken input')
+    }
+    return { signedToken: token }
+  }
+
+  return {
+    token,
+    ...(options.delegatorPublicKey && { delegatorPublicKey: options.delegatorPublicKey }),
+  }
+}
+
+function isCanonicalSignedObject(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as { payload?: unknown; proof?: unknown }
+  if (!candidate.payload || typeof candidate.payload !== 'object') return false
+  if (!candidate.proof || typeof candidate.proof !== 'object') return false
+  const proof = candidate.proof as { verificationMethod?: unknown; proofValue?: unknown }
+  return typeof proof.verificationMethod === 'string' && typeof proof.proofValue === 'string'
 }

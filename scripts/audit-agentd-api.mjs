@@ -5,9 +5,13 @@ import { fileURLToPath } from 'node:url'
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const agentdSourcePath = join(root, 'services/agentd/src/index.ts')
 const agentdOpenApiPath = join(root, 'docs/api/agentd.yaml')
+const statusDocPath = join(root, 'docs/status/fides-v2-implementation-status.md')
+const apiReferencePath = join(root, 'docs/api-reference.md')
 
 const source = readFileSync(agentdSourcePath, 'utf8')
 const openApi = readFileSync(agentdOpenApiPath, 'utf8')
+const statusDoc = readFileSync(statusDocPath, 'utf8')
+const apiReference = readFileSync(apiReferencePath, 'utf8')
 
 const routeAliases = new Map([
   ['GET /.well-known/agents/*', ['GET /.well-known/agents/{param}.json']],
@@ -23,10 +27,15 @@ const missingFromDocs = [...implemented].filter(route => !documented.has(route))
 const missingFromImplementation = [...documented].filter(route => !implemented.has(route)).sort()
 
 const routeOrderErrors = checkRouteOrdering(source)
+const markdownErrors = [
+  ...checkStatusRootApiOverview(documented, statusDoc),
+  ...checkMarkdownRoutesExist(documented, apiReference, 'docs/api-reference.md'),
+]
 const errors = [
   ...missingFromDocs.map(route => `implemented route is missing from docs/api/agentd.yaml: ${route}`),
   ...missingFromImplementation.map(route => `documented route is missing from services/agentd/src/index.ts: ${route}`),
   ...routeOrderErrors,
+  ...markdownErrors,
 ]
 
 if (errors.length > 0) {
@@ -85,9 +94,53 @@ function expandAliases(routes) {
 function normalizeRoute(route) {
   const [method, rawPath] = route.split(' ')
   const path = rawPath
-    .replace(/:[^/]+/g, '{param}')
+    .replace(/:([A-Za-z0-9_]+)/g, '{param}')
     .replace(/\{[^/}]+\}/g, '{param}')
   return `${method} ${path}`
+}
+
+function checkStatusRootApiOverview(openApiRoutes, contents) {
+  const section = extractSection(contents, 'Primary root v2 API:', 'See `docs/api/agentd.yaml`')
+  const markdownRoutes = new Set(parseMarkdownRoutes(section).map(normalizeRoute))
+  const expectedRoutes = [...openApiRoutes]
+    .filter(route => {
+      const path = route.split(' ')[1]
+      return !path.startsWith('/v1/') && path !== '/metrics'
+    })
+    .sort()
+
+  const missing = expectedRoutes.filter(route => !markdownRoutes.has(route))
+  const extra = [...markdownRoutes].filter(route => !expectedRoutes.includes(route)).sort()
+
+  return [
+    ...missing.map(route => `docs/status/fides-v2-implementation-status.md Primary root v2 API is missing ${route}`),
+    ...extra.map(route => `docs/status/fides-v2-implementation-status.md Primary root v2 API lists non-root or undocumented route ${route}`),
+  ]
+}
+
+function checkMarkdownRoutesExist(openApiRoutes, contents, label) {
+  const markdownRoutes = parseMarkdownRoutes(contents).map(normalizeRoute)
+  return markdownRoutes
+    .filter(route => !openApiRoutes.has(route))
+    .sort()
+    .map(route => `${label} lists route missing from docs/api/agentd.yaml: ${route}`)
+}
+
+function parseMarkdownRoutes(contents) {
+  const routes = []
+  const routePattern = /^- `((GET|POST|PUT|DELETE|PATCH) [^`]+)`$/gm
+  for (const match of contents.matchAll(routePattern)) {
+    routes.push(match[1])
+  }
+  return routes
+}
+
+function extractSection(contents, startMarker, endMarker) {
+  const start = contents.indexOf(startMarker)
+  if (start === -1) return ''
+  const end = contents.indexOf(endMarker, start)
+  if (end === -1) return contents.slice(start)
+  return contents.slice(start, end)
 }
 
 function checkRouteOrdering(contents) {

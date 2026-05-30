@@ -165,7 +165,12 @@ export function publicKeyFromDid(did: string): Uint8Array {
     throw new Error('Invalid FIDES DID')
   }
   const encoded = did.slice('did:fides:'.length)
-  const publicKey = bs58.decode(encoded)
+  let publicKey: Uint8Array
+  try {
+    publicKey = bs58.decode(encoded)
+  } catch {
+    throw new Error('Invalid FIDES DID public key encoding')
+  }
   if (publicKey.length !== 32) {
     throw new Error('FIDES DID public key must decode to 32 bytes')
   }
@@ -240,15 +245,15 @@ export function validateIdentityKeyBinding(identity: Pick<AgentIdentity, 'did' |
 }
 
 /**
- * Creates an AgentIdentity with a random Ed25519 key pair.
+ * Creates an AgentIdentity from an existing did:fides identifier.
+ *
+ * Deprecated: new code should use createAgentIdentity/createPublisherIdentity/
+ * createPrincipalIdentity so the private key material is returned with the
+ * identity. This compatibility helper is intentionally fail-closed: a FIDES
+ * identity must not invent a public key that is not bound to its DID.
  */
 export function createIdentity(did: string, type: 'agent' | 'publisher' | 'principal' | 'trust-anchor', metadata: Record<string, unknown> = {}): AgentIdentity & { metadata: Record<string, unknown> } {
-  let publicKey: Uint8Array
-  try {
-    publicKey = publicKeyFromDid(did)
-  } catch {
-    publicKey = crypto.getRandomValues(new Uint8Array(32))
-  }
+  const publicKey = publicKeyFromDid(did)
 
   return {
     did,

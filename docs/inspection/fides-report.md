@@ -42,7 +42,7 @@ Local evidence:
 | Agent identity | Present, shallow v2 shape | `packages/core/src/identity.ts`, `packages/shared/src/types.ts`. |
 | Publisher identity | Present, limited verification methods | `packages/core/src/identity.ts`, `packages/core/src/domain-verifier.ts`. |
 | Principal identity | Present, limited | `packages/core/src/identity.ts`. |
-| Domainless identity | Partial | `packages/core/src/identity.ts` supports DIDs without domain, but identity creation currently uses random bytes as public key rather than keypair issuance. |
+| Domainless identity | Present | `packages/core/src/identity.ts` issues domainless `did:fides` identities from Ed25519 keypairs and deprecated DID-based construction now fails closed when the DID cannot decode to a bound public key. |
 | Platform-hosted identity | Partial | Shared and docs mention platform identity, but no first-class hosted identity lifecycle was found. |
 | Domain/org verified identity | Present for DNS TXT verification | `packages/core/src/domain-verifier.ts`, `services/discovery/src/db/migrations/003_identity_domain_verification.sql`, `services/discovery/src/db/migrations/004_organization_domain_verification.sql`. |
 | Trust anchors | Present | `packages/core/src/trust-anchor.ts`. |

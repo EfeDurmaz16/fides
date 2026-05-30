@@ -81,6 +81,12 @@ describe('Identity v2', () => {
       expect(identity.publicKey).toEqual(issued.identity.publicKey)
       expect(validateIdentityKeyBinding(identity)).toBe(true)
     })
+
+    it('rejects deprecated createIdentity calls when the DID cannot bind to a public key', () => {
+      expect(() => createIdentity('did:fides:not-a-valid-key', 'agent')).toThrow(
+        'Invalid FIDES DID public key encoding'
+      )
+    })
   })
 
   describe('identityDisplayName', () => {

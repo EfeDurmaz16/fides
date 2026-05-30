@@ -221,6 +221,10 @@ export function verifySignedSessionGrantV2(signed: SignedSessionGrantV2): Promis
   return verifyObject(signed)
 }
 
+export async function verifySignedSessionGrantV2Issuer(signed: SignedSessionGrantV2): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedSessionGrantV2(signed)
+}
+
 export interface RevokedSession extends SessionGrant {
   revoked: boolean
   revokedAt: string

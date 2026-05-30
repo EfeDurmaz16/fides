@@ -6,6 +6,7 @@ import {
   signSessionGrantV2,
   validateSessionGrantV2,
   verifySignedSessionGrantV2,
+  verifySignedSessionGrantV2Issuer,
 } from '../src/delegation.js'
 
 describe('SessionGrant v2', () => {
@@ -62,6 +63,29 @@ describe('SessionGrant v2', () => {
 
     const signed = await signSessionGrantV2(grant, issuer.privateKey, issuer.did)
     expect(await verifySignedSessionGrantV2(signed)).toBe(true)
+    expect(await verifySignedSessionGrantV2Issuer(signed)).toBe(true)
+  })
+
+  it('rejects session grant proofs whose verification method is not the issuer', async () => {
+    const issuer = await createIdentityKeyPair()
+    const attacker = await createIdentityKeyPair()
+    const grant = createSessionGrantV2({
+      requesterAgentId: 'did:fides:requester',
+      targetAgentId: 'did:fides:target',
+      principalId: 'did:fides:principal',
+      capability: 'invoice.reconcile',
+      scopes: ['invoice:read'],
+      constraints: {},
+      policyHash: 'sha256:policy',
+      trustResultHash: 'sha256:trust',
+      issuer: issuer.did,
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    })
+
+    const signed = await signSessionGrantV2(grant, attacker.privateKey, attacker.did)
+
+    expect(await verifySignedSessionGrantV2(signed)).toBe(true)
+    expect(await verifySignedSessionGrantV2Issuer(signed)).toBe(false)
   })
 
   it('rejects grants whose shared object ids or subjects drift from session binding', async () => {

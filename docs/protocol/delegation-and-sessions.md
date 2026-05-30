@@ -34,6 +34,13 @@ binds to the same target as the session authority.
 
 Replay protection is required through nonce tracking.
 
+Signed `SessionGrant` verification has two levels. `verifySignedSessionGrantV2`
+checks the canonical Ed25519 proof. `verifySignedSessionGrantV2Issuer` also
+requires `proof.verificationMethod` to equal the grant `issuer`, which is the
+authority-safe check for session acceptance paths. A valid signature from a
+different DID over an otherwise valid grant payload is not enough to establish
+session authority.
+
 ## Invocation Binding
 
 An invocation must bind to a scoped `SessionGrant`. The root local daemon can

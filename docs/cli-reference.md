@@ -80,6 +80,11 @@ agentd approval deny appr_... --reason "too risky"
 agentd delegate create --delegator did:fides:principal --delegatee did:fides:agent --capabilities invoice.reconcile --agentd-url http://localhost:7345
 agentd session request did:fides:... --capability invoice.reconcile --requested-scopes invoice:read
 agentd session verify sess_...
+agentd attest github --identity did:fides:... --handle fides-dev
+agentd attest email --identity did:fides:... --email dev@example.com
+agentd attest domain --identity did:fides:... --domain example.com
+agentd attest package --identity did:fides:... --registry npm --package @fides/example-agent
+agentd attest wallet --identity did:fides:... --address 0x...
 agentd attest runtime --agent did:fides:... --code-hash sha256:... --runtime-hash sha256:... --policy-hash sha256:...
 agentd attest show att_...
 agentd attest verify att_...
@@ -164,10 +169,12 @@ agentd session endpoints. The older `session create` and `session revoke`
 commands remain available for the legacy signed `DelegationToken` `/v1`
 authority path.
 
-`attest runtime/show/verify` use the root v2 local agentd runtime attestation
-endpoints. Issuing or verifying an attestation emits evidence and does not
-grant authority by itself. The older `runtime attest` command remains a local
-MockTEE helper for standalone runtime package checks.
+`attest github/email/domain/package/wallet` add local mock identity trust
+anchors to an existing identity and emit evidence. `attest runtime/show/verify`
+use the root v2 local agentd runtime attestation endpoints. Issuing or
+verifying an attestation emits evidence and does not grant authority by itself.
+The older `runtime attest` command remains a local MockTEE helper for
+standalone runtime package checks.
 
 `incident report/list/inspect/resolve` use the root v2 incident endpoints by
 default. Passing `--private-key-hex` keeps the legacy signed `/v1/incidents`

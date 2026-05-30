@@ -81,6 +81,7 @@ import {
   type DHTPointerRecord,
   type IncidentRecord,
   type IncidentRecordV2,
+  type IdentityTrustAnchor,
   type KillSwitchRule,
   type DelegationToken,
   type PrincipalIdentity,
@@ -94,6 +95,7 @@ import {
   type SignedRegistryIndexRecord,
   type SignedRegistryPeerRecord,
   type SignedAgentCard,
+  type TrustAnchorType,
   type TrustResult,
   type VersionNegotiationRecord,
 } from '@fides/core'
@@ -2156,6 +2158,11 @@ app.post('/incidents/:id/resolve', async (c) => {
 
 app.post('/attestations', async (c) => {
   const body = await c.req.json().catch(() => ({}))
+  const identityAttestation = issueLocalIdentityAttestation(body)
+  if (identityAttestation) {
+    return c.json(identityAttestation.body, identityAttestation.status)
+  }
+
   const agentId = typeof body.agentId === 'string'
     ? body.agentId
     : typeof body.agent_id === 'string'
@@ -2258,6 +2265,138 @@ app.post('/attestations/:id/verify', async (c) => {
   })
   return c.json({ id, valid, attestation, evidenceRefs: [event.event_id], authorityGranted: false })
 })
+
+function issueLocalIdentityAttestation(body: Record<string, unknown>): { body: Record<string, unknown>; status: 201 | 400 | 404 } | null {
+  const identityId = typeof body.identity === 'string'
+    ? body.identity
+    : typeof body.identityId === 'string'
+      ? body.identityId
+      : typeof body.identity_id === 'string'
+        ? body.identity_id
+        : undefined
+  if (!identityId) return null
+
+  const record = localIdentities.get(identityId)
+  if (!record) {
+    return {
+      status: 404,
+      body: {
+        error: 'identity not found',
+        identity: identityId,
+        authorityGranted: false,
+      },
+    }
+  }
+
+  const anchor = createLocalIdentityTrustAnchor(body)
+  if (!anchor) {
+    return {
+      status: 400,
+      body: {
+        error: 'attestation type and value are required',
+        identity: identityId,
+        authorityGranted: false,
+      },
+    }
+  }
+
+  record.identity = {
+    ...record.identity,
+    trustAnchors: [
+      ...(record.identity.trustAnchors ?? []),
+      anchor,
+    ],
+  } as LocalIdentityRecord['identity']
+  localIdentities.set(identityId, record)
+
+  const event = appendRootEvidence({
+    type: 'attestation.issued',
+    actor: identityId,
+    subject: identityId,
+    output: anchor,
+    decision: 'issued',
+    privacy_mode: 'hash_only',
+    metadata: {
+      trust_anchor_type: anchor.type,
+      trust_anchor_value: anchor.value,
+      mock: true,
+    },
+  })
+
+  return {
+    status: 201,
+    body: {
+      attestation: {
+        id: `att_${crypto.randomUUID()}`,
+        schema_version: 'fides.identity_attestation.v1',
+        identity: identityId,
+        trust_anchor: anchor,
+        issued_at: anchor.verifiedAt,
+        mode: 'local_mock',
+      },
+      identity: safeIdentityRecord(record),
+      evidenceRefs: [event.event_id],
+      authorityGranted: false,
+    },
+  }
+}
+
+function createLocalIdentityTrustAnchor(body: Record<string, unknown>): IdentityTrustAnchor | null {
+  const rawType = typeof body.type === 'string'
+    ? body.type
+    : typeof body.provider === 'string'
+      ? body.provider
+      : undefined
+  const type = normalizeTrustAnchorType(rawType, body)
+  if (!type) return null
+  const value = identityTrustAnchorValue(type, body)
+  if (!value) return null
+  return {
+    type,
+    value,
+    verified: true,
+    verifiedAt: new Date().toISOString(),
+  }
+}
+
+function normalizeTrustAnchorType(rawType: string | undefined, body: Record<string, unknown>): TrustAnchorType | null {
+  if (rawType === 'package') {
+    const registry = typeof body.registry === 'string' ? body.registry.toLowerCase() : ''
+    if (registry === 'npm') return 'npm'
+    if (registry === 'pypi') return 'pypi'
+    return null
+  }
+  if (
+    rawType === 'domain' ||
+    rawType === 'github' ||
+    rawType === 'email' ||
+    rawType === 'npm' ||
+    rawType === 'pypi' ||
+    rawType === 'wallet' ||
+    rawType === 'passkey' ||
+    rawType === 'organization_invitation' ||
+    rawType === 'runtime_attestation' ||
+    rawType === 'build_attestation' ||
+    rawType === 'peer_attestation'
+  ) {
+    return rawType
+  }
+  return null
+}
+
+function identityTrustAnchorValue(type: TrustAnchorType, body: Record<string, unknown>): string | null {
+  if (type === 'github') return stringField(body, 'handle')
+  if (type === 'email') return stringField(body, 'email')
+  if (type === 'domain') return stringField(body, 'domain')
+  if (type === 'wallet') return stringField(body, 'address')
+  if (type === 'npm' || type === 'pypi') return stringField(body, 'package') ?? stringField(body, 'name')
+  return stringField(body, 'value')
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key]
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
 
 // ─── FIDES v2 Local API Aliases ───────────────────────────────────
 app.post('/dht/start', (c) => {

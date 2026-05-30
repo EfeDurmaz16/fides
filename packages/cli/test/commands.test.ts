@@ -1177,6 +1177,73 @@ describe('CLI Commands', () => {
       );
     });
 
+    it('attest identity trust-anchor commands should call root v2 attestations', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        attestation: { id: 'att_identity_1' },
+        evidenceRefs: ['evt_1'],
+        authorityGranted: false,
+      }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createAttestCommand } = await import('../src/commands/attest.js');
+      const cmd = createAttestCommand();
+
+      await cmd.parseAsync(['github', '--identity', 'did:fides:publisher', '--handle', 'fides-dev', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['email', '--identity', 'did:fides:publisher', '--email', 'dev@example.com', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['domain', '--identity', 'did:fides:publisher', '--domain', 'example.com', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['package', '--identity', 'did:fides:publisher', '--registry', 'npm', '--package', '@fides/example-agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['wallet', '--identity', 'did:fides:publisher', '--address', '0xabc', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ type: 'github', identity: 'did:fides:publisher', handle: 'fides-dev' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ type: 'email', identity: 'did:fides:publisher', email: 'dev@example.com' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ type: 'domain', identity: 'did:fides:publisher', domain: 'example.com' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        4,
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'package',
+            identity: 'did:fides:publisher',
+            registry: 'npm',
+            package: '@fides/example-agent',
+          }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        5,
+        'http://agentd.test/attestations',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ type: 'wallet', identity: 'did:fides:publisher', address: '0xabc' }),
+        })
+      );
+    });
+
     it('attest show and verify should inspect root v2 runtime attestations', async () => {
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({
         attestation: { attestation_id: 'att_1' },

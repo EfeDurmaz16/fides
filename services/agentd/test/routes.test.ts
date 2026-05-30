@@ -1476,6 +1476,57 @@ describe('Agentd Service Routes', () => {
       ]))
     })
 
+    it('adds local mock identity trust anchors without granting authority', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'publisher', name: 'Anchor Publisher' }),
+      })
+      const { identity } = await identityResponse.json()
+
+      const attestation = await app.request('/attestations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity: identity.did,
+          type: 'github',
+          handle: 'fides-publisher',
+        }),
+      })
+
+      expect(attestation.status).toBe(201)
+      const data = await attestation.json()
+      expect(data.authorityGranted).toBe(false)
+      expect(data.attestation).toMatchObject({
+        schema_version: 'fides.identity_attestation.v1',
+        identity: identity.did,
+        mode: 'local_mock',
+        trust_anchor: {
+          type: 'github',
+          value: 'fides-publisher',
+          verified: true,
+        },
+      })
+      expect(data.identity.identity.trustAnchors).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          type: 'github',
+          value: 'fides-publisher',
+          verified: true,
+        }),
+      ]))
+
+      const evidence = await app.request('/evidence')
+      const evidenceData = await evidence.json()
+      expect(evidenceData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          event_id: data.evidenceRefs[0],
+          type: 'attestation.issued',
+          subject: identity.did,
+          privacy_mode: 'hash_only',
+        }),
+      ]))
+    })
+
     it('records failed attestation verification evidence for missing attestations', async () => {
       const verified = await app.request('/attestations/att_missing/verify', { method: 'POST' })
       expect(verified.status).toBe(404)

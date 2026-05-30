@@ -579,14 +579,22 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          $ref: "#/components/responses/JsonObject"
+          description: Revocation recorded; active records override matching trust and policy evaluation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRevocationRecordResponse"
     get:
       operationId: listLocalRevocations
       tags: [Authority]
       summary: List local revocations
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local revocation records and active subset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRevocationListResponse"
 
   /revocations/{id}:
     get:
@@ -597,7 +605,11 @@ paths:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          $ref: "#/components/responses/JsonObject"
+          description: Local revocation status and record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalRevocationStatusResponse"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -2166,6 +2178,93 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/KillSwitchRule"
+
+    RevocationRecordV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - target_type
+        - target_id
+        - reason
+        - status
+        - evidence_refs
+        - created_at
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.revocation.record.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        target_type:
+          type: string
+          enum: [key, identity, agent, agent_card, capability, session, attestation, publisher]
+        target_id:
+          type: string
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [active, superseded, expired]
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+
+    LocalRevocationRecordResponse:
+      type: object
+      required: [record, authorityOverride]
+      properties:
+        record:
+          $ref: "#/components/schemas/RevocationRecordV2"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityOverride:
+          type: boolean
+          description: True when the revocation can override normal trust and policy evaluation.
+        explanation:
+          type: string
+
+    LocalRevocationListResponse:
+      type: object
+      required: [records, active]
+      properties:
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/RevocationRecordV2"
+        active:
+          type: array
+          items:
+            $ref: "#/components/schemas/RevocationRecordV2"
+
+    LocalRevocationStatusResponse:
+      type: object
+      required: [id, revoked]
+      properties:
+        id:
+          type: string
+        revoked:
+          type: boolean
+        record:
+          $ref: "#/components/schemas/RevocationRecordV2"
 
     EvidenceSubmitRequest:
       type: object

@@ -27,6 +27,12 @@ AgentCards. When the card has been signed, the relay record includes:
 These fields let a caller resolve and verify the AgentCard after rendezvous.
 They do not make the relay a trust anchor.
 
+`RelayDiscoveryProvider.register` accepts only identity-bound signed AgentCards.
+The AgentCard proof verification method must match the advertised
+`identity.did`; otherwise the provider refuses to publish the rendezvous
+message. Relay can carry signed references, but it cannot make another DID speak
+for the agent identity in the card.
+
 ## Relay Must Not Provide
 
 - trust scores

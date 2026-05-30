@@ -85,9 +85,15 @@ paths:
 
   /attestations:
     post:
-      operationId: createRuntimeAttestation
+      operationId: createLocalAttestation
       tags: [Attestation]
-      summary: Issue a local runtime attestation
+      summary: Issue a local identity or runtime attestation
+      description: |
+        Bodies with `identity` add local mock identity trust anchors for
+        GitHub, email, domain, package registry, or wallet claims. Bodies with
+        `agentId`, `codeHash`, `runtimeHash`, and `policyHash` issue a local
+        MockTEE runtime attestation. Attestation issuance records evidence and
+        does not grant authority by itself.
       security:
         - ApiKeyAuth: []
       requestBody:

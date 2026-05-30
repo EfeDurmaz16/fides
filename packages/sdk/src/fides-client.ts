@@ -25,6 +25,7 @@ import {
   type SignedSessionGrantV2,
   type SignedInvocationRequest,
   type SignedInvocationResult,
+  type VersionNegotiationRecord,
 } from '@fides/core'
 import type { AgentdHealthResponse } from './agentd/client.js'
 
@@ -880,6 +881,7 @@ export interface FidesSessionResponse {
   session: SessionGrantV2
   signedSession?: SignedSessionGrantV2
   signedSessionVerified?: boolean
+  versionNegotiation?: VersionNegotiationRecord
   policy?: FidesPolicyDecision
   trust?: TrustResult
   evidenceRefs?: string[]

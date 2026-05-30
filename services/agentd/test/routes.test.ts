@@ -982,6 +982,12 @@ describe('Agentd Service Routes', () => {
       expect(sessionData.authorityMode).toBe('full')
       expect(sessionData.allowedActions).toEqual(['execute', 'dry_run'])
       expect(sessionData.session.capability).toBe('invoice.reconcile')
+      expect(sessionData.session.supported_versions).toEqual(expect.arrayContaining(['fides.v2.0']))
+      expect(sessionData.session.negotiated_version).toBe('fides.v2.0')
+      expect(sessionData.versionNegotiation).toMatchObject({
+        compatible: true,
+        negotiated_version: 'fides.v2.0',
+      })
       expect(sessionData.signedSession.payload).toEqual(sessionData.session)
       expect(sessionData.signedSession.proof.proofPurpose).toBe('delegation')
       expect(sessionData.signedSession.proof.verificationMethod).toBe(sessionData.session.issuer)
@@ -1038,6 +1044,57 @@ describe('Agentd Service Routes', () => {
           output_hash: expect.stringMatching(/^sha256:/),
         }),
       ]))
+    })
+
+    it('refuses to issue SessionGrants for incompatible protocol versions', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Legacy Session Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{
+            id: 'legacy.session',
+            riskLevel: 'low',
+            requiredScopes: ['legacy:read'],
+          }],
+          protocolVersions: ['fides.v1'],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const session = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: 'did:fides:requester',
+          agentId: identity.did,
+          capability: 'legacy.session',
+          requestedScopes: ['legacy:read'],
+          supported_versions: ['fides.v2.0'],
+          required_versions: ['fides.v2.0'],
+        }),
+      })
+
+      expect(session.status).toBe(409)
+      const data = await session.json()
+      expect(data.authorityGranted).toBe(false)
+      expect(data.error.code).toBe('VERSION_INCOMPATIBLE')
+      expect(data.versionNegotiation).toMatchObject({
+        compatible: false,
+        peer_supported_versions: ['fides.v1'],
+      })
     })
 
     it('verifies caller-supplied signed invocation requests before execution', async () => {

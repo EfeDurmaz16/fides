@@ -1643,6 +1643,23 @@ app.post('/sessions', async (c) => {
   const sessionConstraints = policy.decision === 'dry_run_only'
     ? { ...requestedConstraints, dryRunOnly: true }
     : requestedConstraints
+  const sessionVersionNegotiation = negotiateProtocolVersion({
+    localSupported: stringArray(body.supported_versions ?? body.supportedVersions),
+    localRequired: stringArray(body.required_versions ?? body.requiredVersions),
+    peerSupported: found.card.protocolVersions?.length ? found.card.protocolVersions : ['fides.v2.0'],
+    peerRequired: stringArray((found.card as unknown as Record<string, unknown>).required_versions),
+  })
+  if (!sessionVersionNegotiation.compatible || !sessionVersionNegotiation.negotiated_version) {
+    return c.json({
+      authorized: false,
+      authorityGranted: false,
+      error: createErrorEnvelope('VERSION_INCOMPATIBLE', {
+        message: 'SessionGrant cannot be issued for incompatible protocol versions',
+        details: { versionNegotiation: sessionVersionNegotiation },
+      }),
+      versionNegotiation: sessionVersionNegotiation,
+    }, 409)
+  }
   const session = createSessionGrantV2({
     requesterAgentId,
     targetAgentId,
@@ -1653,6 +1670,9 @@ app.post('/sessions', async (c) => {
     policyHash: hashProtocolPayload(policy),
     trustResultHash: hashProtocolPayload(trust),
     audience: Array.isArray(body.audience) ? body.audience.map(String) : [targetAgentId],
+    supportedVersions: sessionVersionNegotiation.supported_versions,
+    requiredVersions: sessionVersionNegotiation.required_versions,
+    negotiatedVersion: sessionVersionNegotiation.negotiated_version,
     issuer: authority.identity.did,
     expiresAt,
   })
@@ -1673,6 +1693,7 @@ app.post('/sessions', async (c) => {
       authority_granted: sessionAuthority.authorityGranted,
       authority_mode: sessionAuthority.authorityMode,
       allowed_actions: sessionAuthority.allowedActions,
+      negotiated_version: session.negotiated_version,
     },
   })
 
@@ -1682,6 +1703,7 @@ app.post('/sessions', async (c) => {
     session,
     signedSession,
     signedSessionVerified: await verifySignedSessionGrantV2Issuer(signedSession),
+    versionNegotiation: sessionVersionNegotiation,
     policy,
     trust,
     evidenceRefs: [sessionEvidence.event_id],

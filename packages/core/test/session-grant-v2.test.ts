@@ -38,6 +38,8 @@ describe('SessionGrant v2', () => {
       policy_hash: 'sha256:policy',
       trust_result_hash: 'sha256:trust',
       audience: ['did:fides:target'],
+      supported_versions: ['fides.v2.0', 'fides.v2'],
+      negotiated_version: 'fides.v2.0',
       issuer: issuer.did,
     })
     expect(grant.id).toBe(grant.session_id)
@@ -112,6 +114,33 @@ describe('SessionGrant v2', () => {
       errors: [
         'SessionGrant.id must match SessionGrant.session_id',
         'SessionGrant.subject must match SessionGrant.target_agent_id',
+      ],
+    })
+  })
+
+  it('rejects grants with invalid protocol version declarations', async () => {
+    const issuer = await createIdentityKeyPair()
+    const grant = createSessionGrantV2({
+      requesterAgentId: 'did:fides:requester',
+      targetAgentId: 'did:fides:target',
+      principalId: 'did:fides:principal',
+      capability: 'invoice.reconcile',
+      scopes: ['invoice:read'],
+      constraints: {},
+      policyHash: 'sha256:policy',
+      trustResultHash: 'sha256:trust',
+      supportedVersions: ['fides.v2.0'],
+      requiredVersions: ['fides.v3.0'],
+      negotiatedVersion: 'fides.v3.0',
+      issuer: issuer.did,
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    })
+
+    expect(validateSessionGrantV2(grant)).toEqual({
+      valid: false,
+      errors: [
+        'SessionGrant.negotiated_version must be included in supported_versions',
+        'SessionGrant.required_versions must be included in supported_versions',
       ],
     })
   })

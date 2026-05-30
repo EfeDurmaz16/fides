@@ -255,6 +255,15 @@ describe('Agentd OpenAPI contract', () => {
     expect(schema).toContain('evidence_refs:')
   })
 
+  it('documents v2 SessionGrants as protocol-version-bound authority records', () => {
+    const schema = extractSchemaBlock(openApi, 'SessionGrantV2')
+    expect(schema).toContain('schema_version:')
+    expect(schema).toContain('supported_versions:')
+    expect(schema).toContain('required_versions:')
+    expect(schema).toContain('negotiated_version:')
+    expect(extractSchemaPropertyBlock(openApi, 'LocalSessionResponse', 'versionNegotiation')).toContain('VersionNegotiationRecord')
+  })
+
   it('keeps root v2 runtime routes documented in OpenAPI', () => {
     const runtimeOperations = extractAgentdRuntimeRoutes(agentdSource)
       .filter(operation => operation.path.startsWith('/'))

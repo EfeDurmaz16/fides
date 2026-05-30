@@ -6,7 +6,7 @@
 
 import type { SignedObject } from './canonical-signer.js'
 import { canonicalDigest, signObject, verifyObject } from './canonical-signer.js'
-import { hashProtocolPayload } from './protocol.js'
+import { FIDES_PROTOCOL_VERSION, FIDES_SUPPORTED_PROTOCOL_VERSIONS, hashProtocolPayload } from './protocol.js'
 import * as ed from '@noble/ed25519'
 import { bytesToHex } from '@noble/hashes/utils'
 
@@ -57,6 +57,9 @@ export interface SessionGrantV2 {
   expires_at: string
   nonce: string
   audience: string[]
+  supported_versions: string[]
+  required_versions?: string[]
+  negotiated_version: string
   issuer: string
   payload_hash: string
 }
@@ -82,6 +85,9 @@ export interface SessionGrantV2Input {
   policyHash: string
   trustResultHash: string
   audience?: string[]
+  supportedVersions?: string[]
+  requiredVersions?: string[]
+  negotiatedVersion?: string
   issuer: string
   issuedAt?: string
   expiresAt: string
@@ -105,6 +111,12 @@ export function createDelegationToken(input: DelegationInput): DelegationToken {
 
 export function createSessionGrantV2(input: SessionGrantV2Input): SessionGrantV2 {
   const sessionId = crypto.randomUUID()
+  const supportedVersions = input.supportedVersions?.length
+    ? input.supportedVersions
+    : [...FIDES_SUPPORTED_PROTOCOL_VERSIONS]
+  const negotiatedVersion = input.negotiatedVersion ?? (
+    supportedVersions.includes(FIDES_PROTOCOL_VERSION) ? FIDES_PROTOCOL_VERSION : supportedVersions[0]
+  )
   const payload = {
     schema_version: 'fides.session_grant.v1' as const,
     id: sessionId,
@@ -122,6 +134,9 @@ export function createSessionGrantV2(input: SessionGrantV2Input): SessionGrantV2
     expires_at: input.expiresAt,
     nonce: input.nonce ?? crypto.randomUUID(),
     audience: input.audience ?? [input.targetAgentId],
+    supported_versions: supportedVersions,
+    ...(input.requiredVersions?.length ? { required_versions: input.requiredVersions } : {}),
+    negotiated_version: negotiatedVersion,
     issuer: input.issuer,
   }
 
@@ -203,6 +218,24 @@ export function validateSessionGrantV2(session: SessionGrantV2): { valid: boolea
   if (!session.policy_hash) errors.push('SessionGrant.policy_hash is required')
   if (!session.trust_result_hash) errors.push('SessionGrant.trust_result_hash is required')
   if (!session.nonce) errors.push('SessionGrant.nonce is required')
+  if (!session.supported_versions || session.supported_versions.length === 0) {
+    errors.push('SessionGrant.supported_versions must not be empty')
+  }
+  if (!session.negotiated_version) errors.push('SessionGrant.negotiated_version is required')
+  if (
+    session.negotiated_version &&
+    session.supported_versions?.length &&
+    !session.supported_versions.includes(session.negotiated_version)
+  ) {
+    errors.push('SessionGrant.negotiated_version must be included in supported_versions')
+  }
+  if (
+    session.required_versions?.length &&
+    session.supported_versions?.length &&
+    session.required_versions.some(version => !session.supported_versions.includes(version))
+  ) {
+    errors.push('SessionGrant.required_versions must be included in supported_versions')
+  }
   if (!session.issuer) errors.push('SessionGrant.issuer is required')
   if (!session.expires_at) errors.push('SessionGrant.expires_at is required')
   if (session.expires_at && isSessionGrantV2Expired(session)) errors.push('SessionGrant is expired')

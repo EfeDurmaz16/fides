@@ -2592,13 +2592,14 @@ components:
             type: string
             enum: [execute, dry_run]
         session:
-          type: object
-          description: FIDES v2 SessionGrant. Dry-run-only sessions include constraints.dryRunOnly=true.
+          $ref: "#/components/schemas/SessionGrantV2"
         signedSession:
           type: object
           description: Canonically signed SessionGrant.
         signedSessionVerified:
           type: boolean
+        versionNegotiation:
+          $ref: "#/components/schemas/VersionNegotiationRecord"
         policy:
           type: object
         trust:
@@ -2607,6 +2608,122 @@ components:
           type: array
           items:
             type: string
+
+    SessionGrantV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - session_id
+        - subject
+        - requester_agent_id
+        - target_agent_id
+        - principal_id
+        - capability
+        - scopes
+        - constraints
+        - policy_hash
+        - trust_result_hash
+        - issued_at
+        - expires_at
+        - nonce
+        - audience
+        - supported_versions
+        - negotiated_version
+        - issuer
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.session_grant.v1]
+        id:
+          type: string
+        session_id:
+          type: string
+        subject:
+          type: string
+          description: Target agent id bound through the shared signed-object envelope.
+        requester_agent_id:
+          type: string
+        target_agent_id:
+          type: string
+        principal_id:
+          type: string
+        capability:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        constraints:
+          type: object
+        policy_hash:
+          type: string
+        trust_result_hash:
+          type: string
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        nonce:
+          type: string
+        audience:
+          type: array
+          items:
+            type: string
+        supported_versions:
+          type: array
+          items:
+            type: string
+        required_versions:
+          type: array
+          items:
+            type: string
+        negotiated_version:
+          type: string
+        issuer:
+          type: string
+        payload_hash:
+          type: string
+
+    VersionNegotiationRecord:
+      type: object
+      required:
+        - schema_version
+        - supported_versions
+        - peer_supported_versions
+        - compatible
+        - errors
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.version_negotiation.v1]
+        supported_versions:
+          type: array
+          items:
+            type: string
+        required_versions:
+          type: array
+          items:
+            type: string
+        peer_supported_versions:
+          type: array
+          items:
+            type: string
+        peer_required_versions:
+          type: array
+          items:
+            type: string
+        negotiated_version:
+          type: string
+        compatible:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: object
 
     DiscoveryResponse:
       type: object

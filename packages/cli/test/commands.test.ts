@@ -894,6 +894,51 @@ describe('CLI Commands', () => {
       expect(output.constraints.maxActions).toBe(3);
     });
 
+    it('delegate create can record a root v2 delegation through agentd', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        token: { id: 'del_1' },
+        authorityGranted: false,
+      }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createDelegateCommand } = await import('../src/commands/delegate.js');
+      const cmd = createDelegateCommand();
+
+      await cmd.parseAsync([
+        'create',
+        '--delegator',
+        'did:fides:principal',
+        '--delegatee',
+        'did:fides:agent',
+        '--capabilities',
+        'invoice.reconcile,payments.prepare',
+        '--max-actions',
+        '2',
+        '--audience',
+        'agentd,invoice-agent',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://agentd.test/delegations',
+        expect.objectContaining({ method: 'POST' })
+      );
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse(init.body as string)).toMatchObject({
+        delegator: 'did:fides:principal',
+        delegatee: 'did:fides:agent',
+        capabilities: ['invoice.reconcile', 'payments.prepare'],
+        constraints: { maxActions: 2 },
+        expiresAt: expect.any(String),
+        audience: ['agentd', 'invoice-agent'],
+      });
+    });
+
     it('session create should call agentd with a DelegationToken', async () => {
       process.env.FIDES_API_KEY = 'cli-api-key'
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({

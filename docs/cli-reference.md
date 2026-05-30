@@ -73,6 +73,7 @@ agentd approval request --agent did:fides:... --capability payments.prepare --re
 agentd approval list
 agentd approval approve appr_... --reason "human approved"
 agentd approval deny appr_... --reason "too risky"
+agentd delegate create --delegator did:fides:principal --delegatee did:fides:agent --capabilities invoice.reconcile --agentd-url http://localhost:7345
 agentd session request did:fides:... --capability invoice.reconcile --requested-scopes invoice:read
 agentd session verify sess_...
 agentd attest runtime --agent did:fides:... --code-hash sha256:... --runtime-hash sha256:... --policy-hash sha256:...
@@ -137,6 +138,11 @@ authority by this command.
 `approval request/list/approve/deny` use root v2 approval endpoints. Approval
 records human authorization intent and evidence, but does not grant authority
 without a policy evaluation and scoped `SessionGrant`.
+
+`delegate create --agentd-url` records a root v2 delegation with local agentd.
+Without `--agentd-url`, `delegate create` keeps its legacy local
+`DelegationToken` generation behavior. Delegation still does not grant
+invocation authority until policy produces a scoped `SessionGrant`.
 
 `session request`, `session show`, and `session verify` use the root v2 local
 agentd session endpoints. The older `session create` and `session revoke`

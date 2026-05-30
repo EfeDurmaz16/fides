@@ -151,7 +151,7 @@ const evidence = await client.evidence.append({
 })
 await client.evidence.inspect(evidence.event.event_id)
 await client.evidence.verify()
-await client.evidence.export()
+await client.evidence.export({ privacy_mode: 'hash_only', include_metadata: false })
 ```
 
 `identity.createAgent`, `identity.list`, and `identity.show` target the root

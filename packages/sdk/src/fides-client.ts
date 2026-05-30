@@ -103,6 +103,11 @@ export interface FidesSignedInvocationRequest {
   issuedAt?: string
 }
 
+export interface FidesEvidenceExportRequest {
+  privacy_mode?: 'public' | 'private' | 'redacted' | 'hash_only'
+  include_metadata?: boolean
+}
+
 export interface FidesInvocationResponse {
   authorityGranted: boolean
   session: SessionGrantV2
@@ -246,7 +251,7 @@ export class FidesClient {
     list: () => this.get('/evidence'),
     inspect: (eventId: string) => this.get(`/evidence/${encodeURIComponent(eventId)}`),
     verify: () => this.post('/evidence/verify', {}),
-    export: () => this.post('/evidence/export', {}),
+    export: (body: FidesEvidenceExportRequest = {}) => this.post('/evidence/export', body),
   }
 
   readonly demo = {

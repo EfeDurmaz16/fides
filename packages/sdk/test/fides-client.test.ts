@@ -89,7 +89,7 @@ describe('FidesClient', () => {
     await client.evidence.list()
     await client.evidence.inspect('evt_1')
     await client.evidence.verify()
-    await client.evidence.export()
+    await client.evidence.export({ privacy_mode: 'hash_only', include_metadata: false })
     await client.demo.run()
     await client.simulate.adversarial()
     await client.invoke({ sessionId: 'sess_1', input: { invoiceId: 'inv_123' } })
@@ -223,6 +223,10 @@ describe('FidesClient', () => {
     expect(JSON.parse(calls[43].init?.body as string)).toEqual({
       capability: 'invoice.reconcile',
       agentId: 'did:fides:agent',
+    })
+    expect(JSON.parse(calls[52].init?.body as string)).toEqual({
+      privacy_mode: 'hash_only',
+      include_metadata: false,
     })
   })
 

@@ -1550,7 +1550,10 @@ describe('CLI Commands', () => {
       const mockFetch = vi.fn(async () => new Response(JSON.stringify({
         trust: { agent_id: 'did:fides:agent', capability: 'invoice.reconcile' },
         reputation: { agent_id: 'did:fides:agent', capability: 'invoice.reconcile' },
-        reputations: [],
+        reputations: [
+          { agent_id: 'did:fides:agent', capability: 'invoice.reconcile' },
+          { agent_id: 'did:fides:agent', capability: 'calendar.schedule' },
+        ],
         authorityGranted: false,
       }), {
         status: 200,
@@ -1563,6 +1566,7 @@ describe('CLI Commands', () => {
       const trustEvaluate = createTrustCommand();
       const trustGet = createTrustCommand();
       const reputation = createReputationCommand();
+      const reputationShortcut = createReputationCommand();
 
       await trustEvaluate.parseAsync([
         'did:fides:agent',
@@ -1590,6 +1594,14 @@ describe('CLI Commands', () => {
         '--json',
       ], { from: 'user' });
       await reputation.parseAsync(['get', 'did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await reputationShortcut.parseAsync([
+        'did:fides:agent',
+        '--capability',
+        'invoice.reconcile',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
 
       expect(mockFetch).toHaveBeenNthCalledWith(
         1,
@@ -1618,6 +1630,10 @@ describe('CLI Commands', () => {
         })
       );
       expect(mockFetch).toHaveBeenNthCalledWith(4, 'http://agentd.test/reputation/did%3Afides%3Aagent', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(5, 'http://agentd.test/reputation/did%3Afides%3Aagent', expect.objectContaining({ method: 'GET' }));
+      const shortcutOutput = JSON.parse(vi.mocked(console.log).mock.calls.at(-1)?.[0] as string);
+      expect(shortcutOutput.capability).toBe('invoice.reconcile');
+      expect(shortcutOutput.reputations[0].capability).toBe('invoice.reconcile');
     });
 
     it('policy evaluate can use the root v2 policy API', async () => {

@@ -169,6 +169,7 @@ agentd reputation update \
   --agentd-url http://localhost:7345
 
 agentd reputation get did:fides:invoice-agent --agentd-url http://localhost:7345
+agentd reputation did:fides:invoice-agent --capability invoice.reconcile --agentd-url http://localhost:7345
 ```
 
 Trust graph inspection, trust, and reputation are signals. Policy is the

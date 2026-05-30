@@ -71,6 +71,7 @@ agentd invoke --session-id sess_... --input invoice.json
 agentd invoke --dry-run did:fides:... --capability payments.prepare --input payment.json
 agentd trust did:fides:... --capability invoice.reconcile --agentd-url http://localhost:7345
 agentd reputation update --agent did:fides:... --capability invoice.reconcile --successful-invocations 5
+agentd reputation did:fides:... --capability invoice.reconcile
 agentd reputation get did:fides:...
 agentd graph inspect did:fides:... --agentd-url http://localhost:7345
 agentd policy evaluate --agent did:fides:... --capability invoice.reconcile --requested-scopes read:invoices --agentd-url http://localhost:7345
@@ -150,9 +151,10 @@ authority by this command.
 
 `trust <agent-id> --capability --agentd-url` evaluates root v2
 capability-specific trust. Without `--agentd-url`, `trust` keeps the legacy
-trust-attestation behavior. `reputation update/get` manages root v2
-capability-specific reputation records. Trust and reputation remain signals;
-policy is the authority.
+trust-attestation behavior. `reputation <agent-id> --capability` inspects
+capability-specific reputation through the required short form, while
+`reputation update/get` remains available for explicit mutation and unfiltered
+listing. Trust and reputation remain signals; policy is the authority.
 
 `graph inspect <agent-id>` reads the local `agentd` trust graph view for an
 agent candidate through `GET /trust/:agentId`. It is an inspection surface only;

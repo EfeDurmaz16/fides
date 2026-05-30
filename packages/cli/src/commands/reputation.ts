@@ -4,6 +4,22 @@ import { getJson, postJson, printResult } from './authority-utils.js'
 export function createReputationCommand(): Command {
   const cmd = new Command('reputation')
     .description('Capability-specific reputation records')
+    .enablePositionalOptions()
+    .argument('[agent-id]', 'Agent DID to inspect with --capability')
+    .option('--capability <capability>', 'Capability ID for shortcut inspection')
+    .option('--agentd-url <url>', 'agentd base URL', process.env.FIDES_AGENTD_URL ?? 'http://localhost:7345')
+    .option('--json', 'Print JSON only')
+    .action(async (agentId, options) => {
+      if (!agentId) {
+        cmd.help()
+        return
+      }
+      if (!options.capability) {
+        throw new Error('--capability is required when using reputation <agent-id>')
+      }
+      const result = await getJson(`${baseUrl(options.agentdUrl)}/reputation/${encodeURIComponent(agentId)}`)
+      printResult('Reputation records:', filterReputationResult(result, options.capability), options)
+    })
 
   cmd.command('update')
     .description('Update root v2 capability-specific reputation')
@@ -48,4 +64,18 @@ export function createReputationCommand(): Command {
 
 function baseUrl(url: string): string {
   return url.replace(/\/+$/, '')
+}
+
+function filterReputationResult(result: unknown, capability: string): unknown {
+  if (!result || typeof result !== 'object') return result
+  const record = result as { reputations?: unknown[]; authorityGranted?: unknown }
+  if (!Array.isArray(record.reputations)) return result
+  return {
+    ...record,
+    capability,
+    authorityGranted: record.authorityGranted === false ? false : record.authorityGranted,
+    reputations: record.reputations.filter((item) => {
+      return item && typeof item === 'object' && (item as { capability?: unknown }).capability === capability
+    }),
+  }
 }

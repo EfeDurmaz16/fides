@@ -65,6 +65,7 @@ import {
   verifyDelegationTokenSignature,
   verifyDomainDid,
   evaluateInvocationPreflight,
+  validateJsonSchemaValue,
   verifyIncidentRecord,
   verifyRevocationRecord,
   type AgentIdentity,
@@ -1561,6 +1562,18 @@ app.post('/invoke', async (c) => {
     }), sessionId, authorityGranted: false }, 404)
   }
 
+  const inputValidation = validateJsonSchemaValue(found.capability.inputSchema, body.input ?? {})
+  if (!inputValidation.valid) {
+    return c.json({ error: createErrorEnvelope('CAPABILITY_SCHEMA_INVALID', {
+      message: 'Invocation input does not satisfy the capability input schema',
+      details: {
+        sessionId,
+        capability: record.session.capability,
+        errors: inputValidation.errors,
+      },
+    }), authorityGranted: false }, 400)
+  }
+
   let request = createInvocationRequest({
     issuer: record.session.requester_agent_id,
     sessionGrant: record.session,
@@ -1610,6 +1623,63 @@ app.post('/invoke', async (c) => {
     request,
     policyDecision: record.policy,
   })
+  const output = preflight.can_execute ? { ok: true, capability: record.session.capability } : undefined
+  const outputValidation = output === undefined
+    ? { valid: true, errors: [] }
+    : validateJsonSchemaValue(found.capability.outputSchema, output)
+  if (!outputValidation.valid) {
+    const failedEvidence = appendRootEvidence({
+      type: 'capability.failed',
+      actor: record.session.target_agent_id,
+      subject: record.session.requester_agent_id,
+      principal: record.session.principal_id,
+      capability: record.session.capability,
+      policy_hash: record.session.policy_hash,
+      decision: 'failed',
+      privacy_mode: 'hash_only',
+      metadata: {
+        session_id: record.session.session_id,
+        invocation_request_id: request.id,
+        schema_errors: outputValidation.errors,
+      },
+    })
+    const failedResult = createInvocationResult({
+      issuer: record.session.target_agent_id,
+      invocationRequestId: request.id,
+      status: 'failed',
+      errorCode: 'CAPABILITY_SCHEMA_INVALID',
+      evidenceRefs: [failedEvidence.event_id],
+    })
+    const targetIdentity = localIdentities.get(record.session.target_agent_id)
+    const signedFailedResult = targetIdentity
+      ? await signInvocationResult(failedResult, Buffer.from(targetIdentity.privateKeyHex, 'hex'), record.session.target_agent_id)
+      : undefined
+
+    return c.json({
+      authorityGranted: false,
+      session: record.session,
+      request,
+      signedRequest,
+      signedRequestVerified,
+      preflight: {
+        ...preflight,
+        status: 'failed',
+        can_execute: false,
+        reason_codes: [...preflight.reason_codes, 'CAPABILITY_SCHEMA_INVALID'],
+      },
+      result: failedResult,
+      signedResult: signedFailedResult,
+      signedResultVerified: signedFailedResult ? await verifySignedInvocationResult(signedFailedResult) : false,
+      error: createErrorEnvelope('CAPABILITY_SCHEMA_INVALID', {
+        message: 'Invocation output does not satisfy the capability output schema',
+        details: {
+          sessionId,
+          capability: record.session.capability,
+          errors: outputValidation.errors,
+        },
+      }),
+    }, 422)
+  }
   const invokedEvidence = appendRootEvidence({
     type: 'capability.invoked',
     actor: record.session.requester_agent_id,
@@ -1633,7 +1703,7 @@ app.post('/invoke', async (c) => {
     subject: record.session.requester_agent_id,
     principal: record.session.principal_id,
     capability: record.session.capability,
-    output: preflight.can_execute ? { ok: true, capability: record.session.capability } : undefined,
+    output,
     policy_hash: record.session.policy_hash,
     decision: status,
     privacy_mode: 'hash_only',
@@ -1648,7 +1718,7 @@ app.post('/invoke', async (c) => {
     issuer: record.session.target_agent_id,
     invocationRequestId: request.id,
     status,
-    output: preflight.can_execute ? { ok: true, capability: record.session.capability } : undefined,
+    output,
     errorCode: preflight.can_execute ? undefined : preflight.reason_codes[0],
     evidenceRefs: [invokedEvidence.event_id, completedEvidence.event_id],
   })

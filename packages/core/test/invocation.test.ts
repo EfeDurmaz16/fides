@@ -7,6 +7,7 @@ import {
   evaluateInvocationPreflight,
   signInvocationRequest,
   signInvocationResult,
+  validateJsonSchemaValue,
   verifySignedInvocationRequest,
   verifySignedInvocationResult,
 } from '../src/invocation.js'
@@ -80,5 +81,35 @@ describe('invocation protocol objects', () => {
     expect(result.output_hash).toMatch(/^sha256:/)
     const signed = await signInvocationResult(result, target.privateKey, target.did)
     expect(await verifySignedInvocationResult(signed)).toBe(true)
+  })
+
+  it('validates invocation inputs and outputs against a JSON Schema subset', () => {
+    const schema = {
+      type: 'object',
+      required: ['invoiceId', 'amount'],
+      additionalProperties: false,
+      properties: {
+        invoiceId: { type: 'string' },
+        amount: { type: 'number' },
+        dryRun: { type: 'boolean' },
+      },
+    }
+
+    expect(validateJsonSchemaValue(schema, {
+      invoiceId: 'inv_123',
+      amount: 42,
+      dryRun: true,
+    })).toEqual({ valid: true, errors: [] })
+
+    const invalid = validateJsonSchemaValue(schema, {
+      invoiceId: 123,
+      unexpected: true,
+    })
+    expect(invalid.valid).toBe(false)
+    expect(invalid.errors).toEqual(expect.arrayContaining([
+      '$.amount is required',
+      '$.invoiceId must be string',
+      '$.unexpected is not allowed',
+    ]))
   })
 })

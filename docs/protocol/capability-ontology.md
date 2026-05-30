@@ -21,6 +21,11 @@ Current implementation anchor:
 - human approval support
 - policy proof support
 
+Invocation treats `inputSchema` and `outputSchema` as enforceable authority
+checks, not just descriptive metadata. The local daemon rejects inputs that do
+not satisfy the advertised `inputSchema`, and fails the invocation if generated
+output does not satisfy `outputSchema`.
+
 ## Seed Capabilities
 
 The seed ontology includes calendar, invoice, payments, code, file, and deploy capabilities.

@@ -876,6 +876,96 @@ describe('Agentd Service Routes', () => {
       })
     })
 
+    it('rejects invocation inputs and outputs that do not satisfy capability schemas', async () => {
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Schema Invoice Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{
+            id: 'invoice.schema_reconcile',
+            riskLevel: 'medium',
+            requiredScopes: ['invoice:read'],
+            inputSchema: {
+              type: 'object',
+              required: ['invoiceId'],
+              properties: { invoiceId: { type: 'string' } },
+              additionalProperties: false,
+            },
+            outputSchema: {
+              type: 'object',
+              required: ['resultId'],
+              properties: { resultId: { type: 'string' } },
+              additionalProperties: false,
+            },
+          }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const session = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: 'did:fides:requester',
+          agentId: identity.did,
+          capability: 'invoice.schema_reconcile',
+          requestedScopes: ['invoice:read'],
+        }),
+      })
+      expect(session.status).toBe(201)
+      const sessionData = await session.json()
+
+      const invalidInput = await app.request('/invoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: sessionData.session.session_id,
+          input: { invoiceId: 123, unexpected: true },
+        }),
+      })
+      expect(invalidInput.status).toBe(400)
+      await expect(invalidInput.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'CAPABILITY_SCHEMA_INVALID',
+          details: {
+            errors: expect.arrayContaining([
+              '$.invoiceId must be string',
+              '$.unexpected is not allowed',
+            ]),
+          },
+        },
+      })
+
+      const invalidOutput = await app.request('/invoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: sessionData.session.session_id,
+          input: { invoiceId: 'inv_123' },
+        }),
+      })
+      expect(invalidOutput.status).toBe(422)
+      const invalidOutputData = await invalidOutput.json()
+      expect(invalidOutputData.authorityGranted).toBe(false)
+      expect(invalidOutputData.error.code).toBe('CAPABILITY_SCHEMA_INVALID')
+      expect(invalidOutputData.result.status).toBe('failed')
+      expect(invalidOutputData.signedResultVerified).toBe(true)
+    })
+
     it('returns typed error envelopes for root session and invocation failures', async () => {
       const missingCapability = await app.request('/sessions', {
         method: 'POST',

@@ -1,5 +1,6 @@
 import { signObject, verifyObject, type SignedObject } from './canonical-signer.js'
 import { hashProtocolPayload } from './protocol.js'
+import type { JSONSchema } from './capability.js'
 import type { SessionGrantV2 } from './delegation.js'
 
 export type InvocationStatus =
@@ -81,6 +82,11 @@ export interface InvocationPreflightResult {
   reason_codes: string[]
 }
 
+export interface SchemaValidationResult {
+  valid: boolean
+  errors: string[]
+}
+
 export function createInvocationRequest(input: InvocationRequestInput): InvocationRequest {
   const payload = {
     schema_version: 'fides.invocation.request.v1' as const,
@@ -155,6 +161,82 @@ export function evaluateInvocationPreflight(input: InvocationPreflightInput): In
         reason_codes: input.policyDecision.reason_codes,
       }
   }
+}
+
+export function validateJsonSchemaValue(schema: JSONSchema | undefined, value: unknown): SchemaValidationResult {
+  if (!schema) return { valid: true, errors: [] }
+  const errors: string[] = []
+  validateAgainstSchema(schema, value, '$', errors)
+  return { valid: errors.length === 0, errors }
+}
+
+function validateAgainstSchema(schema: JSONSchema, value: unknown, path: string, errors: string[]): void {
+  if (schema.const !== undefined && !Object.is(value, schema.const)) {
+    errors.push(`${path} must equal ${JSON.stringify(schema.const)}`)
+  }
+
+  if (Array.isArray(schema.enum) && !schema.enum.some(item => Object.is(item, value))) {
+    errors.push(`${path} must be one of ${schema.enum.map(item => JSON.stringify(item)).join(', ')}`)
+  }
+
+  if (schema.type && !matchesJsonSchemaType(value, schema.type)) {
+    errors.push(`${path} must be ${schema.type}`)
+    return
+  }
+
+  if (schema.type === 'object') {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return
+    const objectValue = value as Record<string, unknown>
+    for (const key of schema.required ?? []) {
+      if (!(key in objectValue)) {
+        errors.push(`${path}.${key} is required`)
+      }
+    }
+
+    const properties = schema.properties ?? {}
+    for (const [key, propertySchema] of Object.entries(properties)) {
+      if (key in objectValue && isJsonSchema(propertySchema)) {
+        validateAgainstSchema(propertySchema, objectValue[key], `${path}.${key}`, errors)
+      }
+    }
+
+    if (schema.additionalProperties === false) {
+      for (const key of Object.keys(objectValue)) {
+        if (!(key in properties)) {
+          errors.push(`${path}.${key} is not allowed`)
+        }
+      }
+    }
+  }
+
+  if (schema.type === 'array' && Array.isArray(value) && isJsonSchema(schema.items)) {
+    value.forEach((item, index) => validateAgainstSchema(schema.items as JSONSchema, item, `${path}[${index}]`, errors))
+  }
+}
+
+function matchesJsonSchemaType(value: unknown, type: string): boolean {
+  switch (type) {
+    case 'object':
+      return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+    case 'array':
+      return Array.isArray(value)
+    case 'string':
+      return typeof value === 'string'
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value)
+    case 'integer':
+      return typeof value === 'number' && Number.isInteger(value)
+    case 'boolean':
+      return typeof value === 'boolean'
+    case 'null':
+      return value === null
+    default:
+      return true
+  }
+}
+
+function isJsonSchema(value: unknown): value is JSONSchema {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value) && typeof (value as { type?: unknown }).type === 'string')
 }
 
 export function signInvocationRequest(

@@ -73,7 +73,7 @@ Local evidence:
 | Approval primitives | Partial | Guard and policy can require approval; I could not find first-class ApprovalRequest/ApprovalDecision protocol objects in core. |
 | Kill switch | Present | `packages/runtime/src/index.ts`, `packages/cli/src/commands/killswitch.ts`, `services/agentd/src/index.ts`. |
 | Evidence privacy | Present, basic | `packages/evidence/src/index.ts` supports public/private/redacted/hash-only export modes. |
-| Version negotiation | Missing/partial | Shared errors include `VersioningError`, but no full VersionNegotiationRecord or discovery downgrade flow was found. |
+| Version negotiation | Present | `packages/core/src/versioning.ts`, `packages/core/src/discovery.ts`, and `packages/discovery/src/orchestrator.ts` negotiate and filter discovery candidates by protocol compatibility. |
 | Typed errors | Partial | `packages/shared/src/errors.ts` has broad classes, but not stable code/category/severity/retryable envelopes. |
 | Explainability | Partial | Guard and policy return factors/explanations in `packages/guard/src/index.ts` and `packages/policy/src/index.ts`. |
 | Adversarial simulation | Present as test, incomplete harness | `tests/adversarial/adversarial.test.ts`; no `agentd simulate adversarial` command found. |

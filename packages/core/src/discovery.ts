@@ -1,5 +1,7 @@
 import type { AgentCard } from './agent-card.js'
 import type { ErrorEnvelope } from './errors.js'
+import { FIDES_PROTOCOL_VERSION } from './protocol.js'
+import { negotiateProtocolVersion, type VersionNegotiationRecord } from './versioning.js'
 
 export interface DiscoveryQuery {
   schema_version: 'fides.discovery_query.v1'
@@ -24,6 +26,7 @@ export interface DiscoveryCandidate {
   rank: number
   explanations: string[]
   errors: ErrorEnvelope[]
+  versionNegotiation?: VersionNegotiationRecord
 }
 
 export function createDiscoveryQuery(input: Omit<DiscoveryQuery, 'schema_version' | 'id'> & { id?: string }): DiscoveryQuery {
@@ -54,6 +57,7 @@ export function createDiscoveryCandidate(input: {
   rank?: number
   explanations?: string[]
   errors?: ErrorEnvelope[]
+  versionNegotiation?: VersionNegotiationRecord
 }): DiscoveryCandidate {
   return {
     schema_version: 'fides.discovery_candidate.v1',
@@ -65,5 +69,23 @@ export function createDiscoveryCandidate(input: {
     rank: input.rank ?? 0,
     explanations: input.explanations ?? [],
     errors: input.errors ?? [],
+    ...(input.versionNegotiation !== undefined && { versionNegotiation: input.versionNegotiation }),
   }
+}
+
+export function negotiateDiscoveryCandidateVersion(
+  query: Pick<DiscoveryQuery, 'supported_versions' | 'required_versions'>,
+  card: AgentCard
+): VersionNegotiationRecord {
+  return negotiateProtocolVersion({
+    localSupported: query.supported_versions,
+    localRequired: query.required_versions,
+    peerSupported: card.protocolVersions?.length ? card.protocolVersions : [FIDES_PROTOCOL_VERSION],
+    peerRequired: getCardRequiredVersions(card),
+  })
+}
+
+function getCardRequiredVersions(card: AgentCard): string[] | undefined {
+  const value = (card as unknown as { required_versions?: unknown }).required_versions
+  return Array.isArray(value) ? value.map(String) : undefined
 }

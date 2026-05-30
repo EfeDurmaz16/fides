@@ -6,6 +6,8 @@ Current implementation anchors:
 
 - `packages/core/src/versioning.ts`
 - `packages/core/src/protocol.ts`
+- `packages/core/src/discovery.ts`
+- `packages/discovery/src/orchestrator.ts`
 
 ## Required Fields
 
@@ -23,6 +25,10 @@ Current implementation anchors:
 4. Reject with `VERSION_INCOMPATIBLE` when no overlap exists.
 
 Version compatibility is a discovery filter. It does not grant authority.
+The package-level `DiscoveryOrchestrator` attaches a
+`VersionNegotiationRecord` to compatible candidates and filters incompatible
+provider or legacy DID-resolution candidates before ranking them.
+
 In root `agentd` discovery, incompatible local AgentCards are excluded from
 active local, well-known, registry, relay, and locally resolvable DHT results.
 They are surfaced as `rejectedCandidates`, `rejectedRecords`, or

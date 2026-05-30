@@ -75,14 +75,18 @@ describe('DiscoveryOrchestrator', () => {
   })
 
   it('discovers capability candidates through provider discover implementations', async () => {
+    const card = {
+      ...mockCard,
+      protocolVersions: ['fides.v2.0'],
+    }
     const provider: DiscoveryProvider = {
       name: 'query-provider',
       resolve: vi.fn(),
       discover: vi.fn().mockResolvedValue([{
         schema_version: 'fides.discovery_candidate.v1',
         provider: 'query-provider',
-        agentId: mockCard.id,
-        card: mockCard,
+        agentId: card.id,
+        card,
         capability: 'calendar.schedule',
         verified: true,
         rank: 10,
@@ -96,12 +100,47 @@ describe('DiscoveryOrchestrator', () => {
 
     expect(candidates).toHaveLength(1)
     expect(provider.discover).toHaveBeenCalledWith(query)
+    expect(candidates[0].versionNegotiation).toMatchObject({
+      compatible: true,
+      negotiated_version: 'fides.v2.0',
+    })
+    expect(candidates[0].explanations).toContain('Protocol version fides.v2.0 is compatible')
+  })
+
+  it('filters provider candidates with incompatible protocol versions', async () => {
+    const provider: DiscoveryProvider = {
+      name: 'query-provider',
+      resolve: vi.fn(),
+      discover: vi.fn().mockResolvedValue([{
+        schema_version: 'fides.discovery_candidate.v1',
+        provider: 'query-provider',
+        agentId: mockCard.id,
+        card: {
+          ...mockCard,
+          protocolVersions: ['fides.v1'],
+        },
+        capability: 'calendar.schedule',
+        verified: true,
+        rank: 10,
+        explanations: ['matched'],
+        errors: [],
+      }]),
+    }
+
+    const candidates = await new DiscoveryOrchestrator([provider]).discover(createDiscoveryQuery({
+      capability: 'calendar.schedule',
+      supported_versions: ['fides.v2.0'],
+      required_versions: ['fides.v2.0'],
+    }))
+
+    expect(candidates).toEqual([])
   })
 
   it('falls back to legacy DID resolution when requester_agent_id is present', async () => {
     const card: AgentCard = {
       ...mockCard,
       capabilities: [createCapabilityDescriptor({ id: 'calendar.schedule' })],
+      protocolVersions: ['fides.v2.0'],
     }
     const provider: DiscoveryProvider = {
       name: 'legacy-provider',
@@ -120,6 +159,28 @@ describe('DiscoveryOrchestrator', () => {
       capability: 'calendar.schedule',
       verified: false,
     })
+    expect(candidates[0].versionNegotiation?.compatible).toBe(true)
+  })
+
+  it('filters legacy DID resolution candidates with incompatible protocol versions', async () => {
+    const card: AgentCard = {
+      ...mockCard,
+      capabilities: [createCapabilityDescriptor({ id: 'calendar.schedule' })],
+      protocolVersions: ['fides.v1'],
+    }
+    const provider: DiscoveryProvider = {
+      name: 'legacy-provider',
+      resolve: vi.fn().mockResolvedValue(card),
+    }
+
+    const candidates = await new DiscoveryOrchestrator([provider]).discover(createDiscoveryQuery({
+      capability: 'calendar.schedule',
+      requester_agent_id: card.id,
+      supported_versions: ['fides.v2.0'],
+      required_versions: ['fides.v2.0'],
+    }))
+
+    expect(candidates).toEqual([])
   })
 
   it('local provider discovers registered cards by capability', async () => {

@@ -5,6 +5,8 @@ import {
   negotiateProtocolVersion,
 } from '../src/versioning.js'
 import { FIDES_PROTOCOL_VERSION } from '../src/protocol.js'
+import { createDiscoveryQuery, negotiateDiscoveryCandidateVersion } from '../src/discovery.js'
+import type { AgentCard } from '../src/agent-card.js'
 
 describe('version negotiation', () => {
   it('negotiates the first common supported version', () => {
@@ -49,5 +51,31 @@ describe('version negotiation', () => {
     expect(record.compatible).toBe(true)
     expect(record.required_versions).toEqual([FIDES_PROTOCOL_VERSION])
     expect(isSupportedProtocolVersion(record.negotiated_version!)).toBe(true)
+  })
+
+  it('negotiates discovery query versions against AgentCard protocol versions', () => {
+    const card = {
+      id: 'did:fides:agent',
+      identity: {
+        did: 'did:fides:agent',
+        publicKey: new Uint8Array(32),
+        keyType: 'Ed25519',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      capabilities: [],
+      endpoints: [],
+      policies: [],
+      protocolVersions: ['fides.v2.0'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    } satisfies AgentCard
+
+    const record = negotiateDiscoveryCandidateVersion(createDiscoveryQuery({
+      supported_versions: ['fides.v2.0'],
+      required_versions: ['fides.v2.0'],
+    }), card)
+
+    expect(record.compatible).toBe(true)
+    expect(record.negotiated_version).toBe('fides.v2.0')
   })
 })

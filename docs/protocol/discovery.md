@@ -28,7 +28,12 @@ Current implementation anchors:
 9. Return ranked candidates with explanations.
 10. Emit evidence.
 
-The current implementation supports capability-query providers and candidate explanations. Trust/policy/evidence integration remains an incremental hardening area.
+The package-level `DiscoveryOrchestrator` supports capability-query providers,
+candidate explanations, provider scoping, ranking, and protocol version
+negotiation. Incompatible provider or legacy DID-resolution candidates are
+filtered before ranking and compatible candidates carry a
+`versionNegotiation` record. Trust/policy/evidence integration remains an
+incremental hardening area.
 
 Root `agentd` local, well-known, registry, relay, locally resolvable DHT, and
 local mock federation discovery now apply protocol version negotiation before

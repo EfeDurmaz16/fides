@@ -1,6 +1,7 @@
 import {
   cardSupportsCapability,
   createDiscoveryCandidate,
+  negotiateDiscoveryCandidateVersion,
   type AgentCard,
   type DiscoveryCandidate,
   type DiscoveryQuery,
@@ -22,19 +23,22 @@ export class DiscoveryOrchestrator {
 
       try {
         if (provider.discover) {
-          candidates.push(...await provider.discover(query))
+          candidates.push(...filterVersionCompatibleCandidates(query, await provider.discover(query)))
           continue
         }
 
         if (query.requester_agent_id) {
           const card = await provider.resolve(query.requester_agent_id)
           if (card && cardSupportsCapability(card, query.capability)) {
+            const versionNegotiation = negotiateDiscoveryCandidateVersion(query, card)
+            if (!versionNegotiation.compatible) continue
             candidates.push(createDiscoveryCandidate({
               provider: provider.name,
               card,
               capability: query.capability,
               verified: false,
               explanations: ['Resolved through legacy DID provider path'],
+              versionNegotiation,
             }))
           }
         }
@@ -84,4 +88,23 @@ export class DiscoveryOrchestrator {
       }
     }
   }
+}
+
+function filterVersionCompatibleCandidates(
+  query: DiscoveryQuery,
+  candidates: DiscoveryCandidate[]
+): DiscoveryCandidate[] {
+  return candidates.flatMap((candidate) => {
+    const versionNegotiation = candidate.versionNegotiation ?? negotiateDiscoveryCandidateVersion(query, candidate.card)
+    if (!versionNegotiation.compatible) return []
+    return [{
+      ...candidate,
+      versionNegotiation,
+      errors: candidate.errors.filter(error => error.code !== 'VERSION_INCOMPATIBLE'),
+      explanations: [
+        ...candidate.explanations,
+        `Protocol version ${versionNegotiation.negotiated_version} is compatible`,
+      ],
+    }]
+  })
 }

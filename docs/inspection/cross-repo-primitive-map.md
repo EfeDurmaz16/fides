@@ -55,7 +55,7 @@ This map reflects the current local inspection of:
 | TEE | Mock/HTTP adapter boundary | not found | not found | not found | not found | FIDES | adapter-ready |
 | Privacy/redaction | evidence privacy modes | not found | credential encryption | profile/spec only | payment privacy primitives | FIDES + Sardis prior art | extend existing |
 | Error vocabulary | broad error classes | `AgitError` | error responses | error taxonomy | exception/reason codes | FIDES + OAPS | extend existing |
-| Version negotiation | missing/partial | not found | version fields | negotiateVersion | version fields | OAPS | create new |
+| Version negotiation | core record + discovery filters | not found | version fields | negotiateVersion | version fields | FIDES + OAPS | extend existing |
 | Kill switch | `packages/runtime`, CLI/agentd | not found | not found | revoke/fail-closed only | payment kill switch | FIDES + Sardis | extend existing |
 | Guardrails | guard/policy | guard chain/blast radius | not core | policy/approval | pre-execution pipeline | FIDES + Sardis + AGIT | extend existing |
 | Service lifecycle | agentd/services | not found | discover/provision/rotate/deprovision | not core | project provisioning payment-adjacent | OSP | adapter-ready |

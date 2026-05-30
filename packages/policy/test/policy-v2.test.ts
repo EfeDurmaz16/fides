@@ -33,6 +33,8 @@ const trust = (band: TrustResult['band'], score: number): TrustResult => ({
 describe('FIDES policy v2', () => {
   it('denies revoked agents before trust or capability scoring', () => {
     const decision = evaluateFidesPolicy({
+      issuerId: 'did:fides:policy-engine',
+      decisionId: 'pol_decision_1',
       principalId: 'did:fides:principal',
       requesterAgentId: 'did:fides:requester',
       targetAgentId: 'did:fides:agent',
@@ -40,8 +42,14 @@ describe('FIDES policy v2', () => {
       trustResult: trust('verified', 0.95),
       requestedScopes: ['invoice:read'],
       revocationActive: true,
+      evaluatedAt: '2026-05-29T00:00:00.000Z',
     })
 
+    expect(decision.id).toBe('pol_decision_1')
+    expect(decision.issuer).toBe('did:fides:policy-engine')
+    expect(decision.subject).toBe('did:fides:agent')
+    expect(decision.issued_at).toBe('2026-05-29T00:00:00.000Z')
+    expect(decision.payload_hash).toMatch(/^sha256:/)
     expect(decision.decision).toBe('deny')
     expect(decision.reason_codes).toContain('REVOCATION_ACTIVE')
     expect(decision.human_reasons[0]).toContain('revocation')
@@ -95,5 +103,28 @@ describe('FIDES policy v2', () => {
     expect(decision.decision).toBe('allow')
     expect(decision.reason_codes).toContain('POLICY_ALLOWED')
     expect(decision.machine_reasons.length).toBeGreaterThan(0)
+  })
+
+  it('changes payload_hash when machine-readable policy reasons change', () => {
+    const base = {
+      issuerId: 'did:fides:policy-engine',
+      decisionId: 'pol_decision_stable',
+      principalId: 'did:fides:principal',
+      requesterAgentId: 'did:fides:requester',
+      targetAgentId: 'did:fides:agent',
+      capability: capability('medium'),
+      trustResult: trust('high' as const, 0.72),
+      requestedScopes: ['invoice:read'],
+      evaluatedAt: '2026-05-29T00:00:00.000Z',
+    }
+
+    const allowed = evaluateFidesPolicy(base)
+    const scopeLimited = evaluateFidesPolicy({
+      ...base,
+      requestedScopes: [],
+    })
+
+    expect(allowed.payload_hash).not.toBe(scopeLimited.payload_hash)
+    expect(scopeLimited.reason_codes).toContain('SESSION_SCOPE_INVALID')
   })
 })

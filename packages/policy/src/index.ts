@@ -1,4 +1,4 @@
-import type { CapabilityControl, CapabilityDescriptor, TrustResult } from '@fides/core'
+import { hashProtocolPayload, type CapabilityControl, type CapabilityDescriptor, type HashValue, type TrustResult } from '@fides/core'
 
 /**
  * FIDES v2 Policy Engine
@@ -58,6 +58,9 @@ export interface PolicyReason {
 
 export interface FidesPolicyDecision {
   schema_version: 'fides.policy.decision.v1'
+  id: string
+  issuer: string
+  subject: string
   decision: FidesPolicyDecisionAction
   principal_id: string
   requester_agent_id: string
@@ -68,10 +71,14 @@ export interface FidesPolicyDecision {
   human_reasons: string[]
   required_controls: CapabilityControl[]
   evidence_refs: string[]
+  issued_at: string
   evaluated_at: string
+  payload_hash: HashValue
 }
 
 export interface FidesPolicyEvaluationInput {
+  issuerId?: string
+  decisionId?: string
   principalId: string
   requesterAgentId: string
   targetAgentId: string
@@ -153,14 +160,18 @@ function createDecision(
   reasons: PolicyReason[],
   requiredControls: CapabilityControl[] = []
 ): FidesPolicyDecision {
+  const evaluatedAt = input.evaluatedAt ?? new Date().toISOString()
   const evidenceRefs = Array.from(new Set([
     ...(input.evidenceRefs ?? []),
     ...input.trustResult.evidence_refs,
     ...reasons.flatMap(reason => reason.evidence_refs),
   ]))
 
-  return {
+  const payload = {
     schema_version: 'fides.policy.decision.v1',
+    id: input.decisionId ?? crypto.randomUUID(),
+    issuer: input.issuerId ?? input.requesterAgentId,
+    subject: input.targetAgentId,
     decision,
     principal_id: input.principalId,
     requester_agent_id: input.requesterAgentId,
@@ -171,7 +182,13 @@ function createDecision(
     human_reasons: reasons.map(reason => reason.message),
     required_controls: Array.from(new Set(requiredControls)),
     evidence_refs: evidenceRefs,
-    evaluated_at: input.evaluatedAt ?? new Date().toISOString(),
+    issued_at: evaluatedAt,
+    evaluated_at: evaluatedAt,
+  } satisfies Omit<FidesPolicyDecision, 'payload_hash'>
+
+  return {
+    ...payload,
+    payload_hash: hashProtocolPayload(payload),
   }
 }
 

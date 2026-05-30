@@ -1066,31 +1066,67 @@ describe('FidesClient', () => {
   })
 
   it('uses the root AgentCard API served by local agentd', async () => {
+    const card = {
+      schema_version: 'fides.agent_card.v1',
+      id: 'card_1',
+      agent_id: 'did:fides:agent',
+      identity: { did: 'did:fides:agent', publicKey: new Uint8Array(32) },
+      capabilities: [],
+      endpoints: [],
+      policies: [{ requiresRuntimeAttestation: false, requiresApproval: false }],
+      protocolVersions: ['fides.v2.0'],
+      createdAt: '2026-05-30T00:00:00.000Z',
+      updatedAt: '2026-05-30T00:00:00.000Z',
+    }
+    const signed = {
+      payload: card,
+      proof: {
+        type: 'Ed25519Signature2020',
+        verificationMethod: 'did:fides:agent',
+        proofPurpose: 'assertionMethod',
+        created: '2026-05-30T00:00:00.000Z',
+        signature: 'local-agent-card-signature',
+      },
+    }
     const calls: Array<{ url: string; init?: RequestInit }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       calls.push({ url: String(url), init })
       if (String(url).endsWith('/agent-cards/card_1/sign')) {
-        return new Response(JSON.stringify({ signed: { payload: { id: 'card_1' }, proof: {} } }), { status: 200 })
+        return new Response(JSON.stringify({ signed }), { status: 200 })
       }
       if (String(url).endsWith('/agent-cards/card_1/verify')) {
-        return new Response(JSON.stringify({ valid: true }), { status: 200 })
+        return new Response(JSON.stringify({
+          valid: true,
+          signed: true,
+          canonicalValid: true,
+          identityBound: true,
+        }), { status: 200 })
       }
       if (String(url).endsWith('/agent-cards/card_1')) {
-        return new Response(JSON.stringify({ card: { id: 'card_1' } }), { status: 200 })
+        return new Response(JSON.stringify({ card, signed }), { status: 200 })
       }
-      return new Response(JSON.stringify({ card: { id: 'card_1' }, validation: { valid: true } }), { status: 201 })
+      return new Response(JSON.stringify({ card, validation: { valid: true, errors: [] } }), { status: 201 })
     }))
 
     const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
 
     await expect(client.cards.create({ identity: { did: 'did:fides:agent' }, capabilities: [] })).resolves.toMatchObject({
-      card: { id: 'card_1' },
+      card: { id: 'card_1', schema_version: 'fides.agent_card.v1' },
+      validation: { valid: true, errors: [] },
     })
     await expect(client.cards.sign({ id: 'card_1' })).resolves.toMatchObject({
+      signed: { payload: { id: 'card_1' }, proof: { verificationMethod: 'did:fides:agent' } },
+    })
+    await expect(client.cards.verify('card_1')).resolves.toMatchObject({
+      valid: true,
+      signed: true,
+      canonicalValid: true,
+      identityBound: true,
+    })
+    await expect(client.cards.get('card_1')).resolves.toMatchObject({
+      card: { id: 'card_1' },
       signed: { payload: { id: 'card_1' } },
     })
-    await expect(client.cards.verify('card_1')).resolves.toMatchObject({ valid: true })
-    await expect(client.cards.get('card_1')).resolves.toMatchObject({ card: { id: 'card_1' } })
 
     expect(calls.map(call => call.url)).toEqual([
       'http://localhost:7345/agent-cards',

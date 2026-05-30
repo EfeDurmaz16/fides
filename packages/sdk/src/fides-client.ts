@@ -1,5 +1,6 @@
 import {
   type AgentIdentity,
+  type AgentCard,
   type ApprovalDecision,
   type ApprovalRequest,
   type CapabilityControl,
@@ -20,6 +21,7 @@ import {
   type InvocationResult,
   type RuntimeAttestation,
   type SessionGrantV2,
+  type SignedAgentCard,
   type SignedSessionGrantV2,
   type SignedInvocationRequest,
   type SignedInvocationResult,
@@ -149,6 +151,39 @@ export interface FidesLocalAgentListResponse {
 export interface FidesLocalAgentDetailResponse extends FidesLocalAgentRegistration {
   card: Record<string, unknown> | null
   signedCard: Record<string, unknown> | null
+}
+
+export interface FidesAgentCardValidation {
+  valid: boolean
+  errors: string[]
+}
+
+export interface FidesAgentCardCreateResponse {
+  card: AgentCard
+  validation: FidesAgentCardValidation
+  [key: string]: unknown
+}
+
+export interface FidesAgentCardResponse {
+  card: AgentCard
+  signed: SignedAgentCard | null
+  [key: string]: unknown
+}
+
+export interface FidesAgentCardSignResponse {
+  signed: SignedAgentCard
+  [key: string]: unknown
+}
+
+export interface FidesAgentCardVerifyResponse {
+  valid: boolean
+  signed: boolean
+  canonicalValid?: boolean
+  identityBound?: boolean
+  validation?: FidesAgentCardValidation
+  error?: string
+  id?: string
+  [key: string]: unknown
 }
 
 export interface FidesRegistryPublishRequest {
@@ -554,10 +589,18 @@ export class FidesClient {
   }
 
   readonly cards = {
-    create: (body: Record<string, unknown>) => this.post('/agent-cards', body),
-    sign: (card: { id?: string } & Record<string, unknown>) => this.post(`/agent-cards/${encodeURIComponent(String(card.id))}/sign`, card),
-    verify: (id: string) => this.post(`/agent-cards/${encodeURIComponent(id)}/verify`, {}),
-    get: (id: string) => this.get(`/agent-cards/${encodeURIComponent(id)}`),
+    create: (body: Record<string, unknown>): Promise<FidesAgentCardCreateResponse> => (
+      this.post('/agent-cards', body) as Promise<FidesAgentCardCreateResponse>
+    ),
+    sign: (card: { id?: string } & Record<string, unknown>): Promise<FidesAgentCardSignResponse> => (
+      this.post(`/agent-cards/${encodeURIComponent(String(card.id))}/sign`, card) as Promise<FidesAgentCardSignResponse>
+    ),
+    verify: (id: string): Promise<FidesAgentCardVerifyResponse> => (
+      this.post(`/agent-cards/${encodeURIComponent(id)}/verify`, {}) as Promise<FidesAgentCardVerifyResponse>
+    ),
+    get: (id: string): Promise<FidesAgentCardResponse> => (
+      this.get(`/agent-cards/${encodeURIComponent(id)}`) as Promise<FidesAgentCardResponse>
+    ),
   }
 
   readonly agents = {

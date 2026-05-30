@@ -39,6 +39,20 @@ async function main() {
     assert(demo.verification?.evidenceHashChainValid === true, 'demo evidence hash chain must verify')
     console.log('ok agentd demo run')
 
+    const discovery = await runAgentdJson(['discover', '--capability', 'invoice.reconcile', '--all-providers', '--json'])
+    assert(discovery.authorityGranted === false, 'all-provider discovery must not grant authority')
+    assertNoAuthorityGrantedTrue(discovery, 'all-provider discovery response')
+    const discoveryResults = Array.isArray(discovery.results) ? discovery.results : []
+    const providers = new Set(discoveryResults.map((entry: Record<string, any>) => entry.provider))
+    for (const expected of ['local', 'well-known', 'registry', 'relay', 'dht', 'federation']) {
+      assert(providers.has(expected), `all-provider discovery did not query ${expected}`)
+    }
+    assert(
+      discoveryResults.some((entry: Record<string, any>) => entry.provider === 'local' && entry.ok === true),
+      'all-provider discovery did not return a successful local provider result',
+    )
+    console.log('ok all-provider discovery')
+
     const simulation = await runAgentdJson(['simulate', 'adversarial', '--json'])
     assert(simulation.status === 'detected', `simulation status was not detected: ${JSON.stringify(simulation.status)}`)
     const detections = new Set(Array.isArray(simulation.detections) ? simulation.detections : [])
@@ -113,6 +127,20 @@ async function runAgentdJson(args: string[]): Promise<Record<string, any>> {
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
+}
+
+function assertNoAuthorityGrantedTrue(value: unknown, label: string): void {
+  if (!value || typeof value !== 'object') return
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      assertNoAuthorityGrantedTrue(item, label)
+    }
+    return
+  }
+  for (const [key, nested] of Object.entries(value)) {
+    assert(!(key === 'authorityGranted' && nested === true), `${label} included authorityGranted: true`)
+    assertNoAuthorityGrantedTrue(nested, label)
+  }
 }
 
 function sleep(ms: number): Promise<void> {

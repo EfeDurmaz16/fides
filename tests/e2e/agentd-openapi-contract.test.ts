@@ -264,6 +264,26 @@ describe('Agentd OpenAPI contract', () => {
     expect(extractSchemaPropertyBlock(openApi, 'LocalSessionResponse', 'versionNegotiation')).toContain('VersionNegotiationRecord')
   })
 
+  it('documents typed ErrorEnvelope responses for root v2 failures', () => {
+    expect(extractSchemaRequired(openApi, 'ErrorEnvelope')).toEqual([
+      'code',
+      'category',
+      'severity',
+      'retryable',
+      'message',
+    ])
+    const errorResponse = extractSchemaPropertyBlock(openApi, 'ErrorResponse', 'error')
+    expect(errorResponse).toContain('ErrorEnvelope')
+    const envelope = extractSchemaBlock(openApi, 'ErrorEnvelope')
+    expect(envelope).toContain('REQUEST_INVALID')
+    expect(envelope).toContain('APPROVAL_NOT_FOUND')
+    expect(envelope).toContain('KILL_SWITCH_RULE_NOT_FOUND')
+    expect(envelope).toContain('REVOCATION_NOT_FOUND')
+    expect(envelope).toContain('INCIDENT_NOT_FOUND')
+    expect(envelope).toContain('EVIDENCE_EVENT_NOT_FOUND')
+    expect(envelope).toContain('EVIDENCE_PRIVACY_MODE_INVALID')
+  })
+
   it('keeps root v2 runtime routes documented in OpenAPI', () => {
     const runtimeOperations = extractAgentdRuntimeRoutes(agentdSource)
       .filter(operation => operation.path.startsWith('/'))

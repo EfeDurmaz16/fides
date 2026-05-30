@@ -1671,7 +1671,81 @@ components:
       required: [error]
       properties:
         error:
+          oneOf:
+            - type: string
+              description: Legacy string error message.
+            - $ref: "#/components/schemas/ErrorEnvelope"
+        authorityGranted:
+          type: boolean
+          description: Present on root v2 authority-sensitive failures.
+
+    ErrorEnvelope:
+      type: object
+      required: [code, category, severity, retryable, message]
+      properties:
+        code:
           type: string
+          enum:
+            - IDENTITY_INVALID_SIGNATURE
+            - IDENTITY_KEY_UNBOUND
+            - AGENT_CARD_INVALID_SIGNATURE
+            - AGENT_CARD_EXPIRED
+            - AGENT_CARD_REVOKED
+            - CAPABILITY_NOT_FOUND
+            - CAPABILITY_SCHEMA_INVALID
+            - TRUST_BELOW_THRESHOLD
+            - POLICY_DENIED
+            - APPROVAL_REQUIRED
+            - APPROVAL_NOT_FOUND
+            - SESSION_EXPIRED
+            - SESSION_NOT_FOUND
+            - SESSION_SCOPE_INVALID
+            - ATTESTATION_INVALID
+            - ATTESTATION_EXPIRED
+            - DHT_POINTER_TAMPERED
+            - DHT_POINTER_EXPIRED
+            - EVIDENCE_CHAIN_BROKEN
+            - EVIDENCE_EVENT_NOT_FOUND
+            - EVIDENCE_PRIVACY_MODE_INVALID
+            - REVOCATION_ACTIVE
+            - REVOCATION_NOT_FOUND
+            - INCIDENT_ACTIVE
+            - INCIDENT_INVALID
+            - INCIDENT_NOT_FOUND
+            - KILL_SWITCH_ACTIVE
+            - KILL_SWITCH_RULE_NOT_FOUND
+            - VERSION_INCOMPATIBLE
+            - REQUEST_INVALID
+        category:
+          type: string
+          enum:
+            - identity
+            - agent_card
+            - capability
+            - trust
+            - policy
+            - approval
+            - session
+            - attestation
+            - discovery
+            - dht
+            - evidence
+            - revocation
+            - incident
+            - kill_switch
+            - version
+            - request
+            - internal
+        severity:
+          type: string
+          enum: [info, warning, error, critical]
+        retryable:
+          type: boolean
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
 
     HealthResponse:
       type: object

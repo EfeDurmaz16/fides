@@ -48,9 +48,12 @@ Last verified locally: 2026-05-30.
   sessions, evidence events, revocations, incidents, and kill switch rules.
 - Public target-structure facade packages for crypto, identity, attestations,
   cards, trust, reputation, delegation, invocation, DHT, relay, registry,
-  revocation, incidents, runtime-effect, and daemon.
+  revocation, incidents, adapters, guard, runtime-effect, and daemon.
 - Public facade packages include export contract tests and no longer depend on
   empty-test fallback behavior.
+- Publishable package hygiene and dry-run pack checks now cover all 25
+  non-private packages under `packages/*`, and fail if a publishable package is
+  omitted from the public package gate.
 - Canonical v2 example agent catalog for calendar, invoice, payment, requester,
   and malicious agents, with audited capability IDs, risk classes, required
   scopes, and authority notes.
@@ -78,6 +81,8 @@ Last verified locally: 2026-05-30.
   responses.
 - CLI command-surface audit for the requested root command groups.
 - OpenAPI contract coverage for evidence-producing discovery responses.
+- Publishable package gate for all non-private package manifests, including
+  README/LICENSE/package metadata and dry-run package contents.
 - OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
 - Canonical example catalog audit for the requested demo agents and
   capability/risk contracts.
@@ -379,6 +384,7 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `86c719e feat(packages): publish guard and adapters surfaces`
 - `33a6de8 feat(packages): add daemon and runtime effect boundaries`
 - `99d40b2 test(examples): enforce v2 capability names`
 - `7b7511f test(examples): audit canonical agent catalog`

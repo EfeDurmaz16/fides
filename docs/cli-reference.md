@@ -12,6 +12,8 @@ Current implementation anchors:
 - `init`
 - `identity`
 - `card`
+- `register`
+- `agents`
 - `discover`
 - `trust`
 - `policy`
@@ -40,6 +42,9 @@ agentd identity list
 agentd identity show did:fides:...
 agentd identity domain challenge example.com did:fides:...
 agentd identity domain verify example.com did:fides:...
+agentd register card_...
+agentd agents list
+agentd agents inspect did:fides:...
 agentd discover "reconcile invoices" --capability invoice.reconcile --provider local
 agentd discover --capability invoice.reconcile --provider registry --supported-versions fides.v2.0 --required-versions fides.v2.0
 agentd discover --capability invoice.reconcile --provider relay --supported-versions fides.v2.0
@@ -87,6 +92,10 @@ Local identity files are stored under `~/.fides/identities` by default. Set
 `FIDES_HOME=/path/to/workdir` to isolate local CLI state for demos or tests.
 `identity show` and `identity list` do not print private keys; private keys stay
 inside the local identity file.
+
+`register` and `agents list/inspect` use the root v2 local agentd registration
+endpoints. Registration records an AgentCard as a discovery candidate only; it
+does not grant authority to invoke capabilities.
 
 `discover --capability` targets local `agentd` capability discovery. Use
 `--provider local`, `well-known`, `registry`, `relay`, `dht`, `federation`, or

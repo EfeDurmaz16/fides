@@ -163,8 +163,9 @@ describe('CLI Commands', () => {
   });
 
   describe('v2 command surface', () => {
-    it('exposes registry, dht, evidence, attest, demo, simulate, and invoke commands', async () => {
+    it('exposes registry, agents, dht, evidence, attest, demo, simulate, and invoke commands', async () => {
       const { createRegistryCommand } = await import('../src/commands/registry.js');
+      const { createAgentsCommand, createRegisterCommand } = await import('../src/commands/agents.js');
       const { createDhtCommand } = await import('../src/commands/dht.js');
       const { createEvidenceCommand } = await import('../src/commands/evidence.js');
       const { createAttestCommand } = await import('../src/commands/attest.js');
@@ -173,6 +174,8 @@ describe('CLI Commands', () => {
       const { createInvokeCommand } = await import('../src/commands/invoke.js');
 
       expect(createRegistryCommand().name()).toBe('registry');
+      expect(createRegisterCommand().name()).toBe('register');
+      expect(createAgentsCommand().name()).toBe('agents');
       expect(createDhtCommand().name()).toBe('dht');
       expect(createEvidenceCommand().name()).toBe('evidence');
       expect(createAttestCommand().name()).toBe('attest');
@@ -1094,6 +1097,41 @@ describe('CLI Commands', () => {
           method: 'POST',
           body: JSON.stringify({}),
         })
+      );
+    });
+
+    it('register and agents commands should manage local discovery candidates', async () => {
+      const mockFetch = vi.fn(async () => new Response(JSON.stringify({
+        registered: true,
+        agentId: 'did:fides:agent',
+        agents: [{ agentId: 'did:fides:agent' }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createRegisterCommand, createAgentsCommand } = await import('../src/commands/agents.js');
+      const register = createRegisterCommand();
+      const agents = createAgentsCommand();
+
+      await register.parseAsync(['card_1', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await agents.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await agents.parseAsync(['inspect', 'did:fides:agent', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/agents/register',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ agentCardId: 'card_1' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://agentd.test/agents', expect.objectContaining({ method: 'GET' }));
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/agents/did%3Afides%3Aagent',
+        expect.objectContaining({ method: 'GET' })
       );
     });
 

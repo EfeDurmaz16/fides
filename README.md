@@ -245,6 +245,13 @@ isolated state:
 pnpm smoke:agentd
 ```
 
+To verify that the documented agentd OpenAPI surface matches the routes
+implemented by the local daemon:
+
+```bash
+pnpm api:audit
+```
+
 For production agentd mutations through the CLI, export the same API key used by the service:
 
 ```bash

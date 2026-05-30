@@ -366,6 +366,8 @@ pnpm --filter @fides/sdk test
 pnpm --filter @fides/sdk build
 pnpm --filter @fides/sdk lint
 pnpm --filter @fides/agentd test
+pnpm api:audit
+pnpm smoke:agentd
 ```
 
 ## Next Steps

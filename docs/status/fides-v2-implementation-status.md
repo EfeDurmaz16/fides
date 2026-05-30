@@ -252,6 +252,7 @@ pnpm --filter @fides/cli lint
 pnpm --filter @fides/agentd test
 pnpm --filter @fides/cli build
 pnpm package:hygiene
+pnpm api:audit
 pnpm smoke:agentd
 ```
 

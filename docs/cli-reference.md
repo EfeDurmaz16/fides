@@ -110,7 +110,10 @@ agentd daemon status
 Local identity files are stored under `~/.fides/identities` by default. Set
 `FIDES_HOME=/path/to/workdir` to isolate local CLI state for demos or tests.
 `identity show` and `identity list` do not print private keys; private keys stay
-inside the local identity file.
+inside the local identity file. Add `--agentd-url http://localhost:7345` to
+`identity create`, `identity list`, or `identity show` to use the root v2 local
+agentd identity API instead of local files. The daemon response also omits
+private key material.
 
 `card create --agentd-url`, `card sign`, `card inspect`, and
 `card verify --agentd-url` use the root v2 local agentd AgentCard endpoints.

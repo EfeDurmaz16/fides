@@ -265,6 +265,7 @@ export function defaultSurfacesForAdapter(kind: AdapterKind): AdapterProtocolSur
     'identity',
     'agent_card',
     'capability',
+    'trust',
     'delegation',
     'policy',
     'evidence',

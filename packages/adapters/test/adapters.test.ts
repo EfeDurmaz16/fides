@@ -97,6 +97,7 @@ describe('FIDES interop adapter interfaces', () => {
       'identity',
       'agent_card',
       'capability',
+      'trust',
       'delegation',
       'policy',
       'evidence',
@@ -108,6 +109,7 @@ describe('FIDES interop adapter interfaces', () => {
     expect(defaultSurfacesForAdapter('sardis')).toContain('payment_action_flow')
     expect(defaultSurfacesForAdapter('x402')).toContain('payment_action_flow')
     expect(defaultSurfacesForAdapter('ap2')).toContain('payment_action_flow')
+    expect(defaultSurfacesForAdapter('oaps')).toContain('trust')
     expect(defaultSurfacesForAdapter('oaps')).not.toContain('payment_action_flow')
 
     const manifest = createAdapterManifest({ kind: 'sardis', name: 'Sardis adapter' })

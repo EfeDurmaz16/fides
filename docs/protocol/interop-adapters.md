@@ -17,7 +17,8 @@ Current implementation anchor:
 - x402
 - Sardis
 
-Adapters map identity, AgentCards, capabilities, delegation, policy, evidence, invocation, and payment/action flows where relevant.
+Adapters map identity, AgentCards, capabilities, trust, delegation, policy,
+evidence, invocation, and payment/action flows where relevant.
 
 Payment-specific execution remains outside generic FIDES.
 

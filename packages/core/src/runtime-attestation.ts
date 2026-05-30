@@ -1,4 +1,46 @@
+import { signObject, verifyObject, type SignedObject } from './canonical-signer.js'
 import { hashProtocolPayload } from './protocol.js'
+
+export type AttestationSubjectType =
+  | 'agent'
+  | 'publisher'
+  | 'principal'
+  | 'domain'
+  | 'package'
+  | 'wallet'
+  | 'passkey'
+  | 'runtime'
+  | 'build'
+  | 'peer'
+
+export interface Attestation {
+  schema_version: 'fides.attestation.v1'
+  id: string
+  issuer: string
+  subject: string
+  subject_type: AttestationSubjectType
+  provider: string
+  claims: Record<string, unknown>
+  evidence_refs: string[]
+  issued_at: string
+  expires_at?: string
+  payload_hash: string
+  signature: string
+}
+
+export type SignedAttestation = SignedObject<Attestation>
+
+export interface AttestationInput {
+  issuer: string
+  subject: string
+  subjectType: AttestationSubjectType
+  provider: string
+  claims?: Record<string, unknown>
+  evidenceRefs?: string[]
+  issuedAt?: string
+  expiresAt?: string
+  signature?: string
+}
 
 export interface RuntimeAttestation {
   schema_version: 'fides.runtime_attestation.v1'
@@ -38,6 +80,48 @@ export interface TeeAttestationProvider extends AttestationProvider {}
 export interface ContainerBuildAttestationProvider extends AttestationProvider {}
 
 const DEFAULT_ATTESTATION_TTL_MS = 3600_000
+
+export function createAttestation(input: AttestationInput): Attestation {
+  const issuedAt = input.issuedAt ?? new Date().toISOString()
+  const payload = {
+    schema_version: 'fides.attestation.v1' as const,
+    id: crypto.randomUUID(),
+    issuer: input.issuer,
+    subject: input.subject,
+    subject_type: input.subjectType,
+    provider: input.provider,
+    claims: input.claims ?? {},
+    evidence_refs: input.evidenceRefs ?? [],
+    issued_at: issuedAt,
+    expires_at: input.expiresAt,
+  }
+
+  return {
+    ...payload,
+    payload_hash: hashProtocolPayload(payload),
+    signature: input.signature ?? '',
+  }
+}
+
+export function isAttestationExpired(attestation: Attestation, now: Date = new Date()): boolean {
+  return attestation.expires_at ? new Date(attestation.expires_at) <= now : false
+}
+
+export function signAttestation(
+  attestation: Attestation,
+  privateKey: Uint8Array,
+  verificationMethod: string
+): Promise<SignedAttestation> {
+  return signObject(attestation, privateKey, { verificationMethod, proofPurpose: 'assertionMethod' })
+}
+
+export function verifySignedAttestation(signed: SignedAttestation): Promise<boolean> {
+  return verifyObject(signed)
+}
+
+export async function verifySignedAttestationIssuer(signed: SignedAttestation): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedAttestation(signed)
+}
 
 export function isRuntimeAttestationExpired(attestation: RuntimeAttestation, now: Date = new Date()): boolean {
   return new Date(attestation.expires_at) <= now

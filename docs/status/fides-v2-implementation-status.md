@@ -114,6 +114,8 @@ Last verified locally: 2026-05-30.
   architecture, protocol, ADR, threat-model, getting-started, API, CLI, SDK,
   and adversarial simulation docs exist and preserve the hard FIDES v2
   constraints.
+- `pnpm protocol:audit` verifies source, docs, tests, and core barrel coverage
+  for all 30 required FIDES v2 protocol objects.
 - OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
 - Core tests for issuer-bound `DelegationTokenV2` canonical signatures and
   payload-hash tamper detection.

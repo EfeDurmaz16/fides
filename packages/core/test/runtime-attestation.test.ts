@@ -2,11 +2,50 @@ import { describe, expect, it } from 'vitest'
 import {
   MockTEEProvider,
   NullAttestationProvider,
+  createAttestation,
+  signAttestation,
+  verifySignedAttestation,
+  verifySignedAttestationIssuer,
+  isAttestationExpired,
   isRuntimeAttestationExpired,
   verifyRuntimeAttestation,
 } from '../src/runtime-attestation.js'
+import { createAgentIdentity } from '../src/identity.js'
 
 describe('runtime attestation v2', () => {
+  it('creates and signs generic attestations with the canonical model', async () => {
+    const issuer = await createAgentIdentity()
+    const attestation = createAttestation({
+      issuer: issuer.identity.did,
+      subject: 'did:fides:agent',
+      subjectType: 'agent',
+      provider: 'github',
+      claims: { handle: 'invoice-agent-publisher' },
+      evidenceRefs: ['evt_attestation_1'],
+    })
+
+    expect(attestation).toMatchObject({
+      schema_version: 'fides.attestation.v1',
+      id: expect.any(String),
+      issuer: issuer.identity.did,
+      subject: 'did:fides:agent',
+      subject_type: 'agent',
+      provider: 'github',
+      claims: { handle: 'invoice-agent-publisher' },
+      evidence_refs: ['evt_attestation_1'],
+      signature: '',
+    })
+    expect(attestation.payload_hash).toMatch(/^sha256:/)
+    expect(isAttestationExpired(attestation)).toBe(false)
+
+    const signed = await signAttestation(attestation, issuer.privateKey, issuer.identity.did)
+    expect(await verifySignedAttestation(signed)).toBe(true)
+    expect(await verifySignedAttestationIssuer(signed)).toBe(true)
+
+    signed.payload.claims.handle = 'tampered'
+    expect(await verifySignedAttestation(signed)).toBe(false)
+  })
+
   it('issues and verifies mock TEE attestations with the FIDES v2 schema', async () => {
     const provider = new MockTEEProvider()
     const attestation = await provider.issue({

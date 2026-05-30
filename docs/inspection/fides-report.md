@@ -59,7 +59,7 @@ Local evidence:
 | Federation | Present, local mock | `packages/core/src/registry.ts` defines `RegistryPeerRecord`; `packages/discovery/src/federation-provider.ts` verifies signed peer records for candidate-only federation discovery. |
 | Trust graph | Present | `services/trust-graph/src/services/graph.ts`, `services/trust-graph/src/services/trust-service.ts`. |
 | Capability-specific reputation | Partial | `services/trust-graph/src/db/migrations/003_capability_scoring.sql`, `services/trust-graph/src/services/capability-scoring.ts`. |
-| Context-specific trust scoring | Partial | Trust edges include optional capability/context, but no full v2 scoring component model. |
+| Context-specific trust scoring | Present, evolving | `packages/core/src/trust.ts` defines componentized `TrustResult` scoring with identity, publisher, trust anchor, capability fit, evidence, policy compliance, runtime safety, peer attestation, incident, novelty, and context-boundary components plus canonical `payload_hash`. |
 | Policy engine | Present, simple | `packages/policy/src/index.ts`, `services/policy-engine/src/index.ts`. |
 | Delegation tokens | Present | `packages/core/src/delegation.ts`. |
 | Session grants | Present, not v2-complete | `packages/core/src/delegation.ts`, `packages/core/src/session-store.ts`, `services/agentd/src/index.ts`. |

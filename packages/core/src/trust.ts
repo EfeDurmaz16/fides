@@ -1,4 +1,5 @@
 import type { CapabilityControl, CapabilityDescriptor } from './capability.js'
+import { hashProtocolPayload, type HashValue } from './protocol.js'
 
 export type TrustBand = 'unknown' | 'low' | 'medium' | 'high' | 'verified'
 
@@ -38,6 +39,9 @@ export interface TrustReason {
 
 export interface TrustResult {
   schema_version: 'fides.trust.result.v1'
+  id: string
+  issuer: string
+  subject: string
   agent_id: string
   capability: string
   score: number
@@ -47,10 +51,13 @@ export interface TrustResult {
   evidence_refs: string[]
   required_controls: CapabilityControl[]
   computed_at: string
+  payload_hash: HashValue
 }
 
 export interface ComputeTrustResultInput {
   agentId: string
+  issuer?: string
+  resultId?: string
   capability: CapabilityDescriptor
   components: TrustScoreComponents
   evidenceRefs?: string[]
@@ -140,8 +147,12 @@ export function computeTrustResult(input: ComputeTrustResultInput): TrustResult 
   if (input.components.contextBoundaryPenalty > 0) riskFlags.push('context_boundary')
   if (input.components.noveltyPenalty > 0.4) riskFlags.push('limited_history')
 
-  return {
+  const computedAt = input.computedAt ?? new Date().toISOString()
+  const payload = {
     schema_version: 'fides.trust.result.v1',
+    id: input.resultId ?? crypto.randomUUID(),
+    issuer: input.issuer ?? 'fides.trust-engine',
+    subject: input.agentId,
     agent_id: input.agentId,
     capability: input.capability.id,
     score: Number(clamp01(score).toFixed(4)),
@@ -150,6 +161,11 @@ export function computeTrustResult(input: ComputeTrustResultInput): TrustResult 
     risk_flags: riskFlags,
     evidence_refs: input.evidenceRefs ?? [],
     required_controls: Array.from(requiredControls),
-    computed_at: input.computedAt ?? new Date().toISOString(),
+    computed_at: computedAt,
+  } satisfies Omit<TrustResult, 'payload_hash'>
+
+  return {
+    ...payload,
+    payload_hash: hashProtocolPayload(payload),
   }
 }

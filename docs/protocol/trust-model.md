@@ -11,6 +11,11 @@ Current implementation anchors:
 
 A `TrustResult` includes:
 
+- id
+- issuer
+- subject
+- agent id
+- capability
 - score
 - band
 - reasons
@@ -18,6 +23,11 @@ A `TrustResult` includes:
 - evidence refs
 - required controls
 - computed timestamp
+- payload hash
+
+`payload_hash` is computed with the shared canonical JSON digest over the
+machine-readable trust result. Session grants and policy decisions can bind to
+that hash without treating trust as authority.
 
 ## Components
 

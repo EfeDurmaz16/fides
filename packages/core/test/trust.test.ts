@@ -58,19 +58,27 @@ describe('TrustResult v2', () => {
 
     const result = computeTrustResult({
       agentId: 'did:fides:agent',
+      issuer: 'did:fides:trust-engine',
+      resultId: 'trust_result_1',
       capability: mediumCapability,
       components,
       evidenceRefs: ['evt_1'],
+      computedAt: '2026-05-30T00:00:00.000Z',
     })
 
     expect(result).toMatchObject({
       schema_version: 'fides.trust.result.v1',
+      id: 'trust_result_1',
+      issuer: 'did:fides:trust-engine',
+      subject: 'did:fides:agent',
       agent_id: 'did:fides:agent',
       capability: 'invoice.reconcile',
       band: 'high',
       evidence_refs: ['evt_1'],
       required_controls: [],
+      computed_at: '2026-05-30T00:00:00.000Z',
     })
+    expect(result.payload_hash).toMatch(/^sha256:/)
     expect(result.score).toBeGreaterThan(0.6)
     expect(result.reasons.map(reason => reason.component)).toEqual(expect.arrayContaining([
       'IdentityScore',
@@ -103,5 +111,40 @@ describe('TrustResult v2', () => {
       'human_approval',
     ]))
     expect(result.risk_flags).toEqual(expect.arrayContaining(['runtime_safety_low']))
+  })
+
+  it('changes payload_hash when trust components alter the computed decision surface', () => {
+    const base: Parameters<typeof computeTrustResult>[0] = {
+      agentId: 'did:fides:agent',
+      resultId: 'trust_result_stable',
+      issuer: 'did:fides:trust-engine',
+      capability: mediumCapability,
+      components: {
+        identity: 0.8,
+        publisher: 0.7,
+        trustAnchors: 0.6,
+        capabilityFit: 0.9,
+        evidence: 0.7,
+        policyCompliance: 0.8,
+        runtimeSafety: 0.6,
+        peerAttestation: 0.4,
+        incidentPenalty: 0.1,
+        noveltyPenalty: 0.05,
+        contextBoundaryPenalty: 0,
+      },
+      computedAt: '2026-05-30T00:00:00.000Z',
+    }
+
+    const highTrust = computeTrustResult(base)
+    const penalized = computeTrustResult({
+      ...base,
+      components: {
+        ...base.components,
+        incidentPenalty: 0.9,
+      },
+    })
+
+    expect(highTrust.payload_hash).not.toBe(penalized.payload_hash)
+    expect(penalized.risk_flags).toContain('incident_history')
   })
 })

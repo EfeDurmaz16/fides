@@ -19,6 +19,9 @@ const capability = (riskLevel: CapabilityDescriptor['riskLevel']): CapabilityDes
 
 const trust = (band: TrustResult['band'], score: number): TrustResult => ({
   schema_version: 'fides.trust.result.v1',
+  id: `trust_${band}_${score}`,
+  issuer: 'did:fides:trust-engine',
+  subject: 'did:fides:agent',
   agent_id: 'did:fides:agent',
   capability: 'invoice.reconcile',
   score,
@@ -28,6 +31,7 @@ const trust = (band: TrustResult['band'], score: number): TrustResult => ({
   evidence_refs: ['evt_1'],
   required_controls: [],
   computed_at: '2026-05-29T00:00:00.000Z',
+  payload_hash: `sha256:${'0'.repeat(64)}`,
 })
 
 describe('FIDES policy v2', () => {

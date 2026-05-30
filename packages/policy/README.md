@@ -38,6 +38,9 @@ const decision = evaluateFidesPolicy({
   },
   trustResult: {
     schema_version: 'fides.trust.result.v1',
+    id: 'trust_result_1',
+    issuer: 'did:fides:trust-engine',
+    subject: 'did:fides:invoice-agent',
     agent_id: 'did:fides:invoice-agent',
     capability: 'invoice.reconcile',
     score: 0.82,
@@ -47,6 +50,7 @@ const decision = evaluateFidesPolicy({
     evidence_refs: ['evt_1'],
     required_controls: [],
     computed_at: new Date().toISOString(),
+    payload_hash: 'sha256:...',
   },
   requestedScopes: ['invoice:read'],
 })

@@ -160,6 +160,11 @@ describe('agentd authority stores', () => {
       dhtPointers: [{ agent_id: 'did:fides:agent', capability: 'invoice.reconcile' }],
       registryRecords: [{ id: 'registry-record-1', agentId: 'did:fides:agent' }],
       relayRecords: [{ id: 'relay-record-1', agentId: 'did:fides:agent' }],
+      trustResults: [{ agentId: 'did:fides:agent', capability: 'invoice.reconcile', score: 0.82 }],
+      reputationRecords: [{ agentId: 'did:fides:agent', capability: 'invoice.reconcile', score: 0.76 }],
+      delegationTokens: [{ id: 'delegation-1', delegatee: 'did:fides:agent' }],
+      approvals: [{ id: 'approval-1', capability: 'payments.prepare' }],
+      approvalDecisions: [{ id: 'approval-decision-1', approvalId: 'approval-1', decision: 'approved' }],
       evidenceEvents: [{ event_id: 'evt-1' }],
       runtimeAttestations: [{ attestation_id: 'att-1' }],
       sessionGrants: [{ session: { session_id: 'sess-1' }, policy: { id: 'policy-decision-1', decision: 'allow' } }],
@@ -202,7 +207,11 @@ describe('agentd authority stores', () => {
         'dht_records',
         'registry_records',
         'relay_records',
+        'trust_results',
+        'reputation_records',
         'policy_decisions',
+        'approvals',
+        'delegations',
         'sessions',
         'evidence_events',
         'revocations',
@@ -212,7 +221,17 @@ describe('agentd authority stores', () => {
       expect((db.prepare('SELECT COUNT(*) AS count FROM identities').get() as { count: number }).count).toBe(1)
       expect((db.prepare('SELECT COUNT(*) AS count FROM capabilities').get() as { count: number }).count).toBe(1)
       expect((db.prepare('SELECT COUNT(*) AS count FROM discovery_records').get() as { count: number }).count).toBe(3)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM trust_results').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM reputation_records').get() as { count: number }).count).toBe(1)
       expect((db.prepare('SELECT COUNT(*) AS count FROM policy_decisions').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM approvals').get() as { count: number }).count).toBe(2)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM delegations').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM attestations').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM sessions').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM evidence_events').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM revocations').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM incidents').get() as { count: number }).count).toBe(1)
+      expect((db.prepare('SELECT COUNT(*) AS count FROM kill_switch_rules').get() as { count: number }).count).toBe(1)
     } finally {
       db.close()
     }

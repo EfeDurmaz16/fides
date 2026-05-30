@@ -56,6 +56,7 @@ import {
 } from '@fides/core'
 import * as ed from '@noble/ed25519'
 import { bytesToHex } from '@noble/hashes/utils'
+import { fullDemoSteps as fullDemoContractSteps } from '../../../examples/full-demo/run.js'
 
 const mockFetch = fetch as ReturnType<typeof vi.fn>
 
@@ -1851,6 +1852,7 @@ describe('Agentd Service Routes', () => {
       expect(demo.status).toBe(200)
       const demoData = await demo.json()
       expect(demoData.status).toBe('executed')
+      expect(demoData.steps).toEqual(fullDemoContractSteps)
       expect(demoData.steps).toContain('discover_payment_through_dht')
       expect(demoData.steps).toContain('verify_evidence_hash_chain')
       expect(demoData.authority).toMatchObject({

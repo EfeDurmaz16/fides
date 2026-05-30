@@ -333,6 +333,9 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `2ccaa52 test(agentd): cover provider discovery evidence refs`
+- `7c60719 docs: document discovery evidence events`
+- `22cd792 feat(agentd): emit discovery evidence events`
 - `55653a8 docs: record non-authoritative discovery writes`
 - `ffd0874 test(sdk): expose non-authoritative discovery writes`
 - `fd17264 feat(agentd): mark discovery writes non-authoritative`

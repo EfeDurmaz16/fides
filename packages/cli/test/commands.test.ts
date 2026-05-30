@@ -710,6 +710,66 @@ describe('CLI Commands', () => {
   });
 
   describe('identity domain commands', () => {
+    it('identity commands can use root local agentd APIs', async () => {
+      const mockFetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).endsWith('/identities') && init?.method === 'POST') {
+          return new Response(JSON.stringify({
+            type: 'principal',
+            identity: { did: 'did:fides:principal', displayName: 'Efe' },
+            publicKeyHex: 'ab'.repeat(32),
+          }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (String(url).endsWith('/identities') && init?.method === 'GET') {
+          return new Response(JSON.stringify({
+            identities: [{ did: 'did:fides:principal', type: 'principal' }],
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
+        return new Response(JSON.stringify({
+          type: 'principal',
+          identity: { did: 'did:fides:principal' },
+          publicKeyHex: 'ab'.repeat(32),
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }) as unknown as typeof fetch;
+      vi.stubGlobal('fetch', mockFetch);
+
+      const { createIdentityCommand } = await import('../src/commands/identity.js');
+      const cmd = createIdentityCommand();
+
+      await cmd.parseAsync([
+        'create',
+        '--type',
+        'principal',
+        '--name',
+        'Efe',
+        '--agentd-url',
+        'http://agentd.test/',
+        '--json',
+      ], { from: 'user' });
+      await cmd.parseAsync(['list', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+      await cmd.parseAsync(['show', 'did:fides:principal', '--agentd-url', 'http://agentd.test/', '--json'], { from: 'user' });
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://agentd.test/identities',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ type: 'principal', name: 'Efe' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://agentd.test/identities',
+        expect.objectContaining({ method: 'GET' })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://agentd.test/identities/did%3Afides%3Aprincipal',
+        expect.objectContaining({ method: 'GET' })
+      );
+      const outputs = vi.mocked(console.log).mock.calls.map(call => String(call[0]));
+      expect(outputs.join('\n')).not.toContain('privateKeyHex');
+    });
+
     it('prints a domain verification challenge as JSON', async () => {
       const { createIdentityCommand } = await import('../src/commands/identity.js');
       const cmd = createIdentityCommand();

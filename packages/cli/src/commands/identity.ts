@@ -14,6 +14,7 @@ import {
   type PublisherIdentity,
 } from '@fides/core'
 import { error, formatTable, info, success } from '../utils/output.js'
+import { getJson, postJson, printResult } from './authority-utils.js'
 
 type LocalIdentityType = 'agent' | 'publisher' | 'principal'
 
@@ -34,10 +35,21 @@ export function createIdentityCommand(): Command {
     .requiredOption('--type <type>', 'Identity type: agent, publisher, or principal')
     .option('--name <name>', 'Display name for publisher/principal or agent metadata')
     .option('--domain <domain>', 'Optional domain for publisher/principal identities')
+    .option('--agentd-url <url>', 'Create the identity through a local agentd root v2 API instead of local files')
     .option('--json', 'Emit JSON output')
     .action(async (options) => {
       try {
         const type = parseIdentityType(options.type)
+        if (options.agentdUrl) {
+          const result = await postJson(`${baseUrl(options.agentdUrl)}/identities`, {
+            type,
+            ...(options.name && { name: options.name }),
+            ...(options.domain && { domain: options.domain }),
+          })
+          printResult('Identity created:', result, options)
+          return
+        }
+
         const stored = await createStoredIdentity(type, {
           name: options.name,
           domain: options.domain,
@@ -67,9 +79,16 @@ export function createIdentityCommand(): Command {
 
   cmd.command('list')
     .description('List local FIDES identities')
+    .option('--agentd-url <url>', 'List identities through a local agentd root v2 API instead of local files')
     .option('--json', 'Emit JSON output')
-    .action((options) => {
+    .action(async (options) => {
       try {
+        if (options.agentdUrl) {
+          const result = await getJson(`${baseUrl(options.agentdUrl)}/identities`)
+          printResult('Identities:', result, options)
+          return
+        }
+
         const identities = readStoredIdentities().map(({ privateKeyHex: _privateKeyHex, ...stored }) => ({
           type: stored.type,
           did: stored.identity.did,
@@ -104,9 +123,16 @@ export function createIdentityCommand(): Command {
   cmd.command('show')
     .description('Show a local FIDES identity without exposing its private key')
     .argument('<did>', 'Identity DID')
+    .option('--agentd-url <url>', 'Read the identity through a local agentd root v2 API instead of local files')
     .option('--json', 'Emit JSON output')
-    .action((did, options) => {
+    .action(async (did, options) => {
       try {
+        if (options.agentdUrl) {
+          const result = await getJson(`${baseUrl(options.agentdUrl)}/identities/${encodeURIComponent(did)}`)
+          printResult('Identity:', result, options)
+          return
+        }
+
         const stored = readStoredIdentity(did)
         if (!stored) {
           error(`Identity not found: ${did}`)
@@ -300,4 +326,8 @@ function readStoredIdentity(did: string): StoredIdentity | null {
     return null
   }
   return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as StoredIdentity
+}
+
+function baseUrl(url: string): string {
+  return url.replace(/\/+$/, '')
 }

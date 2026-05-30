@@ -217,6 +217,10 @@ export function verifySignedRevocationRecordV2(signed: SignedRevocationRecordV2)
   return verifyObject(signed)
 }
 
+export async function verifySignedRevocationRecordV2Issuer(signed: SignedRevocationRecordV2): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedRevocationRecordV2(signed)
+}
+
 export function signIncidentRecordV2(
   record: IncidentRecordV2,
   privateKey: Uint8Array,
@@ -227,6 +231,10 @@ export function signIncidentRecordV2(
 
 export function verifySignedIncidentRecordV2(signed: SignedIncidentRecordV2): Promise<boolean> {
   return verifyObject(signed)
+}
+
+export async function verifySignedIncidentRecordV2Issuer(signed: SignedIncidentRecordV2): Promise<boolean> {
+  return signed.proof.verificationMethod === signed.payload.issuer && await verifySignedIncidentRecordV2(signed)
 }
 
 /**

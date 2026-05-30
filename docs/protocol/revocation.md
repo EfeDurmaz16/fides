@@ -23,6 +23,12 @@ Revocation must be checked before trust, policy, session, and invocation flows c
 `subject`, timestamps, and `payload_hash`. The subject is the revoked target id,
 so policy and evidence can bind to the exact authority surface being disabled.
 
+Signed revocation verification has two levels. `verifySignedRevocationRecordV2`
+checks the canonical Ed25519 proof. `verifySignedRevocationRecordV2Issuer`
+additionally requires `proof.verificationMethod` to equal the record `issuer`.
+Authority paths should use the issuer-bound verifier so another DID cannot sign
+an otherwise valid revocation payload on behalf of the stated issuer.
+
 ## Evidence
 
 The local root daemon appends a hash-only `revocation.recorded` event when a

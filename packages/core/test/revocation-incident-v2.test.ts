@@ -7,7 +7,9 @@ import {
   signIncidentRecordV2,
   signRevocationRecordV2,
   verifySignedIncidentRecordV2,
+  verifySignedIncidentRecordV2Issuer,
   verifySignedRevocationRecordV2,
+  verifySignedRevocationRecordV2Issuer,
 } from '../src/revocation.js'
 
 describe('revocation and incident v2 records', () => {
@@ -34,6 +36,7 @@ describe('revocation and incident v2 records', () => {
 
     const signed = await signRevocationRecordV2(record, issuer.privateKey, issuer.did)
     expect(await verifySignedRevocationRecordV2(signed)).toBe(true)
+    expect(await verifySignedRevocationRecordV2Issuer(signed)).toBe(true)
   })
 
   it('creates and resolves signed incident records with trust impact metadata', async () => {
@@ -63,10 +66,37 @@ describe('revocation and incident v2 records', () => {
 
     const signed = await signIncidentRecordV2(incident, reporter.privateKey, reporter.did)
     expect(await verifySignedIncidentRecordV2(signed)).toBe(true)
+    expect(await verifySignedIncidentRecordV2Issuer(signed)).toBe(true)
 
     const resolved = resolveIncidentRecordV2(incident, 'false_positive')
     expect(resolved.resolution_status).toBe('false_positive')
     expect(resolved.resolved_at).toBeDefined()
     expect(resolved.payload_hash).not.toBe(incident.payload_hash)
+  })
+
+  it('rejects revocation and incident proofs whose verification method is not the issuer', async () => {
+    const issuer = await createIdentityKeyPair()
+    const attacker = await createIdentityKeyPair()
+    const revocation = createRevocationRecordV2({
+      issuer: issuer.did,
+      targetType: 'agent',
+      targetId: 'did:fides:agent',
+      reason: 'Compromised agent identity',
+    })
+    const incident = createIncidentRecordV2({
+      reporter: issuer.did,
+      targetAgentId: 'did:fides:agent',
+      severity: 'critical',
+      category: 'unauthorized_action',
+      description: 'Agent attempted an unauthorized action.',
+    })
+
+    const signedRevocation = await signRevocationRecordV2(revocation, attacker.privateKey, attacker.did)
+    const signedIncident = await signIncidentRecordV2(incident, attacker.privateKey, attacker.did)
+
+    expect(await verifySignedRevocationRecordV2(signedRevocation)).toBe(true)
+    expect(await verifySignedRevocationRecordV2Issuer(signedRevocation)).toBe(false)
+    expect(await verifySignedIncidentRecordV2(signedIncident)).toBe(true)
+    expect(await verifySignedIncidentRecordV2Issuer(signedIncident)).toBe(false)
   })
 })

@@ -311,6 +311,53 @@ describe('FidesClient', () => {
     }
   })
 
+  it('adds identity trust-anchor attestations through promise helpers', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init })
+      return new Response(JSON.stringify({
+        attestation: { id: 'att_identity_1' },
+        evidenceRefs: ['evt_1'],
+        authorityGranted: false,
+      }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+
+    await client.attestations.github({ identity: 'did:fides:publisher', handle: 'fides-dev' })
+    await client.attestations.email({ identity: 'did:fides:publisher', email: 'dev@example.com' })
+    await client.attestations.domain({ identity: 'did:fides:publisher', domain: 'example.com' })
+    await client.attestations.package({
+      identity: 'did:fides:publisher',
+      registry: 'npm',
+      package: '@fides/example-agent',
+    })
+    await client.attestations.wallet({ identity: 'did:fides:publisher', address: '0xabc' })
+
+    expect(calls.map(call => call.url)).toEqual([
+      'http://localhost:7345/attestations',
+      'http://localhost:7345/attestations',
+      'http://localhost:7345/attestations',
+      'http://localhost:7345/attestations',
+      'http://localhost:7345/attestations',
+    ])
+    expect(calls.map(call => JSON.parse(call.init?.body as string))).toEqual([
+      { type: 'github', identity: 'did:fides:publisher', handle: 'fides-dev' },
+      { type: 'email', identity: 'did:fides:publisher', email: 'dev@example.com' },
+      { type: 'domain', identity: 'did:fides:publisher', domain: 'example.com' },
+      {
+        type: 'package',
+        identity: 'did:fides:publisher',
+        registry: 'npm',
+        package: '@fides/example-agent',
+      },
+      { type: 'wallet', identity: 'did:fides:publisher', address: '0xabc' },
+    ])
+  })
+
   it('creates and submits signed invocation requests from a session grant', async () => {
     const requester = await createAgentIdentity()
     const sessionGrant: SessionGrantV2 = {

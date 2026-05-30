@@ -108,6 +108,27 @@ const attestation = await client.attestations.create({
   policyHash: `sha256:${'c'.repeat(64)}`,
 })
 await client.attestations.verify(attestation.attestation.attestation_id)
+await client.attestations.github({
+  identity: identity.identity.did,
+  handle: 'fides-dev',
+})
+await client.attestations.email({
+  identity: identity.identity.did,
+  email: 'dev@example.com',
+})
+await client.attestations.domain({
+  identity: identity.identity.did,
+  domain: 'example.com',
+})
+await client.attestations.package({
+  identity: identity.identity.did,
+  registry: 'npm',
+  package: '@fides/example-agent',
+})
+await client.attestations.wallet({
+  identity: identity.identity.did,
+  address: '0x...',
+})
 await client.registry.start()
 await client.registry.publish({ agentCardId: identity.identity.did })
 await client.registry.search({
@@ -167,11 +188,12 @@ scoped SessionGrant. Session request and invocation helpers use the same root
 local daemon API. Approval and kill switch helpers expose local authority
 controls, with kill switch rules overriding normal policy while active.
 Revocation and incident helpers expose local governance records that feed root
-session policy decisions. Runtime attestation helpers issue and verify local
-MockTEE attestations that can satisfy high-risk session policy when passed as
-an `attestationId`. Registry, relay, DHT, federation, and well-known helpers
-expose the local mock discovery surfaces. They return candidate records or
-pointers only; they do not convert discovery into authority. Discovery,
+session policy decisions. Attestation helpers include local mock identity trust
+anchors for GitHub, email, domain, package registry, and wallet claims, plus
+runtime MockTEE attestations that can satisfy high-risk session policy when
+passed as an `attestationId`. Registry, relay, DHT, federation, and well-known
+helpers expose the local mock discovery surfaces. They return candidate records
+or pointers only; they do not convert discovery into authority. Discovery,
 registry, relay, and federation helpers accept `supported_versions` and
 `required_versions` so callers can request protocol compatibility filtering.
 `dht.publish` can publish a signed local pointer without an AgentCard URL when

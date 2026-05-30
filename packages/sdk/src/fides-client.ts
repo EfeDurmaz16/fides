@@ -108,6 +108,31 @@ export interface FidesEvidenceExportRequest {
   include_metadata?: boolean
 }
 
+export interface FidesIdentityAttestationRequest {
+  identity: string
+}
+
+export interface FidesGithubAttestationRequest extends FidesIdentityAttestationRequest {
+  handle: string
+}
+
+export interface FidesEmailAttestationRequest extends FidesIdentityAttestationRequest {
+  email: string
+}
+
+export interface FidesDomainAttestationRequest extends FidesIdentityAttestationRequest {
+  domain: string
+}
+
+export interface FidesPackageAttestationRequest extends FidesIdentityAttestationRequest {
+  registry: 'npm' | 'pypi'
+  package: string
+}
+
+export interface FidesWalletAttestationRequest extends FidesIdentityAttestationRequest {
+  address: string
+}
+
 export interface FidesInvocationResponse {
   authorityGranted: boolean
   session: SessionGrantV2
@@ -211,6 +236,11 @@ export class FidesClient {
 
   readonly attestations = {
     create: (body: Record<string, unknown>) => this.post('/attestations', body),
+    github: (body: FidesGithubAttestationRequest) => this.post('/attestations', { type: 'github', ...body }),
+    email: (body: FidesEmailAttestationRequest) => this.post('/attestations', { type: 'email', ...body }),
+    domain: (body: FidesDomainAttestationRequest) => this.post('/attestations', { type: 'domain', ...body }),
+    package: (body: FidesPackageAttestationRequest) => this.post('/attestations', { type: 'package', ...body }),
+    wallet: (body: FidesWalletAttestationRequest) => this.post('/attestations', { type: 'wallet', ...body }),
     get: (attestationId: string) => this.get(`/attestations/${encodeURIComponent(attestationId)}`),
     verify: (attestationId: string) => this.post(`/attestations/${encodeURIComponent(attestationId)}/verify`, {}),
   }

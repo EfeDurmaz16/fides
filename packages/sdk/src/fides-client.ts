@@ -3,12 +3,14 @@ import {
   type ApprovalDecision,
   type ApprovalRequest,
   type CapabilityControl,
+  type DelegationToken,
   type IdentityTrustAnchor,
   type IncidentRecordV2,
   type KillSwitchRule,
   type PrincipalIdentity,
   type PublisherIdentity,
   type RevocationRecordV2,
+  type ReputationRecord,
   type TrustResult,
   createInvocationRequest,
   isErrorEnvelope,
@@ -391,6 +393,41 @@ export interface FidesPolicyEvaluationResponse {
   explanation: string
 }
 
+export interface FidesTrustEvaluationResponse {
+  trust: TrustResult
+  authorityGranted: false
+  explanation: string
+  [key: string]: unknown
+}
+
+export interface FidesTrustListResponse {
+  agentId: string
+  trust: TrustResult[]
+  authorityGranted: false
+  [key: string]: unknown
+}
+
+export interface FidesReputationUpdateResponse {
+  reputation: ReputationRecord
+  authorityGranted: false
+  [key: string]: unknown
+}
+
+export interface FidesReputationListResponse {
+  agentId: string
+  reputations: ReputationRecord[]
+  authorityGranted: false
+  [key: string]: unknown
+}
+
+export interface FidesDelegationResponse {
+  token: DelegationToken
+  signed: boolean
+  authorityGranted: false
+  explanation: string
+  [key: string]: unknown
+}
+
 export interface FidesApprovalRequestResponse {
   approval: ApprovalRequest
   evidenceRefs: string[]
@@ -548,13 +585,21 @@ export class FidesClient {
   }
 
   readonly trust = {
-    evaluate: (body: Record<string, unknown>) => this.post('/trust/evaluate', body),
-    get: (agentId: string) => this.get(`/trust/${encodeURIComponent(agentId)}`),
+    evaluate: (body: Record<string, unknown>): Promise<FidesTrustEvaluationResponse> => (
+      this.post('/trust/evaluate', body) as Promise<FidesTrustEvaluationResponse>
+    ),
+    get: (agentId: string): Promise<FidesTrustListResponse> => (
+      this.get(`/trust/${encodeURIComponent(agentId)}`) as Promise<FidesTrustListResponse>
+    ),
   }
 
   readonly reputation = {
-    update: (body: Record<string, unknown>) => this.post('/reputation/update', body),
-    get: (agentId: string) => this.get(`/reputation/${encodeURIComponent(agentId)}`),
+    update: (body: Record<string, unknown>): Promise<FidesReputationUpdateResponse> => (
+      this.post('/reputation/update', body) as Promise<FidesReputationUpdateResponse>
+    ),
+    get: (agentId: string): Promise<FidesReputationListResponse> => (
+      this.get(`/reputation/${encodeURIComponent(agentId)}`) as Promise<FidesReputationListResponse>
+    ),
   }
 
   readonly policy = {
@@ -564,7 +609,9 @@ export class FidesClient {
   }
 
   readonly delegations = {
-    create: (body: Record<string, unknown>) => this.post('/delegations', body),
+    create: (body: Record<string, unknown>): Promise<FidesDelegationResponse> => (
+      this.post('/delegations', body) as Promise<FidesDelegationResponse>
+    ),
   }
 
   readonly approvals = {

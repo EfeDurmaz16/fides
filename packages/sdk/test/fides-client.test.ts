@@ -876,6 +876,119 @@ describe('FidesClient', () => {
     expect(exported.events).toHaveLength(1)
   })
 
+  it('types trust, reputation, and delegation responses as non-authorizing signals', async () => {
+    const trust = {
+      schema_version: 'fides.trust.result.v1',
+      id: 'trust_1',
+      issuer: 'fides.trust-engine',
+      subject: 'did:fides:agent',
+      agent_id: 'did:fides:agent',
+      capability: 'invoice.reconcile',
+      score: 0.72,
+      band: 'high',
+      reasons: [
+        { component: 'IdentityScore', value: 1, weight: 0.14, description: 'identity verified' },
+      ],
+      risk_flags: [],
+      evidence_refs: ['evt_trust'],
+      required_controls: [],
+      computed_at: '2026-05-30T00:00:00.000Z',
+      payload_hash: 'sha256:trust',
+    }
+    const reputation = {
+      schema_version: 'fides.reputation.record.v1',
+      id: 'rep_1',
+      issuer: 'fides.reputation-engine',
+      subject: 'did:fides:agent',
+      agent_id: 'did:fides:agent',
+      capability: 'invoice.reconcile',
+      score: 0.81,
+      successful_invocations: 12,
+      failed_invocations: 1,
+      incident_count: 0,
+      publisher_weight: 0.8,
+      context_boundary_penalty: 0,
+      reasons: [
+        { factor: 'success_rate', value: 0.9231, description: 'capability success rate' },
+      ],
+      computed_at: '2026-05-30T00:00:00.000Z',
+      payload_hash: 'sha256:reputation',
+    }
+    const token = {
+      id: 'del_1',
+      delegator: 'did:fides:principal',
+      delegatee: 'did:fides:requester',
+      capabilities: ['invoice.reconcile'],
+      constraints: { maxActions: 1 },
+      issuedAt: '2026-05-30T00:00:00.000Z',
+      expiresAt: '2026-05-30T01:00:00.000Z',
+      nonce: 'nonce_1',
+      audience: ['did:fides:agent'],
+      signature: 'local-delegation-signature',
+    }
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).endsWith('/trust/evaluate')) {
+        return new Response(JSON.stringify({
+          trust,
+          authorityGranted: false,
+          explanation: 'Trust is a signal only. Policy evaluation and scoped session grants are required before invocation.',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/trust/did%3Afides%3Aagent')) {
+        return new Response(JSON.stringify({
+          agentId: 'did:fides:agent',
+          trust: [trust],
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/reputation/update')) {
+        return new Response(JSON.stringify({
+          reputation,
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/reputation/did%3Afides%3Aagent')) {
+        return new Response(JSON.stringify({
+          agentId: 'did:fides:agent',
+          reputations: [reputation],
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response(JSON.stringify({
+        token,
+        signed: true,
+        authorityGranted: false,
+        explanation: 'Delegation records signed scoped authorization intent. It must still be converted into a policy-checked SessionGrant before invocation.',
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const trustResult = await client.trust.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
+    expect(trustResult.trust.band).toBe('high')
+    expect(trustResult.authorityGranted).toBe(false)
+
+    const trustList = await client.trust.get('did:fides:agent')
+    expect(trustList.trust[0]?.capability).toBe('invoice.reconcile')
+    expect(trustList.authorityGranted).toBe(false)
+
+    const reputationResult = await client.reputation.update({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
+    expect(reputationResult.reputation.score).toBe(0.81)
+    expect(reputationResult.authorityGranted).toBe(false)
+
+    const reputationList = await client.reputation.get('did:fides:agent')
+    expect(reputationList.reputations[0]?.capability).toBe('invoice.reconcile')
+    expect(reputationList.authorityGranted).toBe(false)
+
+    const delegation = await client.delegations.create({
+      delegator: 'did:fides:principal',
+      delegatee: 'did:fides:requester',
+      capabilities: ['invoice.reconcile'],
+    })
+    expect(delegation.token.capabilities).toEqual(['invoice.reconcile'])
+    expect(delegation.authorityGranted).toBe(false)
+  })
+
   it('creates and submits signed invocation requests from a session grant', async () => {
     const requester = await createAgentIdentity()
     const sessionGrant: SessionGrantV2 = {

@@ -52,6 +52,7 @@ export interface LocalDaemonStateSnapshot {
   killSwitchRules: unknown[]
   revocationRecords: unknown[]
   incidentRecords: unknown[]
+  genericAttestations: unknown[]
   runtimeAttestations: unknown[]
   evidenceEvents: unknown[]
   sessionGrants: unknown[]
@@ -940,6 +941,7 @@ export function emptyLocalDaemonStateSnapshot(updatedAt = new Date().toISOString
     killSwitchRules: [],
     revocationRecords: [],
     incidentRecords: [],
+    genericAttestations: [],
     runtimeAttestations: [],
     evidenceEvents: [],
     sessionGrants: [],
@@ -967,6 +969,7 @@ export function normalizeLocalDaemonStateSnapshot(value: unknown): LocalDaemonSt
     killSwitchRules: Array.isArray(input.killSwitchRules) ? input.killSwitchRules : [],
     revocationRecords: Array.isArray(input.revocationRecords) ? input.revocationRecords : [],
     incidentRecords: Array.isArray(input.incidentRecords) ? input.incidentRecords : [],
+    genericAttestations: Array.isArray(input.genericAttestations) ? input.genericAttestations : [],
     runtimeAttestations: Array.isArray(input.runtimeAttestations) ? input.runtimeAttestations : [],
     evidenceEvents: Array.isArray(input.evidenceEvents) ? input.evidenceEvents : [],
     sessionGrants: Array.isArray(input.sessionGrants) ? input.sessionGrants : [],

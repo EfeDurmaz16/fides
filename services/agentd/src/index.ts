@@ -31,6 +31,7 @@ import {
   authorizeDelegation,
   authorizeDelegationV2,
   authorizeSessionInvocation,
+  createAttestation,
   createAgentIdentity,
   computeCapabilityReputation,
   computeTrustResult,
@@ -52,6 +53,7 @@ import {
   createSessionGrantV2,
   hashAgentCard,
   hashProtocolPayload,
+  isAttestationExpired,
   isKillSwitchRuleActive,
   MockTEEProvider as CoreMockTEEProvider,
   negotiateProtocolVersion,
@@ -80,6 +82,7 @@ import {
   validateJsonSchemaValue,
   verifyIncidentRecord,
   verifyRevocationRecord,
+  type Attestation,
   type AgentIdentity,
   type AgentCard,
   type ApprovalDecision,
@@ -178,6 +181,7 @@ const localApprovalDecisions = new Map<string, ApprovalDecision>()
 const localKillSwitchRules = new Map<string, KillSwitchRule>()
 const localRevocationRecords = new Map<string, RevocationRecordV2>()
 const localIncidentRecords = new Map<string, IncidentRecordV2>()
+const localGenericAttestations = new Map<string, Attestation>()
 const localRuntimeAttestations = new Map<string, RuntimeAttestation>()
 let localEvidenceEvents: EvidenceEventV2[] = []
 interface LocalSessionRecord {
@@ -300,6 +304,7 @@ function hydrateLocalState(snapshot: LocalDaemonStateSnapshot): void {
   replaceMap(localKillSwitchRules, mapValues(snapshot.killSwitchRules as KillSwitchRule[]))
   replaceMap(localRevocationRecords, mapValues(snapshot.revocationRecords as RevocationRecordV2[]))
   replaceMap(localIncidentRecords, mapValues(snapshot.incidentRecords as IncidentRecordV2[]))
+  replaceMap(localGenericAttestations, mapValues(snapshot.genericAttestations as Attestation[]))
   localRuntimeAttestations.clear()
   for (const attestation of snapshot.runtimeAttestations as RuntimeAttestation[]) {
     if (attestation?.attestation_id) localRuntimeAttestations.set(attestation.attestation_id, attestation)
@@ -334,6 +339,7 @@ function localStateSnapshot(): LocalDaemonStateSnapshot {
     killSwitchRules: Array.from(localKillSwitchRules.values()),
     revocationRecords: Array.from(localRevocationRecords.values()),
     incidentRecords: Array.from(localIncidentRecords.values()),
+    genericAttestations: Array.from(localGenericAttestations.values()),
     runtimeAttestations: Array.from(localRuntimeAttestations.values()),
     evidenceEvents: localEvidenceEvents,
     sessionGrants: Array.from(localSessionGrants.values()),
@@ -2416,6 +2422,11 @@ app.post('/attestations', async (c) => {
     return c.json(identityAttestation.body, identityAttestation.status)
   }
 
+  const genericAttestation = issueLocalGenericAttestation(body)
+  if (genericAttestation) {
+    return c.json(genericAttestation.body, genericAttestation.status)
+  }
+
   const agentId = typeof body.agentId === 'string'
     ? body.agentId
     : typeof body.agent_id === 'string'
@@ -2482,6 +2493,11 @@ app.post('/attestations', async (c) => {
 
 app.get('/attestations/:id', (c) => {
   const id = c.req.param('id')
+  const genericAttestation = localGenericAttestations.get(id)
+  if (genericAttestation) {
+    return c.json({ attestation: genericAttestation, authorityGranted: false })
+  }
+
   const attestation = localRuntimeAttestations.get(id)
   if (!attestation) {
     return c.json(localError('ATTESTATION_NOT_FOUND', 'attestation not found', { id }), 404)
@@ -2491,6 +2507,25 @@ app.get('/attestations/:id', (c) => {
 
 app.post('/attestations/:id/verify', async (c) => {
   const id = c.req.param('id')
+  const genericAttestation = localGenericAttestations.get(id)
+  if (genericAttestation) {
+    const valid = verifyLocalGenericAttestation(genericAttestation)
+    const event = appendRootEvidence({
+      type: valid ? 'attestation.verified' : 'attestation.failed',
+      actor: genericAttestation.issuer,
+      subject: genericAttestation.subject,
+      output: { valid, attestation_id: id },
+      decision: valid ? 'verified' : 'failed',
+      privacy_mode: 'hash_only',
+      metadata: {
+        attestation_id: id,
+        provider: genericAttestation.provider,
+        subject_type: genericAttestation.subject_type,
+      },
+    })
+    return c.json({ id, valid, attestation: genericAttestation, evidenceRefs: [event.event_id], authorityGranted: false })
+  }
+
   const attestation = localRuntimeAttestations.get(id)
   if (!attestation) {
     const failed = appendRootEvidence({
@@ -2595,6 +2630,117 @@ function issueLocalIdentityAttestation(body: Record<string, unknown>): { body: R
       authorityGranted: false,
     },
   }
+}
+
+function issueLocalGenericAttestation(body: Record<string, unknown>): { body: Record<string, unknown>; status: 201 | 400 } | null {
+  const schemaVersion = typeof body.schema_version === 'string' ? body.schema_version : undefined
+  const subject = typeof body.subject === 'string' ? body.subject : undefined
+  const subjectType = typeof body.subjectType === 'string'
+    ? body.subjectType
+    : typeof body.subject_type === 'string'
+      ? body.subject_type
+      : undefined
+  const provider = typeof body.provider === 'string' ? body.provider : undefined
+  const issuer = typeof body.issuer === 'string' ? body.issuer : undefined
+
+  if (schemaVersion !== 'fides.attestation.v1' && (!subject || !subjectType || !provider || !issuer)) {
+    return null
+  }
+  if (!subject || !subjectType || !provider || !issuer) {
+    return {
+      status: 400,
+      body: localError('REQUEST_INVALID', 'issuer, subject, subjectType, and provider are required for generic attestations', {
+        fields: ['issuer', 'subject', 'subjectType', 'provider'],
+      }),
+    }
+  }
+  if (!isAttestationSubjectType(subjectType)) {
+    return {
+      status: 400,
+      body: localError('REQUEST_INVALID', 'subjectType must be agent, publisher, principal, domain, package, wallet, passkey, runtime, build, or peer', { field: 'subjectType' }),
+    }
+  }
+
+  const claims = isRecord(body.claims) ? body.claims : {}
+  const evidenceRefs = Array.isArray(body.evidenceRefs)
+    ? body.evidenceRefs.map(String)
+    : Array.isArray(body.evidence_refs)
+      ? body.evidence_refs.map(String)
+      : []
+  const attestation = createAttestation({
+    issuer,
+    subject,
+    subjectType,
+    provider,
+    claims,
+    evidenceRefs,
+    issuedAt: typeof body.issuedAt === 'string'
+      ? body.issuedAt
+      : typeof body.issued_at === 'string'
+        ? body.issued_at
+        : undefined,
+    expiresAt: typeof body.expiresAt === 'string'
+      ? body.expiresAt
+      : typeof body.expires_at === 'string'
+        ? body.expires_at
+        : undefined,
+    signature: typeof body.signature === 'string' && body.signature.length > 0
+      ? body.signature
+      : undefined,
+  })
+  const stored = {
+    ...attestation,
+    signature: attestation.signature || localGenericAttestationSignature(attestation),
+  }
+  localGenericAttestations.set(stored.id, stored)
+  const event = appendRootEvidence({
+    type: 'attestation.issued',
+    actor: issuer,
+    subject,
+    output: stored,
+    decision: 'issued',
+    privacy_mode: 'hash_only',
+    metadata: {
+      attestation_id: stored.id,
+      provider,
+      subject_type: subjectType,
+    },
+  })
+
+  return {
+    status: 201,
+    body: { attestation: stored, evidenceRefs: [event.event_id], authorityGranted: false },
+  }
+}
+
+function verifyLocalGenericAttestation(attestation: Attestation): boolean {
+  const { payload_hash: _payloadHash, signature: _signature, ...payload } = attestation
+  const expectedPayloadHash = hashProtocolPayload(payload)
+  return attestation.schema_version === 'fides.attestation.v1' &&
+    attestation.payload_hash === expectedPayloadHash &&
+    !isAttestationExpired(attestation) &&
+    attestation.signature === localGenericAttestationSignature(attestation)
+}
+
+function localGenericAttestationSignature(attestation: Attestation): string {
+  return `local-attestation:${attestation.payload_hash.slice('sha256:'.length)}`
+}
+
+function isAttestationSubjectType(value: string): value is Attestation['subject_type'] {
+  return value === 'agent' ||
+    value === 'publisher' ||
+    value === 'principal' ||
+    value === 'domain' ||
+    value === 'package' ||
+    value === 'wallet' ||
+    value === 'passkey' ||
+    value === 'runtime' ||
+    value === 'build' ||
+    value === 'peer'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function createLocalIdentityTrustAnchor(body: Record<string, unknown>): IdentityTrustAnchor | null {

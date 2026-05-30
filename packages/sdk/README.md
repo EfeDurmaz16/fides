@@ -178,6 +178,14 @@ const attestation = await client.attestations.runtime({
   policyHash: `sha256:${'c'.repeat(64)}`,
 })
 await client.attestations.verify(attestation.attestation.attestation_id)
+const githubAttestation = await client.attestations.generic({
+  issuer: 'did:fides:publisher',
+  subject: identity.identity.did,
+  subjectType: 'agent',
+  provider: 'github',
+  claims: { handle: 'fides-dev' },
+})
+await client.attestations.verify(githubAttestation.attestation.id)
 const session = await client.sessions.request({
   principalId: 'did:fides:principal',
   requesterAgentId: 'did:fides:requester',
@@ -240,10 +248,11 @@ helpers return typed `RevocationRecordV2` responses, and active revocations are
 authority overrides that deny matching trust and policy paths rather than grant
 new authority. Incident helpers return typed `IncidentRecordV2` responses; open
 incidents are policy-review inputs that affect trust and session policy until
-resolved. Attestation helpers return typed local identity trust-anchor responses
-or `RuntimeAttestation` responses. Runtime attestation helpers issue and verify
-local MockTEE attestations that can satisfy high-risk session policy when passed
-as an `attestationId`. Evidence helpers append hash-only events by default, inspect
+resolved. Attestation helpers return typed local identity trust-anchor responses,
+generic `Attestation` responses, or `RuntimeAttestation` responses. Generic
+attestations record signed local claims without granting authority. Runtime
+attestation helpers issue and verify local MockTEE attestations that can satisfy
+high-risk session policy when passed as an `attestationId`. Evidence helpers append hash-only events by default, inspect
 individual events, verify the root hash chain, and export the current local
 ledger.
 

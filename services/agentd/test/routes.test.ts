@@ -2240,6 +2240,65 @@ describe('Agentd Service Routes', () => {
       ]))
     })
 
+    it('issues, reads, and verifies generic attestations without granting authority', async () => {
+      const issued = await app.request('/attestations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issuer: 'did:fides:publisher',
+          subject: 'did:fides:agent',
+          subjectType: 'agent',
+          provider: 'github',
+          claims: { handle: 'fides-dev' },
+        }),
+      })
+
+      expect(issued.status).toBe(201)
+      const issuedData = await issued.json()
+      expect(issuedData.authorityGranted).toBe(false)
+      expect(issuedData.attestation).toMatchObject({
+        schema_version: 'fides.attestation.v1',
+        issuer: 'did:fides:publisher',
+        subject: 'did:fides:agent',
+        subject_type: 'agent',
+        provider: 'github',
+        claims: { handle: 'fides-dev' },
+        signature: expect.stringMatching(/^local-attestation:/),
+      })
+      expect(issuedData.evidenceRefs).toHaveLength(1)
+
+      const shown = await app.request(`/attestations/${issuedData.attestation.id}`)
+      expect(shown.status).toBe(200)
+      await expect(shown.json()).resolves.toMatchObject({
+        attestation: { id: issuedData.attestation.id, schema_version: 'fides.attestation.v1' },
+        authorityGranted: false,
+      })
+
+      const verified = await app.request(`/attestations/${issuedData.attestation.id}/verify`, { method: 'POST' })
+      expect(verified.status).toBe(200)
+      const verifiedData = await verified.json()
+      expect(verifiedData.valid).toBe(true)
+      expect(verifiedData.authorityGranted).toBe(false)
+      expect(verifiedData.evidenceRefs).toHaveLength(1)
+
+      const evidence = await app.request('/evidence')
+      const evidenceData = await evidence.json()
+      expect(evidenceData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          event_id: issuedData.evidenceRefs[0],
+          type: 'attestation.issued',
+          subject: 'did:fides:agent',
+          privacy_mode: 'hash_only',
+        }),
+        expect.objectContaining({
+          event_id: verifiedData.evidenceRefs[0],
+          type: 'attestation.verified',
+          subject: 'did:fides:agent',
+          privacy_mode: 'hash_only',
+        }),
+      ]))
+    })
+
     it('records failed attestation verification evidence for missing attestations', async () => {
       const verified = await app.request('/attestations/att_missing/verify', { method: 'POST' })
       expect(verified.status).toBe(404)

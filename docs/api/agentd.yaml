@@ -99,10 +99,12 @@ paths:
     post:
       operationId: createLocalAttestation
       tags: [Attestation]
-      summary: Issue a local identity or runtime attestation
+      summary: Issue a local identity, generic, or runtime attestation
       description: |
         Bodies with `identity` add local mock identity trust anchors for
         GitHub, email, domain, package registry, or wallet claims. Bodies with
+        `issuer`, `subject`, `subjectType`, and `provider` create a generic
+        `fides.attestation.v1` record. Bodies with
         `agentId`, `codeHash`, `runtimeHash`, and `policyHash` issue a local
         MockTEE runtime attestation. Attestation issuance records evidence and
         does not grant authority by itself.
@@ -112,47 +114,52 @@ paths:
         $ref: "#/components/requestBodies/JsonObject"
       responses:
         "201":
-          description: Local identity trust-anchor attestation or runtime attestation issued
+          description: Local identity trust-anchor, generic, or runtime attestation issued
           content:
             application/json:
               schema:
                 oneOf:
                   - $ref: "#/components/schemas/LocalIdentityAttestationResponse"
+                  - $ref: "#/components/schemas/LocalGenericAttestationResponse"
                   - $ref: "#/components/schemas/LocalRuntimeAttestationResponse"
 
   /attestations/{id}:
     get:
-      operationId: getRuntimeAttestation
+      operationId: getLocalAttestation
       tags: [Attestation]
-      summary: Read a local runtime attestation
+      summary: Read a local generic or runtime attestation
       parameters:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          description: Local runtime attestation
+          description: Local generic or runtime attestation
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocalRuntimeAttestationResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/LocalGenericAttestationResponse"
+                  - $ref: "#/components/schemas/LocalRuntimeAttestationResponse"
         "404":
           $ref: "#/components/responses/Error"
 
   /attestations/{id}/verify:
     post:
-      operationId: verifyRuntimeAttestation
+      operationId: verifyLocalAttestation
       tags: [Attestation]
-      summary: Verify a local runtime attestation
+      summary: Verify a local generic or runtime attestation
       security:
         - ApiKeyAuth: []
       parameters:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
-          description: Local runtime attestation verification result
+          description: Local generic or runtime attestation verification result
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocalRuntimeAttestationVerificationResponse"
+                oneOf:
+                  - $ref: "#/components/schemas/LocalGenericAttestationVerificationResponse"
+                  - $ref: "#/components/schemas/LocalRuntimeAttestationVerificationResponse"
 
   /agent-cards:
     post:
@@ -2208,6 +2215,67 @@ components:
           type: boolean
           enum: [false]
 
+    GenericAttestationV1:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - subject_type
+        - provider
+        - claims
+        - evidence_refs
+        - issued_at
+        - payload_hash
+        - signature
+      properties:
+        schema_version:
+          type: string
+          enum: [fides.attestation.v1]
+        id:
+          type: string
+        issuer:
+          type: string
+        subject:
+          type: string
+        subject_type:
+          type: string
+          enum: [agent, publisher, principal, domain, package, wallet, passkey, runtime, build, peer]
+        provider:
+          type: string
+        claims:
+          type: object
+          additionalProperties: true
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        payload_hash:
+          type: string
+        signature:
+          type: string
+
+    LocalGenericAttestationResponse:
+      type: object
+      required: [attestation, authorityGranted]
+      properties:
+        attestation:
+          $ref: "#/components/schemas/GenericAttestationV1"
+        evidenceRefs:
+          type: array
+          items:
+            type: string
+        authorityGranted:
+          type: boolean
+          enum: [false]
+
     RuntimeAttestationV2:
       type: object
       required:
@@ -2277,6 +2345,19 @@ components:
     LocalRuntimeAttestationVerificationResponse:
       allOf:
         - $ref: "#/components/schemas/LocalRuntimeAttestationResponse"
+        - type: object
+          required: [id, valid, authorityGranted]
+          properties:
+            id:
+              type: string
+            valid:
+              type: boolean
+            error:
+              type: string
+
+    LocalGenericAttestationVerificationResponse:
+      allOf:
+        - $ref: "#/components/schemas/LocalGenericAttestationResponse"
         - type: object
           required: [id, valid, authorityGranted]
           properties:

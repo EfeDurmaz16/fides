@@ -269,14 +269,16 @@ resolved with `POST /incidents/:id/resolve`. Revocation and incident creation
 append `revocation.recorded` and `incident.reported` evidence events and return
 `evidenceRefs`.
 
-`POST /attestations` accepts two local attestation shapes. When the body
+`POST /attestations` accepts three local attestation shapes. When the body
 contains `identity`, it adds a local mock identity trust anchor for `github`,
 `email`, `domain`, `package` (`npm` or `pypi`), or `wallet` and appends
 `attestation.issued` evidence without granting authority. When the body
+contains generic `issuer`, `subject`, `subjectType`, and `provider` fields, it
+creates a local `fides.attestation.v1` record with hash-only evidence. When the body
 contains `agentId` plus `codeHash`, `runtimeHash`, and `policyHash`, it issues
 a local FIDES v2 runtime attestation through the MockTEE provider.
-`POST /attestations/:id/verify` verifies runtime provider, expiry, and hash
-shape. Root `POST /sessions` can consume a valid `attestationId` as runtime
+`POST /attestations/:id/verify` verifies generic attestation payload hashes and
+runtime provider, expiry, and hash shape. Root `POST /sessions` can consume a valid `attestationId` as runtime
 attestation evidence for high-risk capability policy. Attestation issuance and
 verification append `attestation.issued`, `attestation.verified`, or
 `attestation.failed` evidence events and return `evidenceRefs`.

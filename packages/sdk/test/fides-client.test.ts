@@ -996,6 +996,63 @@ describe('FidesClient', () => {
     expect(verified.authorityGranted).toBe(false)
   })
 
+  it('types generic attestation issue and verification responses', async () => {
+    const attestation = {
+      schema_version: 'fides.attestation.v1',
+      id: 'att_generic_1',
+      issuer: 'did:fides:publisher',
+      subject: 'did:fides:agent',
+      subject_type: 'agent',
+      provider: 'github',
+      claims: { handle: 'fides-dev' },
+      evidence_refs: [],
+      issued_at: '2026-05-30T00:00:00.000Z',
+      payload_hash: 'sha256:payload',
+      signature: 'local-attestation:payload',
+    }
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).endsWith('/attestations/att_generic_1/verify')) {
+        return new Response(JSON.stringify({
+          id: 'att_generic_1',
+          valid: true,
+          attestation,
+          evidenceRefs: ['evt_generic_verified'],
+          authorityGranted: false,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (String(url).endsWith('/attestations/att_generic_1') && init?.method === 'GET') {
+        return new Response(JSON.stringify({ attestation, authorityGranted: false }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response(JSON.stringify({
+        attestation,
+        evidenceRefs: ['evt_generic_issued'],
+        authorityGranted: false,
+      }), { status: 201, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    const issued = await client.attestations.generic({
+      issuer: 'did:fides:publisher',
+      subject: 'did:fides:agent',
+      subjectType: 'agent',
+      provider: 'github',
+      claims: { handle: 'fides-dev' },
+    })
+    expect(issued.attestation.schema_version).toBe('fides.attestation.v1')
+    expect(issued.authorityGranted).toBe(false)
+
+    const fetched = await client.attestations.get('att_generic_1')
+    expect(fetched.attestation.schema_version).toBe('fides.attestation.v1')
+
+    const verified = await client.attestations.verify('att_generic_1')
+    expect(verified.valid).toBe(true)
+    expect(verified.authorityGranted).toBe(false)
+  })
+
   it('types root evidence ledger responses as non-authorizing audit records', async () => {
     const event = {
       schema_version: 'fides.evidence_event.v1',

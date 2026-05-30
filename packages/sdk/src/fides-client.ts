@@ -1,5 +1,6 @@
 import {
   type AgentIdentity,
+  type Attestation,
   type AgentCard,
   type ApprovalDecision,
   type ApprovalRequest,
@@ -670,6 +671,18 @@ export interface FidesRuntimeAttestationRequest {
   expiresAt?: string
 }
 
+export interface FidesGenericAttestationRequest {
+  issuer: string
+  subject: string
+  subjectType: Attestation['subject_type']
+  provider: string
+  claims?: Record<string, unknown>
+  evidenceRefs?: string[]
+  issuedAt?: string
+  expiresAt?: string
+  signature?: string
+}
+
 export interface FidesIdentityAttestation {
   id: string
   schema_version: 'fides.identity_attestation.v1'
@@ -695,13 +708,29 @@ export interface FidesRuntimeAttestationResponse {
   [key: string]: unknown
 }
 
+export interface FidesGenericAttestationResponse {
+  attestation: Attestation
+  evidenceRefs?: string[]
+  authorityGranted?: false
+  [key: string]: unknown
+}
+
 export interface FidesRuntimeAttestationVerificationResponse extends FidesRuntimeAttestationResponse {
   id: string
   valid: boolean
   error?: string
 }
 
-export type FidesAttestationResponse = FidesIdentityAttestationResponse | FidesRuntimeAttestationResponse
+export interface FidesGenericAttestationVerificationResponse extends FidesGenericAttestationResponse {
+  id: string
+  valid: boolean
+  error?: string
+}
+
+export type FidesAttestationResponse =
+  | FidesIdentityAttestationResponse
+  | FidesRuntimeAttestationResponse
+  | FidesGenericAttestationResponse
 
 export interface FidesInvocationResponse {
   authorityGranted: boolean
@@ -1065,6 +1094,9 @@ export class FidesClient {
     create: (body: Record<string, unknown>): Promise<FidesAttestationResponse> => (
       this.post('/attestations', body) as Promise<FidesAttestationResponse>
     ),
+    generic: (body: FidesGenericAttestationRequest): Promise<FidesGenericAttestationResponse> => (
+      this.post('/attestations', body) as Promise<FidesGenericAttestationResponse>
+    ),
     github: (body: FidesGithubAttestationRequest): Promise<FidesIdentityAttestationResponse> => (
       this.post('/attestations', { type: 'github', ...body }) as Promise<FidesIdentityAttestationResponse>
     ),
@@ -1083,11 +1115,11 @@ export class FidesClient {
     runtime: (body: FidesRuntimeAttestationRequest): Promise<FidesRuntimeAttestationResponse> => (
       this.post('/attestations', body) as Promise<FidesRuntimeAttestationResponse>
     ),
-    get: (attestationId: string): Promise<FidesRuntimeAttestationResponse> => (
-      this.get(`/attestations/${encodeURIComponent(attestationId)}`) as Promise<FidesRuntimeAttestationResponse>
+    get: (attestationId: string): Promise<FidesRuntimeAttestationResponse | FidesGenericAttestationResponse> => (
+      this.get(`/attestations/${encodeURIComponent(attestationId)}`) as Promise<FidesRuntimeAttestationResponse | FidesGenericAttestationResponse>
     ),
-    verify: (attestationId: string): Promise<FidesRuntimeAttestationVerificationResponse> => (
-      this.post(`/attestations/${encodeURIComponent(attestationId)}/verify`, {}) as Promise<FidesRuntimeAttestationVerificationResponse>
+    verify: (attestationId: string): Promise<FidesRuntimeAttestationVerificationResponse | FidesGenericAttestationVerificationResponse> => (
+      this.post(`/attestations/${encodeURIComponent(attestationId)}/verify`, {}) as Promise<FidesRuntimeAttestationVerificationResponse | FidesGenericAttestationVerificationResponse>
     ),
   }
 

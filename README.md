@@ -335,6 +335,8 @@ pnpm build
 | `pnpm lint` | Lint codebase |
 | `pnpm typecheck` | Type-check TypeScript |
 | `pnpm examples:typecheck` | Type-check example agents and demo manifests |
+| `pnpm cli:audit` | Verify the implemented `agentd` CLI surface against the v2 command contract |
+| `pnpm api:audit` | Verify documented `agentd` API routes against the implementation |
 | `pnpm dev` | Start services in watch mode |
 | `pnpm clean` | Clean build artifacts |
 | `pnpm demo` | Run the primitive-level v2 demo |

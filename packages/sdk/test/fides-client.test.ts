@@ -302,15 +302,24 @@ describe('FidesClient', () => {
 
     const client = new FidesClient({ daemonUrl: 'http://localhost:7345', apiKey: 'sdk-key' })
 
-    await expect(client.identity.createAgent({ name: 'Calendar Agent' })).resolves.toMatchObject({
+    const created = await client.identity.createAgent({ name: 'Calendar Agent' })
+    expect(created).toMatchObject({
       identity: { did: 'did:fides:agent' },
     })
-    await expect(client.identity.list()).resolves.toMatchObject({
+    expect(created.identity.did).toBe('did:fides:agent')
+    expect(created.publicKeyHex).toBeUndefined()
+
+    const listed = await client.identity.list()
+    expect(listed).toMatchObject({
       identities: [{ did: 'did:fides:agent', type: 'agent' }],
     })
-    await expect(client.identity.show('did:fides:agent')).resolves.toMatchObject({
+    expect(listed.identities[0]?.did).toBe('did:fides:agent')
+
+    const shown = await client.identity.show('did:fides:agent')
+    expect(shown).toMatchObject({
       identity: { did: 'did:fides:agent' },
     })
+    expect(shown.identity.did).toBe('did:fides:agent')
 
     expect(calls.map(call => call.url)).toEqual([
       'http://localhost:7345/identities',

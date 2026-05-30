@@ -185,8 +185,10 @@ await client.evidence.export({ privacy_mode: 'hash_only', include_metadata: fals
 ```
 
 `identity.createAgent`, `identity.list`, and `identity.show` target the root
-`agentd` identity API. The API does not return private keys. The facade is
-intentionally thin. The AgentCard helpers target root `agentd` AgentCard
+`agentd` identity API. The API does not return private keys, and the SDK types
+model only public identity records (`did`, `type`, `publicKeyHex`,
+`createdAt`, and the public `identity` object). The facade is intentionally
+thin. The AgentCard helpers target root `agentd` AgentCard
 endpoints and use daemon-held local identity keys for signing. Agent
 registration and discovery return candidates only; `authorityGranted` remains
 `false`. Root `client.agents.register`, `client.agents.list`, and

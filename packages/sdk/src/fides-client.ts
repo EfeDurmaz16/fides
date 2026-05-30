@@ -1,5 +1,8 @@
 import {
+  type AgentIdentity,
   type CapabilityControl,
+  type PrincipalIdentity,
+  type PublisherIdentity,
   type TrustResult,
   createInvocationRequest,
   isErrorEnvelope,
@@ -20,6 +23,23 @@ export interface FidesClientOptions {
 
 export interface FidesRequestOptions {
   headers?: Record<string, string>
+}
+
+export type FidesIdentityType = 'agent' | 'publisher' | 'principal'
+export type FidesIdentity = AgentIdentity | PublisherIdentity | PrincipalIdentity
+
+export interface FidesIdentityResponse {
+  type: FidesIdentityType
+  did: string
+  publicKeyHex: string
+  createdAt: string
+  identity: FidesIdentity
+  [key: string]: unknown
+}
+
+export interface FidesIdentityListResponse {
+  identities: Array<Omit<FidesIdentityResponse, 'identity'> & { identity?: FidesIdentity }>
+  [key: string]: unknown
 }
 
 export interface FidesDiscoveryQuery {
@@ -277,11 +297,19 @@ export class FidesClientError extends Error {
 
 export class FidesClient {
   readonly identity = {
-    createAgent: (body: Record<string, unknown> = {}) => this.post('/identities', { ...body, type: 'agent' }),
-    createPublisher: (body: Record<string, unknown> = {}) => this.post('/identities', { ...body, type: 'publisher' }),
-    createPrincipal: (body: Record<string, unknown> = {}) => this.post('/identities', { ...body, type: 'principal' }),
-    list: () => this.get('/identities'),
-    show: (id: string) => this.get(`/identities/${encodeURIComponent(id)}`),
+    createAgent: (body: Record<string, unknown> = {}): Promise<FidesIdentityResponse> => (
+      this.post('/identities', { ...body, type: 'agent' }) as Promise<FidesIdentityResponse>
+    ),
+    createPublisher: (body: Record<string, unknown> = {}): Promise<FidesIdentityResponse> => (
+      this.post('/identities', { ...body, type: 'publisher' }) as Promise<FidesIdentityResponse>
+    ),
+    createPrincipal: (body: Record<string, unknown> = {}): Promise<FidesIdentityResponse> => (
+      this.post('/identities', { ...body, type: 'principal' }) as Promise<FidesIdentityResponse>
+    ),
+    list: (): Promise<FidesIdentityListResponse> => this.get('/identities') as Promise<FidesIdentityListResponse>,
+    show: (id: string): Promise<FidesIdentityResponse> => (
+      this.get(`/identities/${encodeURIComponent(id)}`) as Promise<FidesIdentityResponse>
+    ),
   }
 
   readonly cards = {

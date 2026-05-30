@@ -159,7 +159,9 @@ await client.evidence.export({ privacy_mode: 'hash_only', include_metadata: fals
 ```
 
 The local identity API returns public identity data only; it does not return
-private keys. AgentCard signing uses the daemon-held local identity key.
+private keys. SDK identity response types model only public records (`did`,
+`type`, `publicKeyHex`, `createdAt`, and the public `identity` object).
+AgentCard signing uses the daemon-held local identity key.
 Registration and discovery produce candidate records only; discovery does not
 grant authority to invoke the agent. Root agent registration/list/detail
 responses preserve `authority: "candidate_only"`, `authorityGranted: false`,

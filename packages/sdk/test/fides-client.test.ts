@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createAgentIdentity, verifySignedInvocationRequest, type SessionGrantV2 } from '@fides/core'
 import { FidesClient, FidesClientError } from '../src/fides-client.js'
 
 afterEach(() => {
@@ -295,6 +296,82 @@ describe('FidesClient', () => {
         reason_codes: ['HIGH_RISK_REQUIRES_ATTESTATION_OR_APPROVAL'],
       })
     }
+  })
+
+  it('creates and submits signed invocation requests from a session grant', async () => {
+    const requester = await createAgentIdentity()
+    const sessionGrant: SessionGrantV2 = {
+      schema_version: 'fides.session_grant.v1',
+      session_id: 'sess_signed',
+      requester_agent_id: requester.identity.did,
+      target_agent_id: 'did:fides:target',
+      principal_id: 'did:fides:principal',
+      capability: 'invoice.reconcile',
+      scopes: ['read:invoices'],
+      constraints: { invoiceId: 'inv_123' },
+      policy_hash: 'sha256:policy',
+      trust_result_hash: 'sha256:trust',
+      issued_at: '2026-05-30T00:00:00.000Z',
+      expires_at: '2026-05-30T01:00:00.000Z',
+      nonce: 'nonce_signed',
+      audience: ['did:fides:target'],
+      issuer: requester.identity.did,
+      payload_hash: 'sha256:session',
+    }
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init })
+      return new Response(JSON.stringify({
+        authorityGranted: true,
+        session: sessionGrant,
+        request: { id: 'inv_req_1' },
+        signedRequestVerified: true,
+        preflight: { status: 'allowed' },
+        result: { status: 'completed' },
+        signedResultVerified: true,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    await expect(client.invokeSigned({
+      sessionGrant,
+      input: { invoiceId: 'inv_123' },
+      privateKey: requester.privateKey,
+      inputSchema: {
+        type: 'object',
+        required: ['invoiceId'],
+        properties: { invoiceId: { type: 'string' } },
+      },
+    })).resolves.toMatchObject({
+      authorityGranted: true,
+      signedRequestVerified: true,
+    })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe('http://localhost:7345/invoke')
+    const body = JSON.parse(calls[0].init?.body as string)
+    expect(body).toMatchObject({
+      sessionId: 'sess_signed',
+      input: { invoiceId: 'inv_123' },
+      signedRequest: {
+        payload: {
+          schema_version: 'fides.invocation.request.v1',
+          issuer: requester.identity.did,
+          session_id: 'sess_signed',
+          requester_agent_id: requester.identity.did,
+          target_agent_id: 'did:fides:target',
+          principal_id: 'did:fides:principal',
+          capability: 'invoice.reconcile',
+          scopes: ['read:invoices'],
+          dry_run: false,
+        },
+        proof: {
+          verificationMethod: requester.identity.did,
+          proofPurpose: 'capabilityInvocation',
+        },
+      },
+    })
+    await expect(verifySignedInvocationRequest(body.signedRequest)).resolves.toBe(true)
   })
 
   it('uses the root AgentCard API served by local agentd', async () => {

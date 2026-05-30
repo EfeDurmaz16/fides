@@ -175,6 +175,22 @@ on `error.error` with stable `code`, `category`, `severity`, `retryable`,
 `message`, and `details` fields.
 `client.invoke()` accepts an optional signed `InvocationRequest`; if supplied,
 the daemon verifies it before execution and returns `signedRequestVerified`.
+`client.invokeSigned()` creates that canonical `InvocationRequest`, signs it
+with the requester key, and submits it with the session id and input:
+
+```ts
+const invocation = await client.invokeSigned({
+  sessionGrant: session.session,
+  input: { invoiceId: 'inv_123' },
+  privateKey: requesterPrivateKey,
+  inputSchema: {
+    type: 'object',
+    required: ['invoiceId'],
+    properties: { invoiceId: { type: 'string' } },
+  },
+})
+```
+
 The response includes the `InvocationResult`, the canonical `signedResult`
 proof when the local target identity can sign it, and `signedResultVerified`
 from daemon-side verification.

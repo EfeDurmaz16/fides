@@ -1,5 +1,7 @@
 import {
+  createInvocationRequest,
   isErrorEnvelope,
+  signInvocationRequest,
   type ErrorEnvelope,
   type InvocationRequest,
   type InvocationResult,
@@ -86,6 +88,17 @@ export interface FidesInvocationRequest {
   input?: unknown
   dryRun?: boolean
   signedRequest?: SignedInvocationRequest
+}
+
+export interface FidesSignedInvocationRequest {
+  sessionGrant: SessionGrantV2
+  input?: unknown
+  dryRun?: boolean
+  privateKey: Uint8Array | string
+  verificationMethod?: string
+  inputSchema?: unknown
+  outputSchema?: unknown
+  issuedAt?: string
 }
 
 export interface FidesInvocationResponse {
@@ -247,6 +260,29 @@ export class FidesClient {
     return this.post('/invoke', body) as Promise<FidesInvocationResponse>
   }
 
+  async invokeSigned(body: FidesSignedInvocationRequest): Promise<FidesInvocationResponse> {
+    const request = createInvocationRequest({
+      issuer: body.sessionGrant.requester_agent_id,
+      sessionGrant: body.sessionGrant,
+      input: body.input ?? {},
+      dryRun: body.dryRun,
+      inputSchema: body.inputSchema,
+      outputSchema: body.outputSchema,
+      issuedAt: body.issuedAt,
+    })
+    const signedRequest = await signInvocationRequest(
+      request,
+      privateKeyBytes(body.privateKey),
+      body.verificationMethod ?? body.sessionGrant.requester_agent_id
+    )
+    return this.invoke({
+      sessionId: body.sessionGrant.session_id,
+      input: body.input,
+      dryRun: body.dryRun,
+      signedRequest,
+    })
+  }
+
   private async get(path: string): Promise<unknown> {
     return this.request(path, { method: 'GET' })
   }
@@ -289,4 +325,12 @@ function extractErrorEnvelope(payload: unknown): ErrorEnvelope | undefined {
   if (!payload || typeof payload !== 'object') return undefined
   const error = (payload as { error?: unknown }).error
   return isErrorEnvelope(error) ? error : undefined
+}
+
+function privateKeyBytes(key: Uint8Array | string): Uint8Array {
+  const bytes = typeof key === 'string' ? Uint8Array.from(Buffer.from(key, 'hex')) : key
+  if (bytes.length !== 32) {
+    throw new FidesClientError('Ed25519 private key must be 32 bytes', 0, {}, undefined)
+  }
+  return bytes
 }

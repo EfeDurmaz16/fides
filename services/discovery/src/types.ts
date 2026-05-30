@@ -52,7 +52,7 @@ export interface RegisterAgentRequest {
   did: string
   name: string
   description?: string
-  url: string
+  url?: string
   version?: string
   provider?: { organization: string; url?: string }
   capabilities?: {
@@ -91,4 +91,6 @@ export interface AgentResponse {
   heartbeatAt: string
   createdAt: string
   updatedAt: string
+  urlRequired: false
+  authorityGranted: false
 }

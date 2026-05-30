@@ -25,7 +25,13 @@ function toAgentResponse(agent: typeof agents.$inferSelect, identity: typeof ide
     heartbeatAt: agent.heartbeatAt.toISOString(),
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt.toISOString(),
+    urlRequired: false,
+    authorityGranted: false,
   }
+}
+
+function localAgentUrl(did: string): string {
+  return `local://agents/${encodeURIComponent(did)}`
 }
 
 // GET /agents - Search agents by capability, status, tag, provider
@@ -90,8 +96,8 @@ agentsRouter.post('/', async (c) => {
   try {
     const body = await c.req.json<RegisterAgentRequest>()
 
-    if (!body.did || !body.name || !body.url) {
-      return c.json({ error: 'Missing required fields: did, name, url' }, 400)
+    if (!body.did || !body.name) {
+      return c.json({ error: 'Missing required fields: did, name' }, 400)
     }
 
     if (!body.did.startsWith(DID_PREFIX)) {
@@ -109,7 +115,7 @@ agentsRouter.post('/', async (c) => {
       did: body.did,
       name: body.name,
       description: body.description || null,
-      url: body.url,
+      url: body.url || localAgentUrl(body.did),
       version: body.version || '1.0.0',
       provider: body.provider || null,
       capabilities: body.capabilities || {},

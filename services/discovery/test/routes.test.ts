@@ -279,6 +279,55 @@ describe('Discovery Service Routes', () => {
     })
   })
 
+  describe('POST /agents', () => {
+    it('registers URL-less local agent candidates without granting authority', async () => {
+      const { db } = await import('../src/db/client.js')
+      const now = new Date('2026-05-30T00:00:00.000Z')
+      vi.mocked(db.insert).mockReturnValueOnce({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([{
+            did: TEST_DID,
+            name: 'URL-less Agent',
+            description: null,
+            url: `local://agents/${encodeURIComponent(TEST_DID)}`,
+            version: '1.0.0',
+            provider: null,
+            capabilities: {},
+            skills: [{ id: 'invoice.reconcile', name: 'Invoice Reconcile' }],
+            defaultInputModes: [],
+            defaultOutputModes: [],
+            status: 'online',
+            heartbeatAt: now,
+            createdAt: now,
+            updatedAt: now,
+          }]),
+        }),
+      } as any)
+
+      const req = new Request('http://localhost/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          did: TEST_DID,
+          name: 'URL-less Agent',
+          skills: [{ id: 'invoice.reconcile', name: 'Invoice Reconcile' }],
+        }),
+      })
+
+      const res = await app.fetch(req)
+
+      expect(res.status).toBe(201)
+      const data = await res.json()
+      expect(data).toMatchObject({
+        did: TEST_DID,
+        name: 'URL-less Agent',
+        url: `local://agents/${encodeURIComponent(TEST_DID)}`,
+        urlRequired: false,
+        authorityGranted: false,
+      })
+    })
+  })
+
   describe('POST /identities/:did/domain/verify', () => {
     it('verifies and persists domain ownership', async () => {
       const dns = await import('node:dns/promises')

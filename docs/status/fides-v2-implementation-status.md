@@ -54,6 +54,9 @@ Last verified locally: 2026-05-30.
 - Canonical v2 example agent catalog for calendar, invoice, payment, requester,
   and malicious agents, with audited capability IDs, risk classes, required
   scopes, and authority notes.
+- Standalone example scripts use dot-separated v2 capability IDs for calendar,
+  invoice, payment, and email flows; the example audit rejects the legacy
+  `namespace:action` IDs that previously remained in examples.
 - Full local demo and adversarial simulation endpoints.
 - Public docs refreshed around `agentd`, `FidesClient`, candidate-only
   discovery, and authority-via-policy/session.
@@ -78,6 +81,8 @@ Last verified locally: 2026-05-30.
 - OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
 - Canonical example catalog audit for the requested demo agents and
   capability/risk contracts.
+- Example audit coverage rejects legacy standalone example capability names so
+  docs, demos, and scripts stay aligned with the v2 ontology.
 - CI and npm publish workflows use the same full `pnpm verify` gate used
   locally.
 
@@ -372,6 +377,7 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `99d40b2 test(examples): enforce v2 capability names`
 - `7b7511f test(examples): audit canonical agent catalog`
 - `44bad51 docs: refresh fides v2 status gates`
 - `d719687 test(cli): audit agentd command surface`

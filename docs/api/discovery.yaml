@@ -624,7 +624,7 @@ components:
         version:
           type: string
         provider:
-          type: string
+          $ref: "#/components/schemas/AgentProvider"
         capabilities:
           type: object
         skills:
@@ -660,7 +660,8 @@ components:
           type: string
           example: ed25519
         provider:
-          type: string
+          allOf:
+            - $ref: "#/components/schemas/AgentProvider"
           nullable: true
         capabilities:
           type: object
@@ -742,7 +743,7 @@ components:
         version:
           type: string
         provider:
-          type: string
+          $ref: "#/components/schemas/AgentProvider"
         capabilities:
           type: object
         skills:
@@ -774,6 +775,16 @@ components:
         message:
           type: string
           example: "Agent deregistered"
+
+    AgentProvider:
+      type: object
+      required: [organization]
+      properties:
+        organization:
+          type: string
+        url:
+          type: string
+          format: uri
 
   responses:
     BadRequest:

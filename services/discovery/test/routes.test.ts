@@ -331,6 +331,112 @@ describe('Discovery Service Routes', () => {
     })
   })
 
+  describe('GET /agents', () => {
+    it('marks listed agents as unverified candidates without authority', async () => {
+      const { db } = await import('../src/db/client.js')
+      const now = new Date('2026-05-30T00:00:00.000Z')
+      const agent = {
+        did: TEST_DID,
+        name: 'Listed Agent',
+        description: null,
+        url: `local://agents/${encodeURIComponent(TEST_DID)}`,
+        version: '1.0.0',
+        provider: { organization: 'example', url: 'https://example.com' },
+        capabilities: {},
+        skills: [{ id: 'invoice.reconcile', name: 'Invoice Reconcile' }],
+        defaultInputModes: [],
+        defaultOutputModes: [],
+        status: 'online',
+        heartbeatAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }
+      const identity = {
+        did: TEST_DID,
+        publicKey: TEST_PUBLIC_KEY,
+      }
+
+      vi.mocked(db.select).mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                offset: vi.fn().mockResolvedValue([{ agents: agent, identities: identity }]),
+              }),
+            }),
+          }),
+        }),
+      } as any)
+
+      const res = await app.fetch(new Request('http://localhost/agents?capability=invoice.reconcile'))
+
+      expect(res.status).toBe(200)
+      const data = await res.json()
+      expect(data).toHaveLength(1)
+      expect(data[0]).toMatchObject({
+        did: TEST_DID,
+        name: 'Listed Agent',
+        provider: { organization: 'example', url: 'https://example.com' },
+        verified: false,
+        urlRequired: false,
+        authorityGranted: false,
+      })
+      expect(data[0].reasons).toContain('standalone_discovery_candidate')
+      expect(data[0].reasons).toContain('signed_agent_card_not_verified_by_discovery_service')
+      expect(data[0].reasons).toContain('discovery_does_not_grant_authority')
+    })
+  })
+
+  describe('GET /agents/:did', () => {
+    it('marks agent detail responses as unverified candidates without authority', async () => {
+      const { db } = await import('../src/db/client.js')
+      const now = new Date('2026-05-30T00:00:00.000Z')
+      const agent = {
+        did: TEST_DID,
+        name: 'Detail Agent',
+        description: null,
+        url: `local://agents/${encodeURIComponent(TEST_DID)}`,
+        version: '1.0.0',
+        provider: null,
+        capabilities: {},
+        skills: [{ id: 'calendar.schedule', name: 'Calendar Schedule' }],
+        defaultInputModes: [],
+        defaultOutputModes: [],
+        status: 'online',
+        heartbeatAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }
+      const identity = {
+        did: TEST_DID,
+        publicKey: TEST_PUBLIC_KEY,
+      }
+
+      vi.mocked(db.select).mockReturnValueOnce({
+        from: vi.fn().mockReturnValue({
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue([{ agents: agent, identities: identity }]),
+          }),
+        }),
+      } as any)
+
+      const res = await app.fetch(new Request(`http://localhost/agents/${encodeURIComponent(TEST_DID)}`))
+
+      expect(res.status).toBe(200)
+      const data = await res.json()
+      expect(data).toMatchObject({
+        did: TEST_DID,
+        name: 'Detail Agent',
+        verified: false,
+        urlRequired: false,
+        authorityGranted: false,
+      })
+      expect(data.reasons).toContain('standalone_discovery_candidate')
+      expect(data.reasons).toContain('signed_agent_card_not_verified_by_discovery_service')
+      expect(data.reasons).toContain('discovery_does_not_grant_authority')
+    })
+  })
+
   describe('POST /identities/:did/domain/verify', () => {
     it('verifies and persists domain ownership', async () => {
       const dns = await import('node:dns/promises')

@@ -57,6 +57,20 @@ describe('DHT pointer records', () => {
     ]))
   })
 
+  it('rejects pointer signatures whose verification method does not match publisher_id', async () => {
+    const { card, record } = await fixture()
+    const attacker = await createAgentIdentity()
+    const signed = await signDHTPointerRecord(record, attacker.privateKey, attacker.identity.did)
+
+    const result = await verifyDHTPointerRecord(signed, {
+      card,
+      verificationMethod: attacker.identity.did,
+    })
+
+    expect(result.valid).toBe(false)
+    expect(result.errors).toContain('DHT pointer verificationMethod must match publisher_id')
+  })
+
   it('rejects expired pointers', async () => {
     const { card, record } = await fixture()
     const result = await verifyDHTPointerRecord({

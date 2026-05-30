@@ -100,12 +100,16 @@ export async function verifyDHTPointerRecord(
   if (!record.signature) {
     errors.push('DHT pointer signature is required')
   } else {
+    const verificationMethod = options.verificationMethod ?? record.publisher_id
+    if (verificationMethod !== record.publisher_id) {
+      errors.push('DHT pointer verificationMethod must match publisher_id')
+    }
     const signatureValid = await verifyObject({
       payload: { ...record, signature: '' },
       proof: {
         type: 'Ed25519Signature2024',
         created: record.expires_at,
-        verificationMethod: options.verificationMethod ?? record.publisher_id,
+        verificationMethod,
         proofPurpose: 'assertionMethod',
         canonicalizationAlgorithm: 'https://fides.dev/canonical-json/v1',
         proofValue: record.signature,

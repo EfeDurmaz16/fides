@@ -11,6 +11,10 @@ Current implementation anchors:
 ## Pointer Record
 
 DHT records point from capability hash to AgentCard location and hash. They include agent ID, publisher ID, expiry, sequence, and signature.
+Pointer signature verification is issuer-bound: the verification method must
+match `publisher_id`. A valid signature from any other DID over the pointer
+payload is rejected, because DHT only provides pointers and must not let a third
+party speak for the publisher named in the record.
 
 The local daemon can publish a signed DHT pointer from an already registered
 local AgentCard without the caller supplying a URL. In that case it uses a

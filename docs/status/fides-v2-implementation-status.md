@@ -51,6 +51,9 @@ Last verified locally: 2026-05-30.
   revocation, and incidents.
 - Public facade packages include export contract tests and no longer depend on
   empty-test fallback behavior.
+- Canonical v2 example agent catalog for calendar, invoice, payment, requester,
+  and malicious agents, with audited capability IDs, risk classes, required
+  scopes, and authority notes.
 - Full local demo and adversarial simulation endpoints.
 - Public docs refreshed around `agentd`, `FidesClient`, candidate-only
   discovery, and authority-via-policy/session.
@@ -73,6 +76,8 @@ Last verified locally: 2026-05-30.
 - CLI command-surface audit for the requested root command groups.
 - OpenAPI contract coverage for evidence-producing discovery responses.
 - OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
+- Canonical example catalog audit for the requested demo agents and
+  capability/risk contracts.
 - CI and npm publish workflows use the same full `pnpm verify` gate used
   locally.
 
@@ -289,6 +294,7 @@ Recently verified commands:
 
 ```bash
 pnpm verify
+pnpm examples:audit
 pnpm examples:typecheck
 pnpm --filter @fides/sdk build
 pnpm --filter @fides/sdk test
@@ -366,6 +372,8 @@ Observed manual smoke results:
 
 Recent v2 status/DX commits:
 
+- `7b7511f test(examples): audit canonical agent catalog`
+- `44bad51 docs: refresh fides v2 status gates`
 - `d719687 test(cli): audit agentd command surface`
 - `2e0bbdf ci: use full verify gate`
 - `c2ca6b7 test(services): require existing test suites`

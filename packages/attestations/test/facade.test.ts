@@ -1,7 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { MockTEEProvider, verifyRuntimeAttestation } from '../src/index.js'
+import {
+  MockTEEProvider,
+  createAttestation,
+  signAttestation,
+  verifyRuntimeAttestation,
+  verifySignedAttestationIssuer,
+} from '../src/index.js'
+import { createAgentIdentity } from '@fides/core'
 
 describe('@fides/attestations facade', () => {
+  it('exports generic canonical Attestation primitives', async () => {
+    const issuer = await createAgentIdentity()
+    const attestation = createAttestation({
+      issuer: issuer.identity.did,
+      subject: 'did:fides:agent',
+      subjectType: 'agent',
+      provider: 'github',
+      claims: { handle: 'fides-dev' },
+      evidenceRefs: ['evt_github_1'],
+    })
+
+    const signed = await signAttestation(attestation, issuer.privateKey, issuer.identity.did)
+
+    expect(attestation.schema_version).toBe('fides.attestation.v1')
+    expect(attestation.payload_hash).toMatch(/^sha256:/)
+    expect(await verifySignedAttestationIssuer(signed)).toBe(true)
+  })
+
   it('exports MockTEE issue and verify primitives', async () => {
     const provider = new MockTEEProvider()
     const hash = (value: string) => `sha256:${value.repeat(64).slice(0, 64)}`

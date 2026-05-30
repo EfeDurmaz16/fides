@@ -2630,6 +2630,16 @@ components:
           enum: [false]
         explanation:
           type: string
+        evidenceRefs:
+          type: array
+          description: Evidence event references produced by root discovery endpoints.
+          items:
+            type: string
+        evidence_refs:
+          type: array
+          description: Snake-case evidence event references for protocol object compatibility.
+          items:
+            type: string
 
     CardResponse:
       type: object

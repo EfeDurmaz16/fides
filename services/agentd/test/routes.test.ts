@@ -501,6 +501,8 @@ describe('Agentd Service Routes', () => {
       expect(discovered.status).toBe(200)
       const discoveredData = await discovered.json()
       expect(discoveredData.authorityGranted).toBe(false)
+      expect(discoveredData.evidenceRefs).toEqual([expect.any(String)])
+      expect(discoveredData.evidence_refs).toEqual(discoveredData.evidenceRefs)
       expect(discoveredData.candidates).toEqual(expect.arrayContaining([
         expect.objectContaining({
           agentId: identity.did,
@@ -520,6 +522,26 @@ describe('Agentd Service Routes', () => {
       expect(discoveredData.candidates[0].reasons).toContain('url_not_required_for_local_discovery')
       expect(discoveredData.candidates[0].reasons).toContain('protocol_version_compatible')
 
+      const evidence = await app.request('/evidence')
+      expect(evidence.status).toBe(200)
+      const evidenceData = await evidence.json()
+      expect(evidenceData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          event_id: discoveredData.evidenceRefs[0],
+          type: 'discovery.performed',
+          actor: 'did:fides:agentd:local-daemon',
+          subject: 'fides.discovery.local',
+          capability: 'invoice.reconcile',
+          decision: 'candidate_only',
+          privacy_mode: 'hash_only',
+          metadata: expect.objectContaining({
+            provider: 'local',
+            candidates: 1,
+            authorityGranted: false,
+          }),
+        }),
+      ]))
+
       const localDiscovered = await app.request('/discover/local', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -530,6 +552,7 @@ describe('Agentd Service Routes', () => {
         provider: 'local',
         authorityGranted: false,
         count: 1,
+        evidenceRefs: [expect.any(String)],
       })
 
       const wellKnownDiscovered = await app.request('/discover/well-known', {
@@ -542,6 +565,7 @@ describe('Agentd Service Routes', () => {
         provider: 'well-known',
         authorityGranted: false,
         count: 1,
+        evidenceRefs: [expect.any(String)],
       })
     })
 

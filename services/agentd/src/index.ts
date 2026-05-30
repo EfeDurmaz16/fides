@@ -1269,25 +1269,79 @@ async function localDiscoveryResult(body: Record<string, unknown>, provider = 'l
   }
 }
 
+function appendDiscoveryEvidence<T extends Record<string, unknown>>(
+  provider: string,
+  body: Record<string, unknown>,
+  result: T
+): T & { evidenceRefs: string[]; evidence_refs: string[] } {
+  const capability = typeof body.capability === 'string' ? body.capability : undefined
+  const candidates = Array.isArray(result.candidates) ? result.candidates.length : 0
+  const records = Array.isArray(result.records) ? result.records.length : 0
+  const pointers = Array.isArray(result.pointers) ? result.pointers.length : 0
+  const rejectedCandidates = Array.isArray(result.rejectedCandidates) ? result.rejectedCandidates.length : 0
+  const rejectedRecords = Array.isArray(result.rejectedRecords) ? result.rejectedRecords.length : 0
+  const rejectedPointers = Array.isArray(result.rejectedPointers) ? result.rejectedPointers.length : 0
+  const event = appendRootEvidence({
+    type: 'discovery.performed',
+    actor: 'did:fides:agentd:local-daemon',
+    subject: `fides.discovery.${provider}`,
+    capability,
+    input: {
+      provider,
+      capability,
+      constraints: body.constraints,
+      supported_versions: body.supported_versions ?? body.supportedVersions,
+      required_versions: body.required_versions ?? body.requiredVersions,
+    },
+    output: {
+      candidates,
+      records,
+      pointers,
+      rejectedCandidates,
+      rejectedRecords,
+      rejectedPointers,
+      authorityGranted: false,
+    },
+    decision: 'candidate_only',
+    privacy_mode: 'hash_only',
+    metadata: {
+      provider,
+      capability,
+      candidates,
+      records,
+      pointers,
+      rejectedCandidates,
+      rejectedRecords,
+      rejectedPointers,
+      authorityGranted: false,
+    },
+  })
+  return {
+    ...result,
+    evidenceRefs: [event.event_id],
+    evidence_refs: [event.event_id],
+  }
+}
+
 app.post('/discover', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const result = await localDiscoveryResult(body)
   if ('error' in result) return c.json({ error: result.error }, 400)
-  return c.json(result)
+  return c.json(appendDiscoveryEvidence('local', body, result))
 })
 
 app.post('/discover/local', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const result = await localDiscoveryResult(body, 'local')
   if ('error' in result) return c.json({ error: result.error }, 400)
-  return c.json(result)
+  return c.json(appendDiscoveryEvidence('local', body, result))
 })
 
 app.post('/discover/well-known', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const result = await localDiscoveryResult(body, 'well-known')
   if ('error' in result) return c.json({ error: result.error }, 400)
-  return c.json(result)
+  return c.json(appendDiscoveryEvidence('well-known', body, result))
 })
 
 app.post('/trust/evaluate', async (c) => {
@@ -2698,7 +2752,7 @@ app.post('/discover/dht', async (c) => {
     found.pointers as Array<Record<string, unknown>>,
     'rejectedPointers'
   )
-  return c.json({
+  const result = {
     provider: 'dht',
     capability: found.capability,
     pointers: filtered.records,
@@ -2708,7 +2762,8 @@ app.post('/discover/dht', async (c) => {
     ],
     authorityGranted: false,
     explanation: 'DHT discovery returns signed pointer candidates only; trust, policy, and session grants are evaluated separately.',
-  })
+  }
+  return c.json(appendDiscoveryEvidence('dht', body, result))
 })
 
 async function localRegistryRecordFor(cardId: string, mode: 'public' | 'private' = 'public') {
@@ -2884,7 +2939,7 @@ app.post('/discover/registry', async (c) => {
   ))
   const verified = await filterVerifiedLocalRegistryRecords(matched)
   const filtered = filterVersionCompatibleProviderRecords(body, verified.records)
-  return c.json({
+  const result = {
     provider: 'registry',
     capability: capability ?? null,
     records: filtered.records,
@@ -2894,7 +2949,8 @@ app.post('/discover/registry', async (c) => {
     ],
     authorityGranted: false,
     explanation: 'Registry discovery returns registry records only; registration does not grant invocation authority.',
-  })
+  }
+  return c.json(appendDiscoveryEvidence('registry', body, result))
 })
 
 app.post('/discover/federation', async (c) => {
@@ -2920,7 +2976,7 @@ app.post('/discover/federation', async (c) => {
       'federation_does_not_grant_authority',
     ],
   }))
-  return c.json({
+  const result = {
     provider: 'federation',
     mode: 'local_mock_federation',
     capability: capability ?? null,
@@ -2934,7 +2990,8 @@ app.post('/discover/federation', async (c) => {
     federationPeerVerified: peer.verified,
     authorityGranted: false,
     explanation: 'Federation expands discovery to registry peers only; federated results are candidates and never invocation authority.',
-  })
+  }
+  return c.json(appendDiscoveryEvidence('federation', body, result))
 })
 
 app.get('/registry/index', async (c) => {
@@ -3008,14 +3065,15 @@ app.post('/discover/relay', async (c) => {
     !capability || (record.capabilities as string[] | undefined)?.includes(capability)
   ))
   const filtered = filterVersionCompatibleProviderRecords(body, matched)
-  return c.json({
+  const result = {
     provider: 'relay',
     capability: capability ?? null,
     records: filtered.records,
     [filtered.rejectedKey]: filtered.rejected,
     authorityGranted: false,
     explanation: 'Relay discovery returns presence records only; relay presence is not authority.',
-  })
+  }
+  return c.json(appendDiscoveryEvidence('relay', body, result))
 })
 
 app.get('/.well-known/fides.json', (c) => {

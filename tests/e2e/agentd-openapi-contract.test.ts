@@ -247,6 +247,14 @@ describe('Agentd OpenAPI contract', () => {
     }
   })
 
+  it('documents discovery responses as evidence-producing candidate results', () => {
+    const schema = extractSchemaBlock(openApi, 'DiscoveryResponse')
+    expect(schema).toContain('authorityGranted:')
+    expect(schema).toContain('enum: [false]')
+    expect(schema).toContain('evidenceRefs:')
+    expect(schema).toContain('evidence_refs:')
+  })
+
   it('keeps root v2 runtime routes documented in OpenAPI', () => {
     const runtimeOperations = extractAgentdRuntimeRoutes(agentdSource)
       .filter(operation => operation.path.startsWith('/'))

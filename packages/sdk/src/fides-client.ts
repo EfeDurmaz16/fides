@@ -101,6 +101,8 @@ export interface FidesDiscoveryResponse {
   pointers?: FidesProviderRecord[]
   rejectedPointers?: FidesProviderRecord[]
   authorityGranted: false
+  evidenceRefs?: string[]
+  evidence_refs?: string[]
   explanation?: string
   [key: string]: unknown
 }

@@ -1073,6 +1073,7 @@ describe('Agentd Service Routes', () => {
       const requestData = await request.json()
       expect(requestData.approval.status).toBe('pending')
       expect(requestData.authorityGranted).toBe(false)
+      expect(requestData.evidenceRefs).toHaveLength(1)
 
       const listed = await app.request('/approvals')
       expect(listed.status).toBe(200)
@@ -1090,6 +1091,56 @@ describe('Agentd Service Routes', () => {
       expect(approvedData.approval.status).toBe('approved')
       expect(approvedData.decision.decision).toBe('approved')
       expect(approvedData.authorityGranted).toBe(false)
+      expect(approvedData.evidenceRefs).toHaveLength(1)
+
+      const denyRequest = await app.request('/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: 'did:fides:requester',
+          agentId: 'did:fides:agent',
+          capability: 'deploy.production',
+          riskLevel: 'critical',
+        }),
+      })
+      const denyRequestData = await denyRequest.json()
+      const denied = await app.request(`/approvals/${denyRequestData.approval.id}/deny`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approverId: 'did:fides:approver', reason: 'No production deploy window.' }),
+      })
+      expect(denied.status).toBe(200)
+      const deniedData = await denied.json()
+      expect(deniedData.approval.status).toBe('denied')
+      expect(deniedData.decision.decision).toBe('denied')
+      expect(deniedData.evidenceRefs).toHaveLength(1)
+
+      const evidence = await app.request('/evidence')
+      const evidenceData = await evidence.json()
+      expect(evidenceData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          event_id: requestData.evidenceRefs[0],
+          type: 'approval.requested',
+          subject: 'did:fides:agent',
+          capability: 'payments.prepare',
+          privacy_mode: 'hash_only',
+        }),
+        expect.objectContaining({
+          event_id: approvedData.evidenceRefs[0],
+          type: 'approval.granted',
+          actor: 'did:fides:approver',
+          decision: 'approved',
+          privacy_mode: 'hash_only',
+        }),
+        expect.objectContaining({
+          event_id: deniedData.evidenceRefs[0],
+          type: 'approval.denied',
+          actor: 'did:fides:approver',
+          decision: 'denied',
+          privacy_mode: 'hash_only',
+        }),
+      ]))
     })
 
     it('serves root kill switch rules and blocks scoped session issuance', async () => {
@@ -1127,6 +1178,7 @@ describe('Agentd Service Routes', () => {
       expect(enabled.status).toBe(201)
       const enabledData = await enabled.json()
       expect(enabledData.rule.enabled).toBe(true)
+      expect(enabledData.evidenceRefs).toHaveLength(1)
 
       const blocked = await app.request('/sessions', {
         method: 'POST',
@@ -1148,6 +1200,18 @@ describe('Agentd Service Routes', () => {
       const disabled = await app.request(`/killswitch/${enabledData.rule.id}`, { method: 'DELETE' })
       expect(disabled.status).toBe(200)
       expect((await disabled.json()).rule.enabled).toBe(false)
+
+      const evidence = await app.request('/evidence')
+      const evidenceData = await evidence.json()
+      expect(evidenceData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          event_id: enabledData.evidenceRefs[0],
+          type: 'kill_switch.triggered',
+          actor: 'did:fides:operator',
+          subject: 'deploy.preview',
+          privacy_mode: 'hash_only',
+        }),
+      ]))
     })
 
     it('serves root revocation records and blocks scoped session issuance', async () => {
@@ -1185,6 +1249,7 @@ describe('Agentd Service Routes', () => {
       expect(revocation.status).toBe(201)
       const revocationData = await revocation.json()
       expect(revocationData.record.status).toBe('active')
+      expect(revocationData.evidenceRefs).toHaveLength(1)
 
       const listed = await app.request('/revocations')
       expect(listed.status).toBe(200)
@@ -1213,6 +1278,18 @@ describe('Agentd Service Routes', () => {
       const blockedData = await blocked.json()
       expect(blockedData.policy.reason_codes).toContain('REVOCATION_ACTIVE')
       expect(blockedData.error.code).toBe('REVOCATION_ACTIVE')
+
+      const evidence = await app.request('/evidence')
+      const evidenceData = await evidence.json()
+      expect(evidenceData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          event_id: revocationData.evidenceRefs[0],
+          type: 'revocation.recorded',
+          actor: 'did:fides:operator',
+          subject: identity.did,
+          privacy_mode: 'hash_only',
+        }),
+      ]))
     })
 
     it('serves root incident records and blocks scoped session issuance until resolved', async () => {
@@ -1252,6 +1329,7 @@ describe('Agentd Service Routes', () => {
       expect(incident.status).toBe(201)
       const incidentData = await incident.json()
       expect(incidentData.record.resolution_status).toBe('open')
+      expect(incidentData.evidenceRefs).toHaveLength(1)
 
       const listed = await app.request('/incidents')
       expect(listed.status).toBe(200)
@@ -1284,6 +1362,19 @@ describe('Agentd Service Routes', () => {
       })
       expect(resolved.status).toBe(200)
       expect((await resolved.json()).record.resolution_status).toBe('resolved')
+
+      const evidence = await app.request('/evidence')
+      const evidenceData = await evidence.json()
+      expect(evidenceData.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          event_id: incidentData.evidenceRefs[0],
+          type: 'incident.reported',
+          actor: 'did:fides:principal',
+          subject: identity.did,
+          risk_level: 'critical',
+          privacy_mode: 'hash_only',
+        }),
+      ]))
     })
 
     it('serves root runtime attestations and uses valid attestations for high-risk session issuance', async () => {

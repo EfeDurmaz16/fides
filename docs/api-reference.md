@@ -209,17 +209,23 @@ invalid invocation request signatures, and capability schema violations.
 `POST /approvals` creates an approval request and records approval decisions
 through `/approvals/:id/approve` or `/approvals/:id/deny`. Approval records do
 not grant authority by themselves; they are inputs to policy/session issuance.
+Approval request, grant, and deny mutations append `approval.requested`,
+`approval.granted`, or `approval.denied` evidence events and return
+`evidenceRefs`.
 `POST /killswitch` creates an active kill switch rule for an agent, publisher,
 capability, session, principal, or risk class. Active kill switch rules override
 normal trust and policy evaluation and block root session issuance until
-disabled with `DELETE /killswitch/:id`.
+disabled with `DELETE /killswitch/:id`. Kill switch creation appends a
+`kill_switch.triggered` evidence event and returns `evidenceRefs`.
 
 `POST /revocations` creates a local FIDES v2 revocation record for keys,
 identities, agents, AgentCards, capabilities, sessions, attestations, or
 publishers. Active matching revocations override normal policy and block root
 session issuance. `POST /incidents` records an open incident against a target
 agent; open incidents require policy review for matching session requests until
-resolved with `POST /incidents/:id/resolve`.
+resolved with `POST /incidents/:id/resolve`. Revocation and incident creation
+append `revocation.recorded` and `incident.reported` evidence events and return
+`evidenceRefs`.
 
 `POST /attestations` issues a local FIDES v2 runtime attestation through the
 MockTEE provider. `POST /attestations/:id/verify` verifies provider, expiry,

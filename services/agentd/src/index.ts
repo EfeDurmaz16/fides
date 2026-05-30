@@ -1777,9 +1777,25 @@ app.post('/approvals', async (c) => {
     expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : undefined,
   })
   localApprovals.set(approval.id, approval)
+  const event = appendRootEvidence({
+    type: 'approval.requested',
+    actor: requesterAgentId,
+    subject: targetAgentId,
+    principal: principalId,
+    capability,
+    decision: 'requested',
+    risk_level: approval.risk_level,
+    privacy_mode: 'hash_only',
+    metadata: {
+      approval_id: approval.id,
+      requested_scopes: approval.requested_scopes,
+      upstream_evidence_refs: approval.evidence_refs,
+    },
+  })
 
   return c.json({
     approval,
+    evidenceRefs: [event.event_id],
     authorityGranted: false,
     explanation: 'Approval records human authorization intent; it does not grant invocation authority without policy and a scoped SessionGrant.',
   }, 201)
@@ -1812,10 +1828,27 @@ app.post('/approvals/:id/approve', async (c) => {
   const updated: ApprovalRequest = { ...approval, status: 'approved' }
   localApprovals.set(id, updated)
   localApprovalDecisions.set(decision.id, decision)
+  const event = appendRootEvidence({
+    type: 'approval.granted',
+    actor: decision.approver_id,
+    subject: approval.target_agent_id,
+    principal: approval.principal_id,
+    capability: approval.capability,
+    output: decision,
+    decision: decision.decision,
+    risk_level: approval.risk_level,
+    privacy_mode: 'hash_only',
+    metadata: {
+      approval_id: approval.id,
+      approval_decision_id: decision.id,
+      upstream_evidence_refs: decision.evidence_refs,
+    },
+  })
 
   return c.json({
     approval: updated,
     decision,
+    evidenceRefs: [event.event_id],
     authorityGranted: false,
     explanation: 'Approval has been recorded. A policy evaluation and scoped SessionGrant are still required before invocation.',
   })
@@ -1840,10 +1873,27 @@ app.post('/approvals/:id/deny', async (c) => {
   const updated: ApprovalRequest = { ...approval, status: 'denied' }
   localApprovals.set(id, updated)
   localApprovalDecisions.set(decision.id, decision)
+  const event = appendRootEvidence({
+    type: 'approval.denied',
+    actor: decision.approver_id,
+    subject: approval.target_agent_id,
+    principal: approval.principal_id,
+    capability: approval.capability,
+    output: decision,
+    decision: decision.decision,
+    risk_level: approval.risk_level,
+    privacy_mode: 'hash_only',
+    metadata: {
+      approval_id: approval.id,
+      approval_decision_id: decision.id,
+      upstream_evidence_refs: decision.evidence_refs,
+    },
+  })
 
   return c.json({
     approval: updated,
     decision,
+    evidenceRefs: [event.event_id],
     authorityGranted: false,
   })
 })
@@ -1880,9 +1930,24 @@ app.post('/killswitch', async (c) => {
     expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : undefined,
   })
   localKillSwitchRules.set(rule.id, rule)
+  const event = appendRootEvidence({
+    type: 'kill_switch.triggered',
+    actor: rule.issuer,
+    subject: rule.target,
+    decision: rule.enabled ? 'enabled' : 'created_disabled',
+    privacy_mode: 'hash_only',
+    metadata: {
+      rule_id: rule.id,
+      target_type: rule.target_type,
+      target: rule.target,
+      enabled: rule.enabled,
+      reason: rule.reason,
+    },
+  })
 
   return c.json({
     rule,
+    evidenceRefs: [event.event_id],
     authorityOverride: true,
     explanation: 'Kill switch rules override normal trust and policy evaluation while active.',
   }, 201)
@@ -1947,9 +2012,22 @@ app.post('/revocations', async (c) => {
     expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : undefined,
   })
   localRevocationRecords.set(record.id, record)
+  const event = appendRootEvidence({
+    type: 'revocation.recorded',
+    actor: record.issuer,
+    subject: record.target_id,
+    decision: record.status,
+    privacy_mode: 'hash_only',
+    metadata: {
+      revocation_id: record.id,
+      target_type: record.target_type,
+      upstream_evidence_refs: record.evidence_refs,
+    },
+  })
 
   return c.json({
     record,
+    evidenceRefs: [event.event_id],
     authorityOverride: true,
     explanation: 'Active revocation records override normal trust and policy evaluation for matching requests.',
   }, 201)
@@ -2018,9 +2096,25 @@ app.post('/incidents', async (c) => {
     reputationPenalty: typeof body.reputationPenalty === 'number' ? body.reputationPenalty : undefined,
   })
   localIncidentRecords.set(record.id, record)
+  const event = appendRootEvidence({
+    type: 'incident.reported',
+    actor: record.reporter,
+    subject: record.target_agent_id,
+    decision: record.resolution_status,
+    risk_level: record.severity,
+    privacy_mode: 'hash_only',
+    metadata: {
+      incident_id: record.id,
+      category: record.category,
+      trust_penalty: record.trust_penalty,
+      reputation_penalty: record.reputation_penalty,
+      upstream_evidence_refs: record.evidence_refs,
+    },
+  })
 
   return c.json({
     record,
+    evidenceRefs: [event.event_id],
     explanation: 'Open incident records require policy review for matching target agents until resolved.',
   }, 201)
 })

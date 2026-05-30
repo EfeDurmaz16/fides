@@ -38,7 +38,9 @@ describe('FidesClient', () => {
     await client.discovery.dht({ capability: 'invoice.reconcile' })
     await client.discovery.federation({ capability: 'invoice.reconcile' })
     await client.trust.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
+    await client.trust.get('did:fides:agent')
     await client.reputation.update({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
+    await client.reputation.get('did:fides:agent')
     await client.policy.evaluate({ agentId: 'did:fides:agent', capability: 'invoice.reconcile' })
     await client.delegations.create({
       delegator: 'did:fides:principal',
@@ -107,7 +109,9 @@ describe('FidesClient', () => {
       'http://localhost:4817/discover/dht',
       'http://localhost:4817/discover/federation',
       'http://localhost:4817/trust/evaluate',
+      'http://localhost:4817/trust/did%3Afides%3Aagent',
       'http://localhost:4817/reputation/update',
+      'http://localhost:4817/reputation/did%3Afides%3Aagent',
       'http://localhost:4817/policy/evaluate',
       'http://localhost:4817/delegations',
       'http://localhost:4817/approvals',
@@ -165,7 +169,9 @@ describe('FidesClient', () => {
       'POST',
       'POST',
       'POST',
+      'GET',
       'POST',
+      'GET',
       'POST',
       'POST',
       'POST',
@@ -215,16 +221,16 @@ describe('FidesClient', () => {
       supported_versions: ['fides.v2.0'],
       required_versions: ['fides.v2.0'],
     })
-    expect(JSON.parse(calls[37].init?.body as string)).toEqual({
+    expect(JSON.parse(calls[39].init?.body as string)).toEqual({
       capability: 'invoice.reconcile',
       supported_versions: ['fides.v2.0'],
       required_versions: ['fides.v2.0'],
     })
-    expect(JSON.parse(calls[43].init?.body as string)).toEqual({
+    expect(JSON.parse(calls[45].init?.body as string)).toEqual({
       capability: 'invoice.reconcile',
       agentId: 'did:fides:agent',
     })
-    expect(JSON.parse(calls[52].init?.body as string)).toEqual({
+    expect(JSON.parse(calls[54].init?.body as string)).toEqual({
       privacy_mode: 'hash_only',
       include_metadata: false,
     })

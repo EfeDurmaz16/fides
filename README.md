@@ -402,22 +402,10 @@ FIDES v2 implements a complete trust fabric with:
 
 ## Contributing
 
-We welcome contributions! Here's how to get started:
-
-1. **Fork the repository**
-2. **Create a feature branch** — `git checkout -b feature/amazing-feature`
-3. **Make your changes** — Follow TypeScript best practices
-4. **Add tests** — Ensure `pnpm test` passes
-5. **Commit changes** — `git commit -m 'Add amazing feature'`
-6. **Push to branch** — `git push origin feature/amazing-feature`
-7. **Open a Pull Request**
-
-**Guidelines:**
-- Write clear commit messages
-- Add tests for new features
-- Update documentation as needed
-- Follow existing code style
-- Ensure CI passes
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the FIDES v2 contribution workflow,
+architecture invariants, security review checklist, and verification gates.
+At minimum, keep `pnpm verify` green and run `pnpm smoke:agentd` for CLI,
+API, daemon, session, invocation, discovery, demo, or simulation changes.
 
 ---
 

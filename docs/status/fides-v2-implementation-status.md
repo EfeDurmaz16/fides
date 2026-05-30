@@ -101,6 +101,9 @@ Last verified locally: 2026-05-30.
 - OpenAPI contract coverage for evidence-producing discovery responses.
 - Publishable package gate for all non-private package manifests, including
   README/LICENSE/package metadata and dry-run package contents.
+- Root `CONTRIBUTING.md` documents protocol invariants, security-sensitive
+  review areas, docs expectations, and local verification gates for external
+  contributors.
 - OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
 - Core tests for issuer-bound `DelegationTokenV2` canonical signatures and
   payload-hash tamper detection.
@@ -415,7 +418,7 @@ Observed manual smoke results:
 - Add real DHT, relay, registry, and federation adapters.
 - Add production TEE/build/container attestation providers.
 - Harden local key storage beyond prototype snapshot material.
-- Add full release notes and contribution guidance for external OSS users.
+- Add full release notes for external OSS users.
 
 ## Commit History Summary
 

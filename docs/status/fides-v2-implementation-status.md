@@ -118,10 +118,10 @@ Last verified locally: 2026-05-30.
 - CLI tests cover canonical signed delegation-token submission to `/v1/sessions`.
 - CLI tests cover canonical signed invocation request submission and issuer
   proof verification.
-- `pnpm cli:audit` now checks 57 command/help surfaces across the Phase 22 CLI
+- `pnpm cli:audit` now checks 59 command/help surfaces across the Phase 22 CLI
   matrix, including identity, attestations, cards, discovery providers, policy,
   sessions, invocation, approvals, evidence, revocation, incidents, kill switch,
-  daemon, demo, and adversarial simulation commands.
+  delegation, daemon, demo, and adversarial simulation commands.
 - `pnpm smoke:agentd` starts an isolated local daemon and exercises root
   `pnpm agentd` CLI flows for demo, signed invocation, canonical signed
   delegation-token session creation, all-provider discovery, and adversarial

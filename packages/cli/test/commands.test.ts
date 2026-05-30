@@ -231,7 +231,14 @@ describe('CLI Commands', () => {
         if (String(url).endsWith('/sessions')) {
           return new Response(JSON.stringify({
             authorityGranted: true,
-            session: { session_id: 'sess_cli' },
+            session: {
+              session_id: 'sess_cli',
+              requester_agent_id: 'did:fides:requester',
+              target_agent_id: 'did:fides:agent',
+              principal_id: 'did:fides:principal',
+              capability: 'invoice.reconcile',
+              scopes: ['read:invoices', 'write:evidence'],
+            },
           }), { status: 201, headers: { 'Content-Type': 'application/json' } });
         }
         return new Response(JSON.stringify({
@@ -273,6 +280,104 @@ describe('CLI Commands', () => {
         sessionId: 'sess_cli',
         input: { invoiceId: 'inv_123' },
       });
+    });
+
+    it('invokes an existing session directly when signing is not requested', async () => {
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(url), init });
+        return new Response(JSON.stringify({
+          authorityGranted: true,
+          result: { status: 'completed' },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }));
+
+      const { createInvokeCommand } = await import('../src/commands/invoke.js');
+      const cmd = createInvokeCommand();
+
+      await cmd.parseAsync([
+        '--session-id',
+        'sess_direct',
+        '--input-json',
+        '{"invoiceId":"inv_123"}',
+        '--json',
+      ], { from: 'user' });
+
+      expect(calls.map(call => call.url)).toEqual([
+        'http://localhost:7345/invoke',
+      ]);
+      expect(JSON.parse(calls[0].init?.body as string)).toEqual({
+        sessionId: 'sess_direct',
+        input: { invoiceId: 'inv_123' },
+      });
+    });
+
+    it('signs invocation requests with the requester key', async () => {
+      const {
+        deriveEd25519PublicKeyHex,
+        didFromPublicKey,
+        verifySignedInvocationRequestIssuer,
+      } = await import('@fides/core');
+      const privateKeyHex = '1'.repeat(64);
+      const publicKeyHex = await deriveEd25519PublicKeyHex(privateKeyHex);
+      const requesterDid = didFromPublicKey(Uint8Array.from(Buffer.from(publicKeyHex, 'hex')));
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+      vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        calls.push({ url: String(url), init });
+        if (String(url).endsWith('/sessions/sess_signed')) {
+          return new Response(JSON.stringify({
+            session: {
+              schema_version: 'fides.session_grant.v2',
+              session_id: 'sess_signed',
+              requester_agent_id: requesterDid,
+              target_agent_id: 'did:fides:target',
+              principal_id: 'did:fides:principal',
+              capability: 'invoice.reconcile',
+              scopes: ['read:invoices'],
+              constraints: {},
+              audience: ['did:fides:target'],
+              policy_hash: 'sha256:policy',
+              trust_result_hash: 'sha256:trust',
+              issued_at: '2026-05-30T00:00:00.000Z',
+              expires_at: '2026-05-30T01:00:00.000Z',
+              nonce: 'nonce_cli',
+              payload_hash: 'sha256:session',
+            },
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(JSON.stringify({
+          authorityGranted: true,
+          signedRequestVerified: true,
+          result: { status: 'completed' },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }));
+
+      const { createInvokeCommand } = await import('../src/commands/invoke.js');
+      const cmd = createInvokeCommand();
+
+      await cmd.parseAsync([
+        '--session-id',
+        'sess_signed',
+        '--input-json',
+        '{"invoiceId":"inv_123"}',
+        '--sign',
+        '--requester-private-key',
+        privateKeyHex,
+        '--json',
+      ], { from: 'user' });
+
+      expect(calls.map(call => call.url)).toEqual([
+        'http://localhost:7345/sessions/sess_signed',
+        'http://localhost:7345/invoke',
+      ]);
+      const invokeBody = JSON.parse(calls[1].init?.body as string);
+      expect(invokeBody.sessionId).toBe('sess_signed');
+      expect(invokeBody.input).toEqual({ invoiceId: 'inv_123' });
+      expect(invokeBody.signedRequest.payload.issuer).toBe(requesterDid);
+      expect(invokeBody.signedRequest.payload.session_id).toBe('sess_signed');
+      expect(invokeBody.signedRequest.proof.verificationMethod).toBe(requesterDid);
+      await expect(verifySignedInvocationRequestIssuer(invokeBody.signedRequest)).resolves.toBe(true);
     });
   });
 

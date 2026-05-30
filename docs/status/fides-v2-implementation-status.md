@@ -42,6 +42,9 @@ Last verified locally: 2026-05-30.
   and verifies the issuer-bound proof without requiring an external
   `delegatorPublicKey`; legacy token sessions remain supported.
 - Scoped SessionGrants and invocation preflight.
+- `agentd invoke --sign` fetches or creates a SessionGrant, verifies the
+  requester private key resolves to `requester_agent_id`, signs a canonical
+  `InvocationRequest`, and submits it as `signedRequest`.
 - SessionGrants now carry supported protocol versions, optional required
   versions, and the negotiated protocol version used for authority.
 - Hash-chained EvidenceEvents with verification and export.
@@ -100,6 +103,8 @@ Last verified locally: 2026-05-30.
   payload-hash tamper detection.
 - Core and agentd route tests cover canonical delegation-session creation,
   issuer mismatch rejection, and nonce replay protection.
+- CLI tests cover canonical signed invocation request submission and issuer
+  proof verification.
 - Canonical example catalog audit for the requested demo agents and
   capability/risk contracts.
 - Example audit coverage rejects legacy standalone example capability names so
@@ -114,7 +119,8 @@ Last verified locally: 2026-05-30.
 - AgentCard create/sign/verify/register/discover.
 - Capability-specific trust and reputation.
 - Policy evaluation and session request.
-- Invocation with dry-run and denial modes.
+- Invocation with dry-run, denial modes, and optional canonical signed
+  invocation requests through SDK and CLI.
 - Evidence append, inspect, verify, and export.
 - Full demo scenario.
 - Adversarial simulation harness.

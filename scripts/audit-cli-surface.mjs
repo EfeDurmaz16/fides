@@ -48,7 +48,7 @@ const checks = [
   { args: ['graph', '--help'], contains: ['inspect'] },
   { args: ['policy', '--help'], contains: ['evaluate'] },
   { args: ['session', '--help'], contains: ['request', 'show', 'verify'] },
-  { args: ['invoke', '--help'], contains: ['--capability <capability>', '--input <path>', '--dry-run'] },
+  { args: ['invoke', '--help'], contains: ['--capability <capability>', '--input <path>', '--dry-run', '--sign'] },
   { args: ['approval', '--help'], contains: ['request', 'list', 'approve', 'deny'] },
   { args: ['evidence', '--help'], contains: ['list', 'inspect', 'verify', 'export'] },
   { args: ['revoke', '--help'], contains: ['agent', 'key', 'identity', 'card', 'capability', 'session', 'attestation', 'publisher'] },

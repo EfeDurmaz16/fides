@@ -68,6 +68,7 @@ agentd dht publish --capability invoice.reconcile --agent-id did:fides:...
 agentd dht find --capability invoice.reconcile
 agentd invoke did:fides:... --capability invoice.reconcile --input invoice.json --requested-scopes invoice:read
 agentd invoke --session-id sess_... --input invoice.json
+agentd invoke --session-id sess_... --input invoice.json --sign --requester-private-key-file requester.key
 agentd invoke --dry-run did:fides:... --capability payments.prepare --input payment.json
 agentd trust did:fides:... --capability invoice.reconcile
 agentd reputation update --agent did:fides:... --capability invoice.reconcile --successful-invocations 5
@@ -146,8 +147,11 @@ local pointer without a URL by passing `--agent-id` or `--agent-card-id` with
 `POST /invoke` directly. With `<agent-id> --capability`, it first requests a
 policy-checked `SessionGrant` from `POST /sessions`, then invokes that session.
 Input defaults to `{}` and can be supplied with `--input` or `--input-json`.
-Use `--dry-run` to request dry-run execution; discovery is never treated as
-authority by this command.
+Use `--dry-run` to request dry-run execution. Use `--sign` with
+`--requester-private-key-file` or `--requester-private-key` to fetch the
+SessionGrant, create a canonical signed `InvocationRequest`, and submit it as
+`signedRequest`; the private key must resolve to the grant's
+`requester_agent_id`. Discovery is never treated as authority by this command.
 
 `trust <agent-id> --capability` evaluates root v2 capability-specific trust
 through local agentd, defaulting to `http://localhost:7345` or

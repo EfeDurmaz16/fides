@@ -182,9 +182,10 @@ endpoints and use daemon-held local identity keys for signing. Agent
 registration and discovery return candidates only; `authorityGranted` remains
 `false`. Trust and reputation APIs return capability-scoped signals, and policy
 evaluation explains the decision but still requires session grant issuance
-before invocation. Delegation helpers create unsigned local DelegationToken
-intents; they do not grant invocation authority without signing, policy, and a
-scoped SessionGrant. Session request and invocation helpers use the same root
+before invocation. Delegation helpers create local DelegationToken intents; the
+daemon signs them when the delegator identity is locally managed, but they still
+do not grant invocation authority without policy and a scoped SessionGrant.
+Session request and invocation helpers use the same root
 local daemon API. Approval and kill switch helpers expose local authority
 controls, with kill switch rules overriding normal policy while active.
 Revocation and incident helpers expose local governance records that feed root

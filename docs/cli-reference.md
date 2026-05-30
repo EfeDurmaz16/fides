@@ -160,6 +160,9 @@ records human authorization intent and evidence, but does not grant authority
 without a policy evaluation and scoped `SessionGrant`.
 
 `delegate create --agentd-url` records a root v2 delegation with local agentd.
+If the delegator DID belongs to a daemon-held local identity, agentd signs the
+DelegationToken with that key; otherwise the delegation is stored as an unsigned
+external-signing draft.
 Without `--agentd-url`, `delegate create` keeps its legacy local
 `DelegationToken` generation behavior. Delegation still does not grant
 invocation authority until policy produces a scoped `SessionGrant`.

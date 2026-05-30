@@ -57,6 +57,7 @@ import {
   normalizeAgentCard,
   resolveIncidentRecordV2,
   signAgentCard,
+  signDelegationToken,
   signDHTPointerRecord,
   signRegistryIndexRecord,
   signRegistryPeerRecord,
@@ -1433,13 +1434,19 @@ app.post('/delegations', async (c) => {
     expiresAt,
     audience: Array.isArray(body.audience) ? body.audience.map(String) : undefined,
   })
-  localDelegationTokens.set(token.id, token)
+  const delegatorIdentity = localIdentities.get(delegator)
+  const signedToken = delegatorIdentity
+    ? await signDelegationToken(token, Buffer.from(delegatorIdentity.privateKeyHex, 'hex'))
+    : token
+  localDelegationTokens.set(signedToken.id, signedToken)
 
   return c.json({
-    token,
-    signed: false,
+    token: signedToken,
+    signed: Boolean(delegatorIdentity),
     authorityGranted: false,
-    explanation: 'Delegation records scoped authorization intent. It must be signed and converted into a policy-checked SessionGrant before invocation.',
+    explanation: delegatorIdentity
+      ? 'Delegation records signed scoped authorization intent. It must still be converted into a policy-checked SessionGrant before invocation.'
+      : 'Delegation records scoped authorization intent. It must be signed and converted into a policy-checked SessionGrant before invocation.',
   }, 201)
 })
 

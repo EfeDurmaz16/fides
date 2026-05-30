@@ -202,9 +202,11 @@ flags. Trust and reputation are signals only; policy decisions still do not
 execute capabilities and allowed decisions require a scoped SessionGrant before
 invocation.
 
-`POST /delegations` creates a local unsigned `DelegationToken` intent and
-returns `authorityGranted: false`; it must still be signed and converted into a
-policy-checked SessionGrant before invocation. `POST /sessions` issues a local
+`POST /delegations` creates a local `DelegationToken` intent and returns
+`authorityGranted: false`; when the delegator is a daemon-held local identity,
+the token is signed immediately with that delegator key. External delegator
+tokens remain unsigned drafts until signed elsewhere. A delegation must still be
+converted into a policy-checked SessionGrant before invocation. `POST /sessions` issues a local
 `SessionGrant` only after policy allows or limits the action to dry-run, signs
 it with the daemon's local authority DID, and returns `signedSession` plus
 `signedSessionVerified`. `POST /sessions/:id/verify` and `POST /invoke` require

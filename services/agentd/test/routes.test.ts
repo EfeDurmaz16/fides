@@ -822,12 +822,19 @@ describe('Agentd Service Routes', () => {
       expect(policyData.requiresSessionGrant).toBe(true)
     })
 
-    it('creates local delegation tokens without granting invocation authority', async () => {
+    it('creates signed local delegation tokens without granting invocation authority', async () => {
+      const principalResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'principal', name: 'Local Principal' }),
+      })
+      const { identity: principal } = await principalResponse.json()
+
       const delegation = await app.request('/delegations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          delegator: 'did:fides:principal:local',
+          delegator: principal.did,
           delegatee: 'did:fides:requester:local',
           capabilities: ['invoice.reconcile'],
           constraints: { maxActions: 1 },
@@ -837,14 +844,28 @@ describe('Agentd Service Routes', () => {
       expect(delegation.status).toBe(201)
       const data = await delegation.json()
       expect(data.authorityGranted).toBe(false)
-      expect(data.signed).toBe(false)
+      expect(data.signed).toBe(true)
       expect(data.token).toMatchObject({
-        delegator: 'did:fides:principal:local',
+        delegator: principal.did,
         delegatee: 'did:fides:requester:local',
         capabilities: ['invoice.reconcile'],
         audience: ['did:fides:invoice-agent'],
       })
-      expect(data.token.signature).toBe('')
+      expect(data.token.signature).toMatch(/^[0-9a-f]{128}$/)
+
+      const externalDelegation = await app.request('/delegations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          delegator: 'did:fides:external-principal',
+          delegatee: 'did:fides:requester:local',
+          capabilities: ['invoice.reconcile'],
+        }),
+      })
+      expect(externalDelegation.status).toBe(201)
+      const externalData = await externalDelegation.json()
+      expect(externalData.signed).toBe(false)
+      expect(externalData.token.signature).toBe('')
 
       const invalid = await app.request('/delegations', {
         method: 'POST',

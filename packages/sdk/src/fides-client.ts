@@ -289,6 +289,23 @@ export interface FidesSignedInvocationRequest {
   issuedAt?: string
 }
 
+export interface FidesSessionRequest {
+  agentId?: string
+  targetAgentId?: string
+  agent_id?: string
+  capability: string
+  capabilityId?: string
+  principalId?: string
+  requesterAgentId?: string
+  requestedScopes?: string[]
+  constraints?: Record<string, unknown>
+  attestationId?: string
+  runtimeAttestationValid?: boolean
+  approvalGranted?: boolean
+  audience?: string[]
+  expiresAt?: string
+}
+
 export interface FidesEvidenceExportRequest {
   privacy_mode?: 'public' | 'private' | 'redacted' | 'hash_only'
   include_metadata?: boolean
@@ -908,7 +925,7 @@ export class FidesClient {
   }
 
   readonly sessions = {
-    request: (body: Record<string, unknown>): Promise<FidesSessionResponse> => (
+    request: (body: FidesSessionRequest): Promise<FidesSessionResponse> => (
       this.post('/sessions', body) as Promise<FidesSessionResponse>
     ),
     verify: (sessionId: string): Promise<FidesSessionVerifyResponse> => (

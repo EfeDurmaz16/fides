@@ -676,7 +676,9 @@ describe('FidesClient', () => {
       payload_hash: 'sha256:payload',
     }
 
-    vi.stubGlobal('fetch', vi.fn(async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init })
       return new Response(JSON.stringify({
         authorized: true,
         authorityGranted: false,
@@ -695,6 +697,14 @@ describe('FidesClient', () => {
     const result = await client.sessions.request({
       agentId: 'did:fides:agent',
       capability: 'payments.prepare',
+      principalId: 'did:fides:principal',
+      requesterAgentId: 'did:fides:requester',
+      requestedScopes: ['payments:prepare'],
+      constraints: { dryRunOnly: true },
+      attestationId: 'att_runtime_1',
+      approvalGranted: true,
+      audience: ['did:fides:agent'],
+      expiresAt: '2026-05-30T01:00:00.000Z',
     })
 
     expect(result.authorized).toBe(true)
@@ -702,6 +712,18 @@ describe('FidesClient', () => {
     expect(result.authorityMode).toBe('dry_run_only')
     expect(result.allowedActions).toEqual(['dry_run'])
     expect(result.session.constraints).toEqual({ dryRunOnly: true })
+    expect(JSON.parse(calls[0]?.init?.body as string)).toEqual({
+      agentId: 'did:fides:agent',
+      capability: 'payments.prepare',
+      principalId: 'did:fides:principal',
+      requesterAgentId: 'did:fides:requester',
+      requestedScopes: ['payments:prepare'],
+      constraints: { dryRunOnly: true },
+      attestationId: 'att_runtime_1',
+      approvalGranted: true,
+      audience: ['did:fides:agent'],
+      expiresAt: '2026-05-30T01:00:00.000Z',
+    })
   })
 
   it('adds identity trust-anchor attestations through promise helpers', async () => {

@@ -184,6 +184,7 @@ const session = await client.sessions.request({
   agentId: identity.identity.did,
   capability: 'invoice.reconcile',
   requestedScopes: ['invoice:read'],
+  audience: [identity.identity.did],
 })
 if (session.authorityMode === 'dry_run_only' && session.allowedActions?.includes('dry_run')) {
   // Dry-run-only sessions are simulation authority, not execution authority.

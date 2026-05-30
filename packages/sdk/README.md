@@ -61,7 +61,10 @@ const card = await client.cards.create({
 const signed = await client.cards.sign({ id: identity.identity.did })
 const verified = await client.cards.verify(identity.identity.did)
 
-await client.agents.register({ agentCardId: identity.identity.did })
+const registration = await client.agents.register({ agentCardId: identity.identity.did })
+if (registration.authority !== 'candidate_only' || registration.authorityGranted !== false) {
+  throw new Error('Registration must remain candidate-only')
+}
 const agents = await client.agents.list()
 const candidateAgent = await client.agents.inspect(identity.identity.did)
 const candidates = await client.discovery.find({ capability: 'invoice.reconcile' })
@@ -154,10 +157,12 @@ await client.evidence.export({ privacy_mode: 'hash_only', include_metadata: fals
 The local identity API returns public identity data only; it does not return
 private keys. AgentCard signing uses the daemon-held local identity key.
 Registration and discovery produce candidate records only; discovery does not
-grant authority to invoke the agent. Standalone discovery responses preserve
-`verified: false`, `authorityGranted: false`, and machine-readable `reasons`
-so SDK callers do not accidentally treat metadata discovery as trust or
-permission. Trust and reputation are capability-scoped signals; policy
+grant authority to invoke the agent. Root agent registration/list/detail
+responses preserve `authority: "candidate_only"`, `authorityGranted: false`,
+`verified`, and machine-readable `reasons`. Standalone discovery responses
+preserve `verified: false`, `authorityGranted: false`, and machine-readable
+`reasons` so SDK callers do not accidentally treat metadata discovery as trust
+or permission. Trust and reputation are capability-scoped signals; policy
 decisions still require scoped session grants before invocation.
 Root session and invocation helpers use the local daemon preflight path and are
 currently in-memory. Approval and kill switch helpers expose local authority

@@ -25,7 +25,10 @@ const card = await client.cards.create({
 await client.cards.sign({ id: identity.identity.did })
 await client.cards.verify(identity.identity.did)
 await client.cards.get(identity.identity.did)
-await client.agents.register({ agentCardId: identity.identity.did })
+const registration = await client.agents.register({ agentCardId: identity.identity.did })
+if (registration.authority !== 'candidate_only' || registration.authorityGranted !== false) {
+  throw new Error('Registration must remain candidate-only')
+}
 await client.agents.list()
 await client.agents.inspect(identity.identity.did)
 const results = await client.discovery.find({ capability: 'invoice.reconcile' })
@@ -183,8 +186,11 @@ await client.evidence.export({ privacy_mode: 'hash_only', include_metadata: fals
 intentionally thin. The AgentCard helpers target root `agentd` AgentCard
 endpoints and use daemon-held local identity keys for signing. Agent
 registration and discovery return candidates only; `authorityGranted` remains
-`false`. Standalone discovery candidate metadata also carries `verified: false`
-and machine-readable `reasons`, which the SDK preserves on returned AgentCard
+`false`. Root `client.agents.register`, `client.agents.list`, and
+`client.agents.inspect` preserve `authority: "candidate_only"`,
+`authorityGranted: false`, `verified`, and machine-readable `reasons`.
+Standalone discovery candidate metadata also carries `verified: false` and
+machine-readable `reasons`, which the SDK preserves on returned AgentCard
 objects. Trust and reputation APIs return capability-scoped signals, and policy
 evaluation explains the decision but still requires session grant issuance
 before invocation. Delegation helpers create local DelegationToken intents; the

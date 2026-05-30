@@ -55,6 +55,7 @@ import {
   signAgentCard,
   signDHTPointerRecord,
   signRegistryIndexRecord,
+  verifySignedInvocationRequest,
   signInvocationResult,
   validateAgentCard,
   verifyDHTPointerRecord,
@@ -83,6 +84,7 @@ import {
   type RevocationRecordV2,
   type RuntimeAttestation,
   type SessionGrantV2,
+  type SignedInvocationRequest,
   type SignedRegistryIndexRecord,
   type SignedAgentCard,
   type TrustResult,
@@ -529,6 +531,12 @@ function policyErrorEnvelope(policy: FidesPolicyDecision) {
       required_controls: policy.required_controls,
     },
   })
+}
+
+function isSignedInvocationRequest(value: unknown): value is SignedInvocationRequest {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<SignedInvocationRequest>
+  return Boolean(candidate.payload && typeof candidate.payload === 'object' && candidate.proof && typeof candidate.proof === 'object')
 }
 
 async function verifyLocalRuntimeAttestation(attestationId: string | undefined, agentId: string): Promise<boolean | undefined> {
@@ -1553,7 +1561,7 @@ app.post('/invoke', async (c) => {
     }), sessionId, authorityGranted: false }, 404)
   }
 
-  const request = createInvocationRequest({
+  let request = createInvocationRequest({
     issuer: record.session.requester_agent_id,
     sessionGrant: record.session,
     input: body.input ?? {},
@@ -1561,6 +1569,43 @@ app.post('/invoke', async (c) => {
     inputSchema: found.capability.inputSchema,
     outputSchema: found.capability.outputSchema,
   })
+  let signedRequest: SignedInvocationRequest | undefined
+  let signedRequestVerified = false
+  if (body.signedRequest !== undefined) {
+    if (!isSignedInvocationRequest(body.signedRequest)) {
+      return c.json({ error: createErrorEnvelope('IDENTITY_INVALID_SIGNATURE', {
+        message: 'signedRequest must be a canonical signed InvocationRequest',
+      }), authorityGranted: false }, 400)
+    }
+
+    const candidateSignedRequest = body.signedRequest
+    signedRequest = candidateSignedRequest
+    signedRequestVerified = await verifySignedInvocationRequest(candidateSignedRequest)
+    const signedPayload = candidateSignedRequest.payload
+    const expectedInputHash = hashProtocolPayload(body.input ?? {})
+    const expectedDryRun = typeof body.dryRun === 'boolean' ? body.dryRun : false
+    const payloadMatchesSession = signedPayload.session_id === record.session.session_id &&
+      signedPayload.requester_agent_id === record.session.requester_agent_id &&
+      signedPayload.target_agent_id === record.session.target_agent_id &&
+      signedPayload.principal_id === record.session.principal_id &&
+      signedPayload.capability === record.session.capability &&
+      signedPayload.input_hash === expectedInputHash &&
+      signedPayload.dry_run === expectedDryRun
+
+    if (!signedRequestVerified || !payloadMatchesSession) {
+      return c.json({ error: createErrorEnvelope('IDENTITY_INVALID_SIGNATURE', {
+        message: 'Signed invocation request failed verification or does not match the session and input',
+        details: {
+          signedRequestVerified,
+          payloadMatchesSession,
+          sessionId,
+          request_id: signedPayload.id,
+        },
+      }), authorityGranted: false }, 401)
+    }
+
+    request = signedPayload
+  }
   const preflight = evaluateInvocationPreflight({
     request,
     policyDecision: record.policy,
@@ -1617,6 +1662,8 @@ app.post('/invoke', async (c) => {
     authorityGranted: preflight.can_execute,
     session: record.session,
     request,
+    signedRequest,
+    signedRequestVerified,
     preflight,
     result,
     signedResult,

@@ -186,15 +186,18 @@ invocation.
 returns `authorityGranted: false`; it must still be signed and converted into a
 policy-checked SessionGrant before invocation. `POST /sessions` issues a local
 `SessionGrant` only after policy allows or limits the action to dry-run.
-`POST /invoke` verifies the session, runs the policy preflight path, validates
-the capability context, and returns an `InvocationResult` plus a canonical
+`POST /invoke` verifies the session, verifies an optional caller-supplied
+canonical `signedRequest`, runs the policy preflight path, validates the
+capability context, and returns an `InvocationResult` plus a canonical
 `signedResult` proof from the target agent identity when the target is locally
-managed. Invocation state and result evidence are persisted in the local daemon
-snapshot when SQLite state is enabled; normalized durable invocation tables
-remain follow-up hardening work. Session issuance and invocation failures
-return a stable `ErrorEnvelope` on the `error` field for policy denial,
-approval required, active revocation, active kill switch, missing capability,
-missing session, expired session, and invalid session-scope cases.
+managed. A supplied signed request must verify and match the session, input
+hash, and dry-run mode before execution. Invocation state and result evidence
+are persisted in the local daemon snapshot when SQLite state is enabled;
+normalized durable invocation tables remain follow-up hardening work. Session
+issuance and invocation failures return a stable `ErrorEnvelope` on the
+`error` field for policy denial, approval required, active revocation, active
+kill switch, missing capability, missing session, expired session, invalid
+session-scope cases, and invalid invocation request signatures.
 
 `POST /approvals` creates an approval request and records approval decisions
 through `/approvals/:id/approve` or `/approvals/:id/deny`. Approval records do

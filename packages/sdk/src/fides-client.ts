@@ -4,6 +4,7 @@ import {
   type InvocationRequest,
   type InvocationResult,
   type SessionGrantV2,
+  type SignedInvocationRequest,
   type SignedInvocationResult,
 } from '@fides/core'
 
@@ -84,12 +85,15 @@ export interface FidesInvocationRequest {
   session_id?: string
   input?: unknown
   dryRun?: boolean
+  signedRequest?: SignedInvocationRequest
 }
 
 export interface FidesInvocationResponse {
   authorityGranted: boolean
   session: SessionGrantV2
   request: InvocationRequest
+  signedRequest?: SignedInvocationRequest
+  signedRequestVerified?: boolean
   preflight: Record<string, unknown>
   result: InvocationResult
   signedResult?: SignedInvocationResult

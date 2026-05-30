@@ -45,10 +45,13 @@ vi.mock('node:dns/promises', () => ({
 import { app } from '../src/index.js'
 import {
   createDelegationToken,
+  createIdentityKeyPair,
   createIncidentRecord,
+  createInvocationRequest,
   createRevocationRecord,
   signDelegationToken,
   signIncidentRecord,
+  signInvocationRequest,
   signRevocationRecord,
 } from '@fides/core'
 import * as ed from '@noble/ed25519'
@@ -789,6 +792,88 @@ describe('Agentd Service Routes', () => {
           output_hash: expect.stringMatching(/^sha256:/),
         }),
       ]))
+    })
+
+    it('verifies caller-supplied signed invocation requests before execution', async () => {
+      const requester = await createIdentityKeyPair()
+      const identityResponse = await app.request('/identities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'agent', name: 'Signed Invoice Agent' }),
+      })
+      const { identity } = await identityResponse.json()
+      await app.request('/agent-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity,
+          capabilities: [{
+            id: 'invoice.signed_reconcile',
+            riskLevel: 'medium',
+            requiredScopes: ['invoice:read'],
+          }],
+        }),
+      })
+      await app.request(`/agent-cards/${encodeURIComponent(identity.did)}/sign`, { method: 'POST' })
+      await app.request('/agents/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentCardId: identity.did }),
+      })
+
+      const session = await app.request('/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          principalId: 'did:fides:principal',
+          requesterAgentId: requester.did,
+          agentId: identity.did,
+          capability: 'invoice.signed_reconcile',
+          requestedScopes: ['invoice:read'],
+        }),
+      })
+      expect(session.status).toBe(201)
+      const sessionData = await session.json()
+      const input = { invoiceId: 'inv_signed' }
+      const request = createInvocationRequest({
+        issuer: requester.did,
+        sessionGrant: sessionData.session,
+        input,
+      })
+      const signedRequest = await signInvocationRequest(request, requester.privateKey, requester.did)
+
+      const accepted = await app.request('/invoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: sessionData.session.session_id,
+          input,
+          signedRequest,
+        }),
+      })
+      expect(accepted.status).toBe(200)
+      const acceptedData = await accepted.json()
+      expect(acceptedData.signedRequestVerified).toBe(true)
+      expect(acceptedData.request).toEqual(request)
+      expect(acceptedData.signedResultVerified).toBe(true)
+
+      const rejected = await app.request('/invoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: sessionData.session.session_id,
+          input: { invoiceId: 'inv_tampered' },
+          signedRequest,
+        }),
+      })
+      expect(rejected.status).toBe(401)
+      await expect(rejected.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'IDENTITY_INVALID_SIGNATURE',
+          category: 'identity',
+        },
+      })
     })
 
     it('returns typed error envelopes for root session and invocation failures', async () => {

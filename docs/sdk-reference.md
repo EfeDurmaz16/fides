@@ -131,6 +131,7 @@ const session = await client.sessions.request({
 const invocation = await client.invoke({
   sessionId: session.session.session_id,
   input: { invoiceId: 'inv_123' },
+  // signedRequest may be supplied when the requester signs an InvocationRequest.
 })
 if (!invocation.signedResultVerified) {
   throw new Error('Invocation result signature did not verify')
@@ -172,9 +173,11 @@ a registered local AgentCard. Failed SDK calls throw `FidesClientError`; when
 the daemon returns a protocol `ErrorEnvelope`, the typed envelope is available
 on `error.error` with stable `code`, `category`, `severity`, `retryable`,
 `message`, and `details` fields.
-`client.invoke()` returns a typed invocation response including the
-`InvocationResult`, the canonical `signedResult` proof when the local target
-identity can sign it, and `signedResultVerified` from daemon-side verification.
+`client.invoke()` accepts an optional signed `InvocationRequest`; if supplied,
+the daemon verifies it before execution and returns `signedRequestVerified`.
+The response includes the `InvocationResult`, the canonical `signedResult`
+proof when the local target identity can sign it, and `signedResultVerified`
+from daemon-side verification.
 Advanced authority flows can use `AgentdClient`. `AgentdClient.health()` reads
 `GET /health` and returns typed authority-store and local-state-store status,
 including the SQLite snapshot path when the daemon exposes it.

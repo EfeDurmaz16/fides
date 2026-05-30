@@ -87,6 +87,7 @@ import {
   type DHTPointerRecord,
   type IncidentRecord,
   type IncidentRecordV2,
+  type FidesErrorCode,
   type IdentityTrustAnchor,
   type KillSwitchRule,
   type DelegationToken,
@@ -126,6 +127,20 @@ const TRUST_GRAPH_URL = process.env.TRUST_GRAPH_URL || 'http://localhost:3200'
 const REGISTRY_URL = process.env.REGISTRY_URL || 'http://localhost:7346'
 const TRUST_GRAPH_SERVICE_ID = 'trust-graph'
 const PROPAGATION_MAX_ATTEMPTS = parseInt(process.env.AGENTD_PROPAGATION_MAX_ATTEMPTS || '5', 10)
+
+function localError(
+  code: FidesErrorCode,
+  message: string,
+  details?: Record<string, unknown>,
+): { error: ReturnType<typeof createErrorEnvelope>; authorityGranted: false } {
+  return {
+    error: createErrorEnvelope(code, {
+      message,
+      ...(details ? { details } : {}),
+    }),
+    authorityGranted: false,
+  }
+}
 
 const teeProvider = new RuntimeMockTEEProvider()
 const runtimeAttestationProvider = new CoreMockTEEProvider()
@@ -1996,7 +2011,7 @@ app.post('/approvals', async (c) => {
       ? body.capabilityId
       : undefined
   if (!capability) {
-    return c.json({ error: 'capability is required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'capability is required', { field: 'capability' }), 400)
   }
 
   const approval = createApprovalRequest({
@@ -2049,7 +2064,7 @@ app.post('/approvals/:id/approve', async (c) => {
   const id = c.req.param('id')
   const approval = localApprovals.get(id)
   if (!approval) {
-    return c.json({ error: 'approval request not found', id }, 404)
+    return c.json(localError('APPROVAL_NOT_FOUND', 'approval request not found', { id }), 404)
   }
 
   const body = await c.req.json().catch(() => ({}))
@@ -2094,7 +2109,7 @@ app.post('/approvals/:id/deny', async (c) => {
   const id = c.req.param('id')
   const approval = localApprovals.get(id)
   if (!approval) {
-    return c.json({ error: 'approval request not found', id }, 404)
+    return c.json(localError('APPROVAL_NOT_FOUND', 'approval request not found', { id }), 404)
   }
 
   const body = await c.req.json().catch(() => ({}))
@@ -2149,12 +2164,12 @@ app.post('/killswitch', async (c) => {
     targetType !== 'principal' &&
     targetType !== 'risk_class'
   ) {
-    return c.json({ error: 'targetType must be agent, publisher, capability, session, principal, or risk_class' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'targetType must be agent, publisher, capability, session, principal, or risk_class', { field: 'targetType' }), 400)
   }
 
   const target = typeof body.target === 'string' ? body.target : undefined
   if (!target) {
-    return c.json({ error: 'target is required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'target is required', { field: 'target' }), 400)
   }
 
   const rule = createKillSwitchRule({
@@ -2201,7 +2216,7 @@ app.delete('/killswitch/:id', (c) => {
   const id = c.req.param('id')
   const rule = localKillSwitchRules.get(id)
   if (!rule) {
-    return c.json({ error: 'kill switch rule not found', id }, 404)
+    return c.json(localError('KILL_SWITCH_RULE_NOT_FOUND', 'kill switch rule not found', { id }), 404)
   }
   const { payload_hash: _payloadHash, ...rulePayload } = rule
   const disabledPayload = { ...rulePayload, enabled: false }
@@ -2227,7 +2242,7 @@ app.post('/revocations', async (c) => {
     targetType !== 'attestation' &&
     targetType !== 'publisher'
   ) {
-    return c.json({ error: 'targetType must be key, identity, agent, agent_card, capability, session, attestation, or publisher' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'targetType must be key, identity, agent, agent_card, capability, session, attestation, or publisher', { field: 'targetType' }), 400)
   }
 
   const targetId = typeof body.targetId === 'string'
@@ -2236,7 +2251,7 @@ app.post('/revocations', async (c) => {
       ? body.target_id
       : undefined
   if (!targetId) {
-    return c.json({ error: 'targetId is required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'targetId is required', { field: 'targetId' }), 400)
   }
 
   const record = createRevocationRecordV2({
@@ -2281,7 +2296,11 @@ app.get('/revocations/:id', (c) => {
   const id = c.req.param('id')
   const record = localRevocationRecords.get(id) ?? Array.from(localRevocationRecords.values()).find(item => item.target_id === id)
   if (!record) {
-    return c.json({ id, revoked: false }, 404)
+    return c.json({
+      ...localError('REVOCATION_NOT_FOUND', 'revocation record not found', { id }),
+      id,
+      revoked: false,
+    }, 404)
   }
   return c.json({ id, revoked: isActiveLocalRevocation(record), record })
 })
@@ -2290,7 +2309,7 @@ app.post('/incidents', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   const severity = typeof body.severity === 'string' ? body.severity : undefined
   if (severity !== 'low' && severity !== 'medium' && severity !== 'high' && severity !== 'critical') {
-    return c.json({ error: 'severity must be low, medium, high, or critical' }, 400)
+    return c.json(localError('INCIDENT_INVALID', 'severity must be low, medium, high, or critical', { field: 'severity' }), 400)
   }
 
   const category = typeof body.category === 'string' ? body.category : undefined
@@ -2304,7 +2323,7 @@ app.post('/incidents', async (c) => {
     category !== 'payment_error' &&
     category !== 'suspicious_behavior'
   ) {
-    return c.json({ error: 'category is invalid' }, 400)
+    return c.json(localError('INCIDENT_INVALID', 'category is invalid', { field: 'category' }), 400)
   }
 
   const targetAgentId = typeof body.targetAgentId === 'string'
@@ -2313,12 +2332,12 @@ app.post('/incidents', async (c) => {
       ? body.target_agent_id
       : undefined
   if (!targetAgentId) {
-    return c.json({ error: 'targetAgentId is required' }, 400)
+    return c.json(localError('INCIDENT_INVALID', 'targetAgentId is required', { field: 'targetAgentId' }), 400)
   }
 
   const description = typeof body.description === 'string' ? body.description : undefined
   if (!description) {
-    return c.json({ error: 'description is required' }, 400)
+    return c.json(localError('INCIDENT_INVALID', 'description is required', { field: 'description' }), 400)
   }
 
   const record = createIncidentRecordV2({
@@ -2367,7 +2386,7 @@ app.get('/incidents/:id', (c) => {
   const id = c.req.param('id')
   const record = localIncidentRecords.get(id)
   if (!record) {
-    return c.json({ error: 'incident record not found', id }, 404)
+    return c.json(localError('INCIDENT_NOT_FOUND', 'incident record not found', { id }), 404)
   }
   return c.json({ record })
 })
@@ -2376,7 +2395,7 @@ app.post('/incidents/:id/resolve', async (c) => {
   const id = c.req.param('id')
   const record = localIncidentRecords.get(id)
   if (!record) {
-    return c.json({ error: 'incident record not found', id }, 404)
+    return c.json(localError('INCIDENT_NOT_FOUND', 'incident record not found', { id }), 404)
   }
   const body = await c.req.json().catch(() => ({}))
   const status = body.status === 'dismissed' || body.status === 'false_positive' ? body.status : 'resolved'
@@ -3155,7 +3174,7 @@ app.post('/evidence', async (c) => {
   const type = typeof body.type === 'string' ? body.type : undefined
   const actor = typeof body.actor === 'string' ? body.actor : undefined
   if (!type || !actor) {
-    return c.json({ error: 'type and actor are required' }, 400)
+    return c.json(localError('REQUEST_INVALID', 'type and actor are required', { fields: ['type', 'actor'] }), 400)
   }
   const event = appendRootEvidence({
     type: type as EvidenceEventV2Input['type'],
@@ -3208,7 +3227,7 @@ app.post('/evidence/export', async (c) => {
     privacyMode !== 'redacted' &&
     privacyMode !== 'hash_only'
   ) {
-    return c.json({ error: 'privacy_mode must be public, private, redacted, or hash_only' }, 400)
+    return c.json(localError('EVIDENCE_PRIVACY_MODE_INVALID', 'privacy_mode must be public, private, redacted, or hash_only', { field: 'privacy_mode' }), 400)
   }
   const includeMetadata = typeof body.include_metadata === 'boolean'
     ? body.include_metadata
@@ -3234,7 +3253,7 @@ app.get('/evidence/:eventId', (c) => {
   const eventId = c.req.param('eventId')
   const event = localEvidenceEvents.find(item => item.event_id === eventId)
   if (!event) {
-    return c.json({ error: 'evidence event not found', eventId }, 404)
+    return c.json(localError('EVIDENCE_EVENT_NOT_FOUND', 'evidence event not found', { eventId }), 404)
   }
   return c.json({ event, authorityGranted: false })
 })

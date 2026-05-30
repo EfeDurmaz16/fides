@@ -55,4 +55,36 @@ describe('error envelopes', () => {
       severity: 'critical',
     })
   })
+
+  it('covers root local API validation and lookup failures', () => {
+    expect(createErrorEnvelope('REQUEST_INVALID')).toMatchObject({
+      code: 'REQUEST_INVALID',
+      category: 'request',
+      retryable: false,
+    })
+    expect(createErrorEnvelope('APPROVAL_NOT_FOUND')).toMatchObject({
+      code: 'APPROVAL_NOT_FOUND',
+      category: 'approval',
+    })
+    expect(createErrorEnvelope('KILL_SWITCH_RULE_NOT_FOUND')).toMatchObject({
+      code: 'KILL_SWITCH_RULE_NOT_FOUND',
+      category: 'kill_switch',
+    })
+    expect(createErrorEnvelope('REVOCATION_NOT_FOUND')).toMatchObject({
+      code: 'REVOCATION_NOT_FOUND',
+      category: 'revocation',
+    })
+    expect(createErrorEnvelope('INCIDENT_NOT_FOUND')).toMatchObject({
+      code: 'INCIDENT_NOT_FOUND',
+      category: 'incident',
+    })
+    expect(createErrorEnvelope('EVIDENCE_EVENT_NOT_FOUND')).toMatchObject({
+      code: 'EVIDENCE_EVENT_NOT_FOUND',
+      category: 'evidence',
+    })
+    expect(createErrorEnvelope('EVIDENCE_PRIVACY_MODE_INVALID')).toMatchObject({
+      code: 'EVIDENCE_PRIVACY_MODE_INVALID',
+      category: 'evidence',
+    })
+  })
 })

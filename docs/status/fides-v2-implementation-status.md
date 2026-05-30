@@ -18,7 +18,8 @@ Last verified locally: 2026-05-30.
   - `pnpm agentd <command>`
   - `pnpm agentd:dev`
 - Canonical signing model for signed protocol objects.
-- Typed error envelopes on important session and invocation failure paths.
+- Typed error envelopes on session, invocation, approval, kill switch,
+  revocation, incident, and evidence failure paths.
 - Signed AgentCards and capability descriptors.
 - Candidate-only discovery across local, well-known, registry, relay, DHT, and
   federation-ready surfaces.
@@ -49,7 +50,8 @@ Last verified locally: 2026-05-30.
 ## Production-Like
 
 - Canonical object signing and verification primitives.
-- Typed error vocabulary and `ErrorEnvelope` response shape.
+- Typed error vocabulary and `ErrorEnvelope` response shape, including root v2
+  validation and resource lookup failures.
 - `agentd` scoped API key enforcement on protected mutation routes.
 - Postgres authority-store migration and health-check path for `agentd`.
 - SQLite local-state snapshot and mirror-table persistence for local inspection.

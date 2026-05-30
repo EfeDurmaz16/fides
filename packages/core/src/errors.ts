@@ -14,6 +14,7 @@ export type FidesErrorCategory =
   | 'incident'
   | 'kill_switch'
   | 'version'
+  | 'request'
   | 'internal'
 
 export type FidesErrorSeverity = 'info' | 'warning' | 'error' | 'critical'
@@ -79,6 +80,12 @@ export const FIDES_ERROR_CODES = {
     retryable: true,
     message: 'Approval is required before execution',
   },
+  APPROVAL_NOT_FOUND: {
+    category: 'approval',
+    severity: 'error',
+    retryable: false,
+    message: 'Approval request was not found',
+  },
   SESSION_EXPIRED: {
     category: 'session',
     severity: 'error',
@@ -127,11 +134,29 @@ export const FIDES_ERROR_CODES = {
     retryable: false,
     message: 'Evidence hash chain is broken',
   },
+  EVIDENCE_EVENT_NOT_FOUND: {
+    category: 'evidence',
+    severity: 'error',
+    retryable: false,
+    message: 'Evidence event was not found',
+  },
+  EVIDENCE_PRIVACY_MODE_INVALID: {
+    category: 'evidence',
+    severity: 'error',
+    retryable: false,
+    message: 'Evidence privacy mode is invalid',
+  },
   REVOCATION_ACTIVE: {
     category: 'revocation',
     severity: 'critical',
     retryable: false,
     message: 'An active revocation blocks this action',
+  },
+  REVOCATION_NOT_FOUND: {
+    category: 'revocation',
+    severity: 'error',
+    retryable: false,
+    message: 'Revocation record was not found',
   },
   INCIDENT_ACTIVE: {
     category: 'incident',
@@ -145,17 +170,35 @@ export const FIDES_ERROR_CODES = {
     retryable: false,
     message: 'Incident record is invalid',
   },
+  INCIDENT_NOT_FOUND: {
+    category: 'incident',
+    severity: 'error',
+    retryable: false,
+    message: 'Incident record was not found',
+  },
   KILL_SWITCH_ACTIVE: {
     category: 'kill_switch',
     severity: 'critical',
     retryable: false,
     message: 'Kill switch is active',
   },
+  KILL_SWITCH_RULE_NOT_FOUND: {
+    category: 'kill_switch',
+    severity: 'error',
+    retryable: false,
+    message: 'Kill switch rule was not found',
+  },
   VERSION_INCOMPATIBLE: {
     category: 'version',
     severity: 'error',
     retryable: false,
     message: 'Protocol versions are incompatible',
+  },
+  REQUEST_INVALID: {
+    category: 'request',
+    severity: 'error',
+    retryable: false,
+    message: 'Request payload is invalid',
   },
 } as const satisfies Record<string, {
   category: FidesErrorCategory

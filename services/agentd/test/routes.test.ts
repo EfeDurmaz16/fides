@@ -1441,6 +1441,163 @@ describe('Agentd Service Routes', () => {
         },
         sessionId: 'sess_missing',
       })
+
+      const missingApprovalCapability = await app.request('/approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      expect(missingApprovalCapability.status).toBe(400)
+      await expect(missingApprovalCapability.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+          retryable: false,
+          details: { field: 'capability' },
+        },
+      })
+
+      const missingApproval = await app.request('/approvals/app_missing/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      expect(missingApproval.status).toBe(404)
+      await expect(missingApproval.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'APPROVAL_NOT_FOUND',
+          category: 'approval',
+          retryable: false,
+          details: { id: 'app_missing' },
+        },
+      })
+
+      const invalidKillSwitch = await app.request('/killswitch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetType: 'service', target: 'did:fides:agent:test' }),
+      })
+      expect(invalidKillSwitch.status).toBe(400)
+      await expect(invalidKillSwitch.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+          details: { field: 'targetType' },
+        },
+      })
+
+      const missingKillSwitch = await app.request('/killswitch/rule_missing', {
+        method: 'DELETE',
+      })
+      expect(missingKillSwitch.status).toBe(404)
+      await expect(missingKillSwitch.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'KILL_SWITCH_RULE_NOT_FOUND',
+          category: 'kill_switch',
+          details: { id: 'rule_missing' },
+        },
+      })
+
+      const invalidRevocation = await app.request('/revocations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetType: 'unknown', targetId: 'did:fides:agent:test' }),
+      })
+      expect(invalidRevocation.status).toBe(400)
+      await expect(invalidRevocation.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+          details: { field: 'targetType' },
+        },
+      })
+
+      const missingRevocation = await app.request('/revocations/rev_missing')
+      expect(missingRevocation.status).toBe(404)
+      await expect(missingRevocation.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        revoked: false,
+        error: {
+          code: 'REVOCATION_NOT_FOUND',
+          category: 'revocation',
+          details: { id: 'rev_missing' },
+        },
+      })
+
+      const invalidIncident = await app.request('/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ severity: 'urgent' }),
+      })
+      expect(invalidIncident.status).toBe(400)
+      await expect(invalidIncident.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'INCIDENT_INVALID',
+          category: 'incident',
+          details: { field: 'severity' },
+        },
+      })
+
+      const missingIncident = await app.request('/incidents/inc_missing/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      expect(missingIncident.status).toBe(404)
+      await expect(missingIncident.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'INCIDENT_NOT_FOUND',
+          category: 'incident',
+          details: { id: 'inc_missing' },
+        },
+      })
+
+      const invalidEvidenceAppend = await app.request('/evidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'policy.evaluated' }),
+      })
+      expect(invalidEvidenceAppend.status).toBe(400)
+      await expect(invalidEvidenceAppend.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'REQUEST_INVALID',
+          category: 'request',
+        },
+      })
+
+      const invalidEvidenceExport = await app.request('/evidence/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ privacy_mode: 'raw' }),
+      })
+      expect(invalidEvidenceExport.status).toBe(400)
+      await expect(invalidEvidenceExport.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'EVIDENCE_PRIVACY_MODE_INVALID',
+          category: 'evidence',
+          details: { field: 'privacy_mode' },
+        },
+      })
+
+      const missingEvidence = await app.request('/evidence/evt_missing')
+      expect(missingEvidence.status).toBe(404)
+      await expect(missingEvidence.json()).resolves.toMatchObject({
+        authorityGranted: false,
+        error: {
+          code: 'EVIDENCE_EVENT_NOT_FOUND',
+          category: 'evidence',
+          details: { eventId: 'evt_missing' },
+        },
+      })
     })
 
     it('serves root approval request and decision lifecycle', async () => {

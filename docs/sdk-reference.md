@@ -217,7 +217,10 @@ successful provider responses remain available. The aggregate response keeps
 `authorityGranted: false`; provider orchestration is still discovery, not
 authority. Trust and reputation APIs return capability-scoped signals, and policy
 evaluation explains the decision but still requires session grant issuance
-before invocation. `client.graph.inspect(agentId)` reads the local trust graph
+before invocation. The public facade exposes named TypeScript request
+interfaces for policy evaluation, delegation, approvals, kill switch rules,
+revocations, incidents, sessions, and evidence append inputs instead of opaque
+object bags. `client.graph.inspect(agentId)` reads the local trust graph
 view through `GET /trust/:agentId` and wraps it as an inspection-only response
 with `authorityGranted: false`; it is not an authorization surface. Delegation
 helpers create local DelegationToken intents; the daemon signs them when the

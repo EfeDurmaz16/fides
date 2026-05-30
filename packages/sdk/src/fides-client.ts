@@ -306,6 +306,168 @@ export interface FidesSessionRequest {
   expiresAt?: string
 }
 
+export type FidesRiskLevel = 'low' | 'medium' | 'high' | 'critical'
+
+export interface FidesTrustEvaluationRequest {
+  agentId?: string
+  agent_id?: string
+  capability: string
+  principalId?: string
+  requesterAgentId?: string
+  context?: Record<string, unknown>
+  evidenceRefs?: string[]
+}
+
+export interface FidesReputationUpdateRequest {
+  agentId?: string
+  agent_id?: string
+  capability: string
+  successfulInvocations?: number
+  failedInvocations?: number
+  incidentCount?: number
+  publisherWeight?: number
+  contextBoundaryPenalty?: number
+  evidenceRefs?: string[]
+}
+
+export interface FidesPolicyEvaluationRequest {
+  agentId?: string
+  targetAgentId?: string
+  agent_id?: string
+  capability: string
+  principalId?: string
+  requesterAgentId?: string
+  requestedScopes?: string[]
+  constraints?: Record<string, unknown>
+  trustResult?: TrustResult
+  reputationResult?: ReputationRecord
+  runtimeAttestationValid?: boolean
+  attestationId?: string
+  revoked?: boolean
+  incidentsActive?: boolean
+  incidentCount?: number
+  killSwitchActive?: boolean
+  approvalGranted?: boolean
+  dryRun?: boolean
+  evidenceRefs?: string[]
+}
+
+export interface FidesDelegationRequest {
+  delegator: string
+  delegatee: string
+  capabilities: string[]
+  constraints?: Record<string, unknown>
+  expiresAt?: string
+  audience?: string[]
+  nonce?: string
+  signature?: string
+}
+
+export interface FidesApprovalCreateRequest {
+  agentId?: string
+  targetAgentId?: string
+  capability: string
+  requesterAgentId?: string
+  principalId?: string
+  requestedScopes?: string[]
+  riskLevel?: FidesRiskLevel
+  policyDecisionHash?: string
+  evidenceRefs?: string[]
+  expiresAt?: string
+}
+
+export interface FidesApprovalDecisionRequest {
+  approverId?: string
+  reason?: string
+  constraints?: Record<string, unknown>
+  evidenceRefs?: string[]
+}
+
+export type FidesKillSwitchTargetType =
+  | 'agent'
+  | 'publisher'
+  | 'capability'
+  | 'session'
+  | 'principal'
+  | 'risk_class'
+
+export interface FidesKillSwitchEnableRequest {
+  targetType: FidesKillSwitchTargetType
+  target: string
+  reason?: string
+  issuer?: string
+}
+
+export type FidesRevocationTargetType =
+  | 'key'
+  | 'identity'
+  | 'agent'
+  | 'agent_card'
+  | 'capability'
+  | 'session'
+  | 'attestation'
+  | 'publisher'
+
+export interface FidesRevocationCreateRequest {
+  targetType: FidesRevocationTargetType
+  targetId: string
+  reason?: string
+  issuer?: string
+  evidenceRefs?: string[]
+}
+
+export type FidesIncidentSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type FidesIncidentCategory =
+  | 'policy_violation'
+  | 'data_exfiltration'
+  | 'malicious_output'
+  | 'sandbox_escape'
+  | 'unauthorized_action'
+  | 'prompt_injection_failure'
+  | 'payment_error'
+  | 'suspicious_behavior'
+
+export interface FidesIncidentReportRequest {
+  targetAgentId: string
+  severity: FidesIncidentSeverity
+  category: FidesIncidentCategory
+  description: string
+  reporter?: string
+  evidenceRefs?: string[]
+  trustPenalty?: number
+  reputationPenalty?: number
+}
+
+export interface FidesIncidentResolveRequest {
+  status: 'resolved' | 'dismissed' | 'false_positive'
+  reason?: string
+  resolver?: string
+  evidenceRefs?: string[]
+}
+
+export interface FidesEvidenceAppendRequest {
+  type: FidesEvidenceEventType
+  actor: string
+  subject?: string
+  principal?: string
+  capability?: string
+  input?: unknown
+  inputHash?: string
+  input_hash?: string
+  output?: unknown
+  outputHash?: string
+  output_hash?: string
+  policy?: unknown
+  policyHash?: string
+  policy_hash?: string
+  decision?: string
+  riskLevel?: FidesRiskLevel
+  risk_level?: FidesRiskLevel
+  privacyMode?: FidesEvidencePrivacyMode
+  privacy_mode?: FidesEvidencePrivacyMode
+  metadata?: Record<string, unknown>
+}
+
 export interface FidesEvidenceExportRequest {
   privacy_mode?: 'public' | 'private' | 'redacted' | 'hash_only'
   include_metadata?: boolean
@@ -800,7 +962,7 @@ export class FidesClient {
   }
 
   readonly trust = {
-    evaluate: (body: Record<string, unknown>): Promise<FidesTrustEvaluationResponse> => (
+    evaluate: (body: FidesTrustEvaluationRequest): Promise<FidesTrustEvaluationResponse> => (
       this.post('/trust/evaluate', body) as Promise<FidesTrustEvaluationResponse>
     ),
     get: (agentId: string): Promise<FidesTrustListResponse> => (
@@ -817,7 +979,7 @@ export class FidesClient {
   }
 
   readonly reputation = {
-    update: (body: Record<string, unknown>): Promise<FidesReputationUpdateResponse> => (
+    update: (body: FidesReputationUpdateRequest): Promise<FidesReputationUpdateResponse> => (
       this.post('/reputation/update', body) as Promise<FidesReputationUpdateResponse>
     ),
     get: (agentId: string): Promise<FidesReputationListResponse> => (
@@ -837,32 +999,32 @@ export class FidesClient {
   }
 
   readonly policy = {
-    evaluate: (body: Record<string, unknown>): Promise<FidesPolicyEvaluationResponse> => (
+    evaluate: (body: FidesPolicyEvaluationRequest): Promise<FidesPolicyEvaluationResponse> => (
       this.post('/policy/evaluate', body) as Promise<FidesPolicyEvaluationResponse>
     ),
   }
 
   readonly delegations = {
-    create: (body: Record<string, unknown>): Promise<FidesDelegationResponse> => (
+    create: (body: FidesDelegationRequest): Promise<FidesDelegationResponse> => (
       this.post('/delegations', body) as Promise<FidesDelegationResponse>
     ),
   }
 
   readonly approvals = {
-    create: (body: Record<string, unknown>): Promise<FidesApprovalRequestResponse> => (
+    create: (body: FidesApprovalCreateRequest): Promise<FidesApprovalRequestResponse> => (
       this.post('/approvals', body) as Promise<FidesApprovalRequestResponse>
     ),
     list: (): Promise<FidesApprovalListResponse> => this.get('/approvals') as Promise<FidesApprovalListResponse>,
-    approve: (approvalId: string, body: Record<string, unknown> = {}): Promise<FidesApprovalDecisionResponse> => (
+    approve: (approvalId: string, body: FidesApprovalDecisionRequest = {}): Promise<FidesApprovalDecisionResponse> => (
       this.post(`/approvals/${encodeURIComponent(approvalId)}/approve`, body) as Promise<FidesApprovalDecisionResponse>
     ),
-    deny: (approvalId: string, body: Record<string, unknown> = {}): Promise<FidesApprovalDecisionResponse> => (
+    deny: (approvalId: string, body: FidesApprovalDecisionRequest = {}): Promise<FidesApprovalDecisionResponse> => (
       this.post(`/approvals/${encodeURIComponent(approvalId)}/deny`, body) as Promise<FidesApprovalDecisionResponse>
     ),
   }
 
   readonly killSwitch = {
-    enable: (body: Record<string, unknown>): Promise<FidesKillSwitchRuleResponse> => (
+    enable: (body: FidesKillSwitchEnableRequest): Promise<FidesKillSwitchRuleResponse> => (
       this.post('/killswitch', body) as Promise<FidesKillSwitchRuleResponse>
     ),
     list: (): Promise<FidesKillSwitchListResponse> => this.get('/killswitch') as Promise<FidesKillSwitchListResponse>,
@@ -872,7 +1034,7 @@ export class FidesClient {
   }
 
   readonly revocations = {
-    create: (body: Record<string, unknown>): Promise<FidesRevocationRecordResponse> => (
+    create: (body: FidesRevocationCreateRequest): Promise<FidesRevocationRecordResponse> => (
       this.post('/revocations', body) as Promise<FidesRevocationRecordResponse>
     ),
     list: (): Promise<FidesRevocationListResponse> => this.get('/revocations') as Promise<FidesRevocationListResponse>,
@@ -882,14 +1044,14 @@ export class FidesClient {
   }
 
   readonly incidents = {
-    report: (body: Record<string, unknown>): Promise<FidesIncidentRecordResponse> => (
+    report: (body: FidesIncidentReportRequest): Promise<FidesIncidentRecordResponse> => (
       this.post('/incidents', body) as Promise<FidesIncidentRecordResponse>
     ),
     list: (): Promise<FidesIncidentListResponse> => this.get('/incidents') as Promise<FidesIncidentListResponse>,
     get: (recordId: string): Promise<FidesIncidentRecordResponse> => (
       this.get(`/incidents/${encodeURIComponent(recordId)}`) as Promise<FidesIncidentRecordResponse>
     ),
-    resolve: (recordId: string, body: Record<string, unknown> = {}): Promise<FidesIncidentRecordResponse> => (
+    resolve: (recordId: string, body: FidesIncidentResolveRequest): Promise<FidesIncidentRecordResponse> => (
       this.post(`/incidents/${encodeURIComponent(recordId)}/resolve`, body) as Promise<FidesIncidentRecordResponse>
     ),
   }
@@ -982,7 +1144,7 @@ export class FidesClient {
   }
 
   readonly evidence = {
-    append: (body: Record<string, unknown>): Promise<FidesEvidenceAppendResponse> => (
+    append: (body: FidesEvidenceAppendRequest): Promise<FidesEvidenceAppendResponse> => (
       this.post('/evidence', body) as Promise<FidesEvidenceAppendResponse>
     ),
     list: (): Promise<FidesEvidenceListResponse> => this.get('/evidence') as Promise<FidesEvidenceListResponse>,

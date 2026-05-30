@@ -219,7 +219,10 @@ or permission. `client.discovery.allProviders()` queries local, well-known,
 registry, relay, DHT, and federation surfaces and preserves partial provider
 failures as `ok: false` results instead of granting authority or dropping
 successful candidates. Trust and reputation are capability-scoped signals; policy
-decisions still require scoped session grants before invocation.
+decisions still require scoped session grants before invocation. The public
+facade exposes named TypeScript request interfaces for policy evaluation,
+delegation, approvals, kill switch rules, revocations, incidents, sessions, and
+evidence append inputs instead of opaque object bags.
 Root session and invocation helpers use the local daemon preflight path and are
 currently in-memory. Session responses preserve `authorityMode` and
 `allowedActions`; full sessions return `authorityGranted: true`, while

@@ -188,6 +188,191 @@ describe('FidesClient', () => {
     expect(disabled.rule.enabled).toBe(false)
   })
 
+  it('serializes typed governance and evidence request contracts', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), init })
+      return new Response(JSON.stringify({
+        policy: { decision: 'allow' },
+        token: { id: 'del_1' },
+        approval: { id: 'appr_1' },
+        decision: { id: 'apprd_1' },
+        rule: { id: 'ks_1' },
+        record: { id: 'rec_1' },
+        event: { event_id: 'evt_1' },
+        authorityGranted: false,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    const client = new FidesClient({ daemonUrl: 'http://localhost:7345' })
+    await client.policy.evaluate({
+      principalId: 'did:fides:principal',
+      requesterAgentId: 'did:fides:requester',
+      agentId: 'did:fides:target',
+      capability: 'payments.prepare',
+      requestedScopes: ['payments:prepare'],
+      runtimeAttestationValid: false,
+      approvalGranted: true,
+      evidenceRefs: ['evt_policy_input'],
+    })
+    await client.delegations.create({
+      delegator: 'did:fides:principal',
+      delegatee: 'did:fides:requester',
+      capabilities: ['payments.prepare'],
+      constraints: { dryRunOnly: true },
+      audience: ['did:fides:target'],
+      nonce: 'nonce_1',
+    })
+    await client.approvals.create({
+      targetAgentId: 'did:fides:target',
+      capability: 'payments.prepare',
+      requesterAgentId: 'did:fides:requester',
+      principalId: 'did:fides:principal',
+      requestedScopes: ['payments:prepare'],
+      riskLevel: 'high',
+      policyDecisionHash: 'sha256:policy',
+    })
+    await client.approvals.approve('appr_1', {
+      approverId: 'did:fides:approver',
+      reason: 'approved for dry run',
+      constraints: { dryRunOnly: true },
+      evidenceRefs: ['evt_approval'],
+    })
+    await client.killSwitch.enable({
+      targetType: 'risk_class',
+      target: 'critical',
+      issuer: 'did:fides:operator',
+      reason: 'incident response',
+    })
+    await client.revocations.create({
+      targetType: 'attestation',
+      targetId: 'att_1',
+      issuer: 'did:fides:operator',
+      reason: 'expired attestation',
+      evidenceRefs: ['evt_revocation'],
+    })
+    await client.incidents.report({
+      targetAgentId: 'did:fides:target',
+      reporter: 'did:fides:principal',
+      severity: 'critical',
+      category: 'sandbox_escape',
+      description: 'escaped policy sandbox',
+      trustPenalty: 0.5,
+      reputationPenalty: 0.4,
+      evidenceRefs: ['evt_incident'],
+    })
+    await client.incidents.resolve('inc_1', {
+      status: 'resolved',
+      reason: 'patched',
+      resolver: 'did:fides:operator',
+      evidenceRefs: ['evt_resolution'],
+    })
+    await client.evidence.append({
+      type: 'policy.evaluated',
+      actor: 'did:fides:agentd',
+      subject: 'did:fides:target',
+      principal: 'did:fides:principal',
+      capability: 'payments.prepare',
+      input: { amount: 100 },
+      output: { decision: 'require_approval' },
+      policy: { decision: 'require_approval' },
+      decision: 'require_approval',
+      riskLevel: 'high',
+      privacyMode: 'hash_only',
+      metadata: { source: 'sdk-test' },
+    })
+
+    expect(calls.map(call => call.url)).toEqual([
+      'http://localhost:7345/policy/evaluate',
+      'http://localhost:7345/delegations',
+      'http://localhost:7345/approvals',
+      'http://localhost:7345/approvals/appr_1/approve',
+      'http://localhost:7345/killswitch',
+      'http://localhost:7345/revocations',
+      'http://localhost:7345/incidents',
+      'http://localhost:7345/incidents/inc_1/resolve',
+      'http://localhost:7345/evidence',
+    ])
+    expect(calls.map(call => JSON.parse(call.init?.body as string))).toEqual([
+      {
+        principalId: 'did:fides:principal',
+        requesterAgentId: 'did:fides:requester',
+        agentId: 'did:fides:target',
+        capability: 'payments.prepare',
+        requestedScopes: ['payments:prepare'],
+        runtimeAttestationValid: false,
+        approvalGranted: true,
+        evidenceRefs: ['evt_policy_input'],
+      },
+      {
+        delegator: 'did:fides:principal',
+        delegatee: 'did:fides:requester',
+        capabilities: ['payments.prepare'],
+        constraints: { dryRunOnly: true },
+        audience: ['did:fides:target'],
+        nonce: 'nonce_1',
+      },
+      {
+        targetAgentId: 'did:fides:target',
+        capability: 'payments.prepare',
+        requesterAgentId: 'did:fides:requester',
+        principalId: 'did:fides:principal',
+        requestedScopes: ['payments:prepare'],
+        riskLevel: 'high',
+        policyDecisionHash: 'sha256:policy',
+      },
+      {
+        approverId: 'did:fides:approver',
+        reason: 'approved for dry run',
+        constraints: { dryRunOnly: true },
+        evidenceRefs: ['evt_approval'],
+      },
+      {
+        targetType: 'risk_class',
+        target: 'critical',
+        issuer: 'did:fides:operator',
+        reason: 'incident response',
+      },
+      {
+        targetType: 'attestation',
+        targetId: 'att_1',
+        issuer: 'did:fides:operator',
+        reason: 'expired attestation',
+        evidenceRefs: ['evt_revocation'],
+      },
+      {
+        targetAgentId: 'did:fides:target',
+        reporter: 'did:fides:principal',
+        severity: 'critical',
+        category: 'sandbox_escape',
+        description: 'escaped policy sandbox',
+        trustPenalty: 0.5,
+        reputationPenalty: 0.4,
+        evidenceRefs: ['evt_incident'],
+      },
+      {
+        status: 'resolved',
+        reason: 'patched',
+        resolver: 'did:fides:operator',
+        evidenceRefs: ['evt_resolution'],
+      },
+      {
+        type: 'policy.evaluated',
+        actor: 'did:fides:agentd',
+        subject: 'did:fides:target',
+        principal: 'did:fides:principal',
+        capability: 'payments.prepare',
+        input: { amount: 100 },
+        output: { decision: 'require_approval' },
+        policy: { decision: 'require_approval' },
+        decision: 'require_approval',
+        riskLevel: 'high',
+        privacyMode: 'hash_only',
+        metadata: { source: 'sdk-test' },
+      },
+    ])
+  })
+
   it('types root revocation responses as authority overrides', async () => {
     const record = {
       schema_version: 'fides.revocation.record.v1',

@@ -449,11 +449,19 @@ function safeIdentityRecord(record: LocalIdentityRecord): Record<string, unknown
 
 function safeRegisteredAgent(record: LocalRegisteredAgent): Record<string, unknown> {
   const card = localAgentCards.get(record.cardId)
+  const signed = localSignedAgentCards.has(record.cardId) || record.signed
   return {
     ...record,
-    signed: localSignedAgentCards.has(record.cardId) || record.signed,
+    signed,
+    verified: signed,
+    authority: 'candidate_only',
     capabilities: card?.capabilities.map(capability => capability.id) ?? [],
     authorityGranted: false,
+    reasons: [
+      signed ? 'identity_bound_signed_agent_card_verified' : 'signed_agent_card_not_verified',
+      'local_registration_candidate_only',
+      'discovery_does_not_grant_authority',
+    ],
   }
 }
 

@@ -453,13 +453,45 @@ describe('Agentd Service Routes', () => {
         body: JSON.stringify({ agentCardId: identity.did }),
       })
       expect(registered.status).toBe(201)
-      expect((await registered.json()).authorityGranted).toBe(false)
+      const registeredData = await registered.json()
+      expect(registeredData).toMatchObject({
+        authority: 'candidate_only',
+        verified: true,
+        authorityGranted: false,
+      })
+      expect(registeredData.reasons).toEqual(expect.arrayContaining([
+        'identity_bound_signed_agent_card_verified',
+        'local_registration_candidate_only',
+        'discovery_does_not_grant_authority',
+      ]))
 
       const listed = await app.request('/agents')
       expect(listed.status).toBe(200)
       expect((await listed.json()).agents).toEqual(expect.arrayContaining([
-        expect.objectContaining({ agentId: identity.did }),
+        expect.objectContaining({
+          agentId: identity.did,
+          authority: 'candidate_only',
+          verified: true,
+          authorityGranted: false,
+          reasons: expect.arrayContaining([
+            'identity_bound_signed_agent_card_verified',
+            'discovery_does_not_grant_authority',
+          ]),
+        }),
       ]))
+
+      const detail = await app.request(`/agents/${encodeURIComponent(identity.did)}`)
+      expect(detail.status).toBe(200)
+      expect(await detail.json()).toMatchObject({
+        agentId: identity.did,
+        authority: 'candidate_only',
+        verified: true,
+        authorityGranted: false,
+        reasons: expect.arrayContaining([
+          'local_registration_candidate_only',
+          'discovery_does_not_grant_authority',
+        ]),
+      })
 
       const discovered = await app.request('/discover', {
         method: 'POST',

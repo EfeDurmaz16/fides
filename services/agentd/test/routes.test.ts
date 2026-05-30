@@ -3260,7 +3260,7 @@ describe('Agentd Service Routes', () => {
       expect(data.agentDid).toBe(TEST_DID)
       expect(data.provider).toBe('mock-tee')
       expect(data.measurement).toBeDefined()
-      expect(data.signature).toBe('mock-signature')
+      expect(data.signature).toMatch(/^local-attestation:/)
     })
 
     it('returns 400 when did is missing', async () => {

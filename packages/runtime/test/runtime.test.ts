@@ -17,6 +17,7 @@ describe('MockTEEProvider', () => {
 
     expect(attestation.provider).toBe('mock-tee')
     expect(attestation.agentDid).toBe('did:fides:agent1')
+    expect(attestation.signature).toMatch(/^local-attestation:/)
 
     const valid = await provider.verify(attestation)
     expect(valid).toBe(true)
@@ -29,6 +30,14 @@ describe('MockTEEProvider', () => {
 
     const valid = await provider.verify(attestation)
     expect(valid).toBe(false)
+  })
+
+  it('rejects tampered mock attestation fields', async () => {
+    const provider = new MockTEEProvider()
+    const attestation = await provider.attest('did:fides:agent1')
+    attestation.measurement = 'mock-measurement-did:fides:agent2'
+
+    await expect(provider.verify(attestation)).resolves.toBe(false)
   })
 })
 
@@ -47,6 +56,19 @@ describe('Production attestation adapters', () => {
 
     attestation.measurement = 'sha256:tampered'
     expect(await provider.verify(attestation)).toBe(false)
+  })
+
+  it('rejects tampered local structured attestation signatures', async () => {
+    const provider = new BuildProvenanceAttestationProvider()
+    const attestation = await provider.attest({
+      agentDid: 'did:fides:agent1',
+      imageDigest: 'sha256:abc',
+      sourceCommit: 'abc123',
+      builderId: 'builder://github/actions',
+    })
+
+    attestation.signature = 'local-attestation:tampered'
+    await expect(provider.verify(attestation)).resolves.toBe(false)
   })
 
   it('verifies container image attestations against allowed images', async () => {

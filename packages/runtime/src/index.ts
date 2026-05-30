@@ -4,6 +4,8 @@
  * Provides runtime attestation primitives and emergency kill switch.
  */
 
+import { createHash } from 'node:crypto'
+
 export interface RuntimeAttestation {
   id: string
   agentDid: string
@@ -97,14 +99,21 @@ export class MockTEEProvider implements TEEAdapter {
       timestamp: now.toISOString(),
       expiresAt: expires.toISOString(),
       evidence: { mock: true },
-      signature: 'mock-signature',
+      signature: localAttestationSignature({
+        agentDid,
+        provider: this.provider,
+        measurement,
+        timestamp: now.toISOString(),
+        expiresAt: expires.toISOString(),
+        evidence: { mock: true },
+      }),
     }
   }
 
   async verify(attestation: RuntimeAttestation): Promise<boolean> {
     if (attestation.provider !== this.provider) return false
     if (new Date(attestation.expiresAt) < new Date()) return false
-    return attestation.signature === 'mock-signature'
+    return attestation.signature === localAttestationSignature(attestation)
   }
 }
 
@@ -330,22 +339,53 @@ function createStructuredAttestation(input: {
   expiresAt: string
   evidence: unknown
 }): RuntimeAttestation {
+  const timestamp = new Date().toISOString()
   return {
     id: crypto.randomUUID(),
     agentDid: input.agentDid,
     provider: input.provider,
     measurement: input.measurement,
-    timestamp: new Date().toISOString(),
+    timestamp,
     expiresAt: input.expiresAt,
     evidence: input.evidence,
-    signature: 'structured-local-attestation',
+    signature: localAttestationSignature({
+      agentDid: input.agentDid,
+      provider: input.provider,
+      measurement: input.measurement,
+      timestamp,
+      expiresAt: input.expiresAt,
+      evidence: input.evidence,
+    }),
   }
 }
 
 function isFreshProvider(attestation: RuntimeAttestation, provider: string): boolean {
-  return attestation.provider === provider && new Date(attestation.expiresAt) >= new Date()
+  return attestation.provider === provider &&
+    new Date(attestation.expiresAt) >= new Date() &&
+    attestation.signature === localAttestationSignature(attestation)
 }
 
 function isSha256Digest(value: string): boolean {
   return /^sha256:[a-f0-9]{64}$/i.test(value)
+}
+
+function localAttestationSignature(attestation: Omit<RuntimeAttestation, 'id' | 'signature'>): string {
+  const payload = {
+    agentDid: attestation.agentDid,
+    provider: attestation.provider,
+    measurement: attestation.measurement,
+    timestamp: attestation.timestamp,
+    expiresAt: attestation.expiresAt,
+    evidence: attestation.evidence,
+  }
+  return `local-attestation:${createHash('sha256').update(stableJson(payload)).digest('hex')}`
+}
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, nested) => {
+    if (nested !== null && typeof nested === 'object' && !Array.isArray(nested)) {
+      return Object.fromEntries(Object.entries(nested as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+    }
+    return nested
+  })
 }

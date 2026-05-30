@@ -19,13 +19,14 @@ import {
   appendEvidenceEvent,
   buildEvidenceMerkleProof,
   createEvidenceChain,
+  hashEvidenceValue,
   verifyEvidenceChain,
   verifyMerkleProof,
 } from '@fides/evidence'
 
 let chain = createEvidenceChain()
 
-chain = appendEvidenceEvent(chain, {
+const event = {
   id: 'evt_1',
   type: 'invoke',
   timestamp: new Date().toISOString(),
@@ -33,7 +34,13 @@ chain = appendEvidenceEvent(chain, {
   action: 'payments.execute',
   payload: { amount: '10.00' },
   privacy: { level: 'redacted' },
-}, 'signature-hex')
+}
+
+chain = appendEvidenceEvent(
+  chain,
+  event,
+  `local-evidence:${hashEvidenceValue(event).slice('sha256:'.length)}`
+)
 
 const valid = verifyEvidenceChain(chain)
 const proof = buildEvidenceMerkleProof(chain, 'evt_1')

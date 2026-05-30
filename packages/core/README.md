@@ -13,19 +13,27 @@ npm install @fides/core
 ## Usage
 
 ```typescript
-import { createIdentity, createDelegationToken, classifyCapabilityRisk } from '@fides/core'
+import {
+  createAgentIdentity,
+  createPrincipalIdentity,
+  createDelegationToken,
+  signDelegationToken,
+  classifyCapabilityRisk,
+} from '@fides/core'
 
-const principal = createIdentity('did:fides:principal', 'principal')
-const agent = createIdentity('did:fides:agent', 'agent')
+const { identity: principal, privateKey: principalPrivateKey } = await createPrincipalIdentity({
+  type: 'individual',
+  displayName: 'Operator',
+})
+const { identity: agent } = await createAgentIdentity()
 
-const token = createDelegationToken({
+const token = await signDelegationToken(createDelegationToken({
   delegator: principal.did,
   delegatee: agent.did,
   capabilities: ['payments.execute'],
-  capabilityId: 'payments.execute',
   constraints: { maxActions: 3 },
   expiresAt: new Date(Date.now() + 60_000).toISOString(),
-})
+}), principalPrivateKey)
 
 const risk = classifyCapabilityRisk('payments.execute')
 ```

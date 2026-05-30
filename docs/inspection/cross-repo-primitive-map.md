@@ -67,13 +67,13 @@ This map reflects the current local inspection of:
 | Examples | `examples/` | demos | examples | many fixtures/examples | many demos | FIDES | extend existing |
 | Tests | package/service/e2e/adversarial | Rust/Python/TS tests | conformance | reference tests | large suite | FIDES | extend existing |
 | Docs | docs present but stale | docs | spec/docs | spec/schemas | docs/site | FIDES | extend existing |
-| MCP adapter | not first-class FIDES adapter | exists | MCP server | MCP adapter | MCP server | OAPS + Sardis/OSP | adapter-ready |
-| A2A adapter | shared/SDK legacy shapes | exists | A2A adjacent | A2A adapter | A2A resources/routes | FIDES + OAPS/Sardis | adapter-ready |
-| OAPS adapter | not found | not found | not found | source spec | not found | FIDES | create new |
-| OSP adapter | not found | not found | source spec | not found | not found | FIDES + OSP | adapter-ready |
-| AP2 adapter | not found | not found | not core | payment profile | AP2 verifier/mandates | Sardis | adapter-ready |
-| x402 adapter | not found | not found | not core | x402 adapter | x402 facilitator | Sardis/OAPS | adapter-ready |
-| Sardis adapter | not found | FIDES adapter to AGIT | Sardis integration | profile relation | source consumer | FIDES + Sardis | create new |
+| MCP adapter | adapter contract + manifest | exists | MCP server | MCP adapter | MCP server | OAPS + Sardis/OSP | adapter-ready |
+| A2A adapter | adapter contract + manifest | exists | A2A adjacent | A2A adapter | A2A resources/routes | FIDES + OAPS/Sardis | adapter-ready |
+| OAPS adapter | adapter contract + mapping set | not found | not found | source spec | not found | FIDES | extend existing |
+| OSP adapter | adapter contract + mapping set | not found | source spec | not found | not found | FIDES + OSP | adapter-ready |
+| AP2 adapter | payment action-flow adapter contract | not found | not core | payment profile | AP2 verifier/mandates | Sardis | adapter-ready |
+| x402 adapter | payment action-flow adapter contract | not found | not core | x402 adapter | x402 facilitator | Sardis/OAPS | adapter-ready |
+| Sardis adapter | payment action-flow adapter contract | FIDES adapter to AGIT | Sardis integration | profile relation | source consumer | FIDES + Sardis | extend existing |
 
 ## Key Findings
 

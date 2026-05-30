@@ -283,6 +283,11 @@ from daemon-side verification.
 Advanced authority flows can use `AgentdClient`. `AgentdClient.health()` reads
 `GET /health` and returns typed authority-store and local-state-store status,
 including the SQLite snapshot path when the daemon exposes it.
+`AgentdClient.createSignedSession()` now creates a canonical
+`SignedDelegationTokenV2` and sends it as `signedToken` to `/v1/sessions`.
+The daemon verifies the issuer-bound proof directly, so no external
+`delegatorPublicKey` is required for this path. The delegator DID must be a
+`did:fides:<base58-public-key>` identity that matches the supplied private key.
 
 ## AGIT / Rust Primitive Bridge
 

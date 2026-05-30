@@ -1170,10 +1170,12 @@ paths:
       security:
         - ApiKeyAuth: []
       description: |
-        Creates a local SessionGrant from a DelegationToken. In production,
-        or whenever `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`,
-        the request must include `delegatorPublicKey` so agentd can verify
-        the DelegationToken before storing the session.
+        Creates a local SessionGrant from either a legacy DelegationToken or a
+        canonical SignedDelegationTokenV2. New callers should send
+        `signedToken`; agentd verifies its issuer-bound canonical proof without
+        a separate `delegatorPublicKey`. Legacy `token` requests still require
+        `delegatorPublicKey` in production or whenever
+        `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`.
       requestBody:
         required: true
         content:
@@ -3863,6 +3865,87 @@ components:
           type: string
           description: Hex-encoded Ed25519 signature over the canonical token body
 
+    DelegationTokenV2:
+      type: object
+      required:
+        - schema_version
+        - id
+        - issuer
+        - subject
+        - delegator
+        - delegatee
+        - capabilities
+        - constraints
+        - issued_at
+        - expires_at
+        - nonce
+        - payload_hash
+      properties:
+        schema_version:
+          type: string
+          example: fides.delegation_token.v1
+        id:
+          type: string
+        issuer:
+          type: string
+          description: Issuer DID. Must match the proof verification method.
+        subject:
+          type: string
+        delegator:
+          type: string
+        delegatee:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        constraints:
+          type: object
+          additionalProperties: true
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        nonce:
+          type: string
+        audience:
+          type: array
+          items:
+            type: string
+        payload_hash:
+          type: string
+          example: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+    SignedDelegationTokenV2:
+      type: object
+      required: [payload, proof]
+      properties:
+        payload:
+          $ref: "#/components/schemas/DelegationTokenV2"
+        proof:
+          type: object
+          required: [type, created, verificationMethod, proofPurpose, payloadHash, proofValue]
+          properties:
+            type:
+              type: string
+              example: Ed25519Signature2020
+            created:
+              type: string
+              format: date-time
+            verificationMethod:
+              type: string
+              description: did:fides DID containing the signing Ed25519 public key.
+            proofPurpose:
+              type: string
+              example: delegation
+            payloadHash:
+              type: string
+            proofValue:
+              type: string
+              description: Base58 Ed25519 canonical object signature
+
     SessionGrant:
       type: object
       properties:
@@ -3891,10 +3974,12 @@ components:
 
     SessionCreateRequest:
       type: object
-      required: [token, capabilityId]
+      required: [capabilityId]
       properties:
         token:
           $ref: "#/components/schemas/DelegationToken"
+        signedToken:
+          $ref: "#/components/schemas/SignedDelegationTokenV2"
         capabilityId:
           type: string
         audience:
@@ -3907,7 +3992,10 @@ components:
         delegatorPublicKey:
           type: string
           pattern: "^[a-fA-F0-9]{64}$"
-          description: Delegator Ed25519 public key. Required when `AGENTD_REQUIRE_AUTHORITY_SIGNATURE_VERIFICATION=true`.
+          description: Delegator Ed25519 public key for legacy `token` requests. Not required for canonical `signedToken` requests.
+      oneOf:
+        - required: [token]
+        - required: [signedToken]
 
     SessionCreateResponse:
       type: object
@@ -3916,6 +4004,9 @@ components:
           type: boolean
         session:
           $ref: "#/components/schemas/SessionGrant"
+        signedDelegationVerified:
+          type: boolean
+          description: True when the session was created from a canonical SignedDelegationTokenV2.
 
     SessionLookupResponse:
       type: object

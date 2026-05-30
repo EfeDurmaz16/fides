@@ -45,12 +45,14 @@ vi.mock('node:dns/promises', () => ({
 import { app } from '../src/index.js'
 import {
   createDelegationToken,
+  createDelegationTokenV2,
   createIdentityKeyPair,
   createIncidentRecord,
   createInvocationRequest,
   createRevocationRecord,
   hashProtocolPayload,
   signDelegationToken,
+  signDelegationTokenV2,
   signIncidentRecord,
   signInvocationRequest,
   signRevocationRecord,
@@ -112,6 +114,22 @@ describe('Agentd Service Routes', () => {
     return {
       publicKey: bytesToHex(await ed.getPublicKeyAsync(privateKey)),
       token: await signDelegationToken(token, privateKey),
+    }
+  }
+
+  async function signedDelegationTokenV2(delegatee: string) {
+    const { privateKey, did: delegator } = await createIdentityKeyPair()
+    const token = createDelegationTokenV2({
+      delegator,
+      delegatee,
+      capabilities: ['payments.execute'],
+      constraints: {},
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      audience: ['agentd'],
+    })
+    return {
+      token,
+      signedToken: await signDelegationTokenV2(token, privateKey, delegator),
     }
   }
 
@@ -3079,6 +3097,37 @@ describe('Agentd Service Routes', () => {
       expect(res.status).toBe(409)
       const data = await res.json()
       expect(data.errors).toContain('DelegationToken nonce has already been used')
+    })
+
+    it('creates sessions from canonical signed DelegationTokenV2 without external public keys', async () => {
+      const { signedToken } = await signedDelegationTokenV2(`${TEST_DID}:session-v2`)
+
+      const res = await app.request('/v1/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signedToken,
+          capabilityId: 'payments.execute',
+          audience: 'agentd',
+        }),
+      })
+
+      expect(res.status).toBe(201)
+      const data = await res.json()
+      expect(data).toMatchObject({
+        authorized: true,
+        signedDelegationVerified: true,
+        session: {
+          token: {
+            id: signedToken.payload.id,
+            delegator: signedToken.payload.delegator,
+            delegatee: signedToken.payload.delegatee,
+            capabilities: ['payments.execute'],
+            signature: signedToken.proof.proofValue,
+          },
+          sessionKey: 'redacted',
+        },
+      })
     })
 
     it('rejects tampered delegation tokens when a delegator public key is supplied', async () => {

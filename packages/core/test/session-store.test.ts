@@ -4,10 +4,14 @@ import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   authorizeDelegation,
+  authorizeDelegationV2,
   authorizeSessionInvocation,
   createDelegationToken,
+  createDelegationTokenV2,
+  createIdentityKeyPair,
   FileSessionStore,
   InMemorySessionStore,
+  signDelegationTokenV2,
 } from '../src/index.js'
 
 const tempDirs: string[] = []
@@ -64,6 +68,66 @@ describe('SessionStore authorization', () => {
 
     expect(replay.ok).toBe(false)
     expect(replay.errors).toContain('DelegationToken nonce has already been used')
+  })
+
+  it('creates sessions from issuer-bound canonical delegation tokens', async () => {
+    const store = new InMemorySessionStore()
+    const { privateKey, did: delegator } = await createIdentityKeyPair()
+    const token = createDelegationTokenV2({
+      delegator,
+      delegatee: 'did:fides:delegatee',
+      capabilities: ['payments.execute'],
+      constraints: { maxActions: 1 },
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      audience: ['agentd'],
+      nonce: 'nonce_v2_authorized',
+    })
+    const signedToken = await signDelegationTokenV2(token, privateKey, delegator)
+
+    const result = await authorizeDelegationV2({
+      signedToken,
+      store,
+      capabilityId: 'payments.execute',
+      audience: 'agentd',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.session?.token).toMatchObject({
+      id: token.id,
+      delegator,
+      delegatee: 'did:fides:delegatee',
+      capabilities: ['payments.execute'],
+      issuedAt: token.issued_at,
+      expiresAt: token.expires_at,
+      nonce: 'nonce_v2_authorized',
+      signature: signedToken.proof.proofValue,
+    })
+    expect(await store.hasNonce(token.nonce)).toBe(true)
+  })
+
+  it('rejects canonical delegation tokens signed by a different issuer', async () => {
+    const store = new InMemorySessionStore()
+    const { did: delegator } = await createIdentityKeyPair()
+    const wrongIssuer = await createIdentityKeyPair()
+    const token = createDelegationTokenV2({
+      delegator,
+      delegatee: 'did:fides:delegatee',
+      capabilities: ['payments.execute'],
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      audience: ['agentd'],
+    })
+    const signedToken = await signDelegationTokenV2(token, wrongIssuer.privateKey, wrongIssuer.did)
+
+    const result = await authorizeDelegationV2({
+      signedToken,
+      store,
+      capabilityId: 'payments.execute',
+      audience: 'agentd',
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.errors).toContain('DelegationToken canonical signature verification failed')
+    expect(await store.listSessions()).toHaveLength(0)
   })
 
   it('rejects missing capabilities before creating a session', async () => {

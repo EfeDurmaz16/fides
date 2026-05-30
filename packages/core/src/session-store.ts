@@ -5,8 +5,11 @@ import {
   createSessionGrant,
   isSessionExpired,
   type DelegationToken,
+  type SignedDelegationTokenV2,
   type SessionGrant,
   validateDelegationToken,
+  validateDelegationTokenV2,
+  verifySignedDelegationTokenV2Issuer,
 } from './delegation.js'
 
 export interface NonceUseRecord {
@@ -35,6 +38,15 @@ export interface SessionStore {
 
 export interface DelegationAuthorizationInput {
   token: DelegationToken
+  store: SessionStore
+  capabilityId?: string
+  audience?: string
+  boundTo?: string
+  ttlMs?: number
+}
+
+export interface DelegationAuthorizationV2Input {
+  signedToken: SignedDelegationTokenV2
   store: SessionStore
   capabilityId?: string
   audience?: string
@@ -215,6 +227,51 @@ export async function authorizeDelegation(input: DelegationAuthorizationInput): 
   return { ok: true, session, errors: [] }
 }
 
+export async function authorizeDelegationV2(input: DelegationAuthorizationV2Input): Promise<AuthorizationResult> {
+  const proofValid = await verifySignedDelegationTokenV2Issuer(input.signedToken)
+  const validation = validateDelegationTokenV2(input.signedToken.payload)
+  const errors = [...validation.errors]
+
+  if (!proofValid) {
+    errors.push('DelegationToken canonical signature verification failed')
+  }
+
+  const token = toLegacyDelegationToken(input.signedToken)
+
+  if (input.capabilityId && !token.capabilities.includes(input.capabilityId)) {
+    errors.push(`DelegationToken does not grant capability ${input.capabilityId}`)
+  }
+
+  if (input.audience && token.audience?.length && !token.audience.includes(input.audience)) {
+    errors.push(`DelegationToken audience does not include ${input.audience}`)
+  }
+
+  if (await input.store.hasNonce(token.nonce)) {
+    errors.push('DelegationToken nonce has already been used')
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors }
+  }
+
+  const session = toStoredSession(
+    createSessionGrant({
+      token,
+      boundTo: input.boundTo,
+      ttlMs: input.ttlMs,
+    })
+  )
+  await input.store.markNonceUsed({
+    nonce: token.nonce,
+    tokenId: token.id,
+    delegator: token.delegator,
+    delegatee: token.delegatee,
+    usedAt: new Date().toISOString(),
+  })
+  await input.store.createSession(session)
+  return { ok: true, session, errors: [] }
+}
+
 export async function authorizeSessionInvocation(input: SessionInvocationInput): Promise<AuthorizationResult> {
   const session = await input.store.getSession(input.sessionId)
   if (!session) {
@@ -243,6 +300,22 @@ export function toStoredSession(session: SessionGrant): StoredSession {
     ...session,
     createdAt: new Date().toISOString(),
     revoked: false,
+  }
+}
+
+function toLegacyDelegationToken(signedToken: SignedDelegationTokenV2): DelegationToken {
+  const token = signedToken.payload
+  return {
+    id: token.id,
+    delegator: token.delegator,
+    delegatee: token.delegatee,
+    capabilities: token.capabilities,
+    constraints: token.constraints,
+    issuedAt: token.issued_at,
+    expiresAt: token.expires_at,
+    nonce: token.nonce,
+    audience: token.audience,
+    signature: signedToken.proof.proofValue,
   }
 }
 

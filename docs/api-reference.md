@@ -79,6 +79,11 @@ Current implementation anchors:
 - `POST /v1/killswitch/disengage`
 - `POST /v1/attest`
 
+`POST /v1/sessions` accepts the legacy `token` plus `delegatorPublicKey` path
+and the canonical `signedToken` path. New callers should send
+`SignedDelegationTokenV2`; agentd verifies the issuer-bound canonical proof and
+does not require a separate public key.
+
 ## v2 Alias Endpoints
 
 - `POST /dht/start`

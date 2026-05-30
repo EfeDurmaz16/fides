@@ -38,6 +38,9 @@ Last verified locally: 2026-05-30.
   attestation, and kill switch inputs.
 - Canonically signed `DelegationTokenV2` records with issuer-bound verification,
   scoped capabilities, audience restriction, expiry, nonce, and payload hash.
+- `agentd` `/v1/sessions` accepts canonical `SignedDelegationTokenV2` payloads
+  and verifies the issuer-bound proof without requiring an external
+  `delegatorPublicKey`; legacy token sessions remain supported.
 - Scoped SessionGrants and invocation preflight.
 - SessionGrants now carry supported protocol versions, optional required
   versions, and the negotiated protocol version used for authority.
@@ -95,6 +98,8 @@ Last verified locally: 2026-05-30.
 - OpenAPI contract coverage for version-bound `SessionGrantV2` responses.
 - Core tests for issuer-bound `DelegationTokenV2` canonical signatures and
   payload-hash tamper detection.
+- Core and agentd route tests cover canonical delegation-session creation,
+  issuer mismatch rejection, and nonce replay protection.
 - Canonical example catalog audit for the requested demo agents and
   capability/risk contracts.
 - Example audit coverage rejects legacy standalone example capability names so

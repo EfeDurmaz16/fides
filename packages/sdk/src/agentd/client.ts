@@ -1,13 +1,15 @@
 import {
-  createDelegationToken,
+  createDelegationTokenV2,
   createIncidentRecord,
   createRevocationRecord,
   deriveEd25519PublicKeyHex,
+  didFromPublicKey,
   isErrorEnvelope,
-  signDelegationToken,
+  signDelegationTokenV2,
   signIncidentRecord,
   signRevocationRecord,
   type DelegationToken as CoreDelegationToken,
+  type SignedDelegationTokenV2 as CoreSignedDelegationTokenV2,
   type ErrorEnvelope,
   type IncidentRecord as CoreIncidentRecord,
   type RevocationRecord as CoreRevocationRecord,
@@ -53,6 +55,7 @@ export interface AuthorizationRequest {
 }
 
 export type DelegationToken = CoreDelegationToken
+export type SignedDelegationTokenV2 = CoreSignedDelegationTokenV2
 
 export interface SessionGrant {
   id: string
@@ -67,7 +70,8 @@ export interface SessionGrant {
 }
 
 export interface SessionCreateRequest {
-  token: DelegationToken
+  token?: DelegationToken
+  signedToken?: SignedDelegationTokenV2
   capabilityId?: string
   audience?: string
   boundTo?: string
@@ -79,6 +83,7 @@ export interface SessionCreateResponse {
   authorized: boolean
   session?: SessionGrant
   errors?: string[]
+  signedDelegationVerified?: boolean
 }
 
 export interface SessionLookupResponse {
@@ -130,7 +135,7 @@ export interface CreateSignedSessionOptions {
   delegatee: string
   capabilities: string[]
   privateKey: Uint8Array | string
-  constraints?: DelegationToken['constraints']
+  constraints?: Record<string, unknown>
   audience?: string[]
   capabilityId?: string
   boundTo?: string
@@ -262,8 +267,13 @@ export class AgentdClient {
 
   async createSignedSession(options: CreateSignedSessionOptions): Promise<SessionCreateResponse> {
     const privateKey = this.privateKeyBytes(options.privateKey)
+    const expectedDelegator = await this.didForPrivateKey(privateKey)
+    if (options.delegator !== expectedDelegator) {
+      throw new AgentdError('Delegator DID must match the supplied Ed25519 private key')
+    }
+
     const audience = options.audience ?? ['agentd']
-    const token = createDelegationToken({
+    const token = createDelegationTokenV2({
       delegator: options.delegator,
       delegatee: options.delegatee,
       capabilities: options.capabilities,
@@ -271,15 +281,14 @@ export class AgentdClient {
       expiresAt: options.tokenExpiresAt ?? this.expiresAt(options.tokenTtlMs ?? 3600_000),
       audience,
     })
-    const signedToken = await signDelegationToken(token, privateKey)
+    const signedToken = await signDelegationTokenV2(token, privateKey, options.delegator)
 
     return this.createSession({
-      token: signedToken,
+      signedToken,
       capabilityId: options.capabilityId,
       audience: options.sessionAudience ?? audience[0] ?? 'agentd',
       boundTo: options.boundTo,
       ttlMs: options.sessionTtlMs,
-      delegatorPublicKey: await this.publicKeyHex(options.privateKey),
     })
   }
 
@@ -391,6 +400,11 @@ export class AgentdClient {
   private async publicKeyHex(key: Uint8Array | string): Promise<string> {
     const hex = typeof key === 'string' ? key : Buffer.from(key).toString('hex')
     return deriveEd25519PublicKeyHex(hex)
+  }
+
+  private async didForPrivateKey(key: Uint8Array): Promise<string> {
+    const publicKeyHex = await this.publicKeyHex(key)
+    return didFromPublicKey(Uint8Array.from(Buffer.from(publicKeyHex, 'hex')))
   }
 
   private expiresAt(ttlMs: number): string {

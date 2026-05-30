@@ -290,7 +290,7 @@ const card = await agentd.getCard('did:fides:agent')
 const domain = await agentd.verifyDomain('example.com', 'did:fides:agent')
 
 const session = await agentd.createSignedSession({
-  delegator: 'did:fides:principal',
+  delegator: 'did:fides:<base58-public-key>',
   delegatee: 'did:fides:agent',
   capabilities: ['payments.execute'],
   capabilityId: 'payments.execute',
@@ -459,7 +459,7 @@ const distribution = await platform.trustAnchorDistribution({
 | `DiscoveryClient.verifyDomain(did, domain?)` | Verify and persist a registered identity domain in discovery |
 | `DiscoveryClient.verifyOrganizationDomain(did, domain?)` | Verify and persist a registered organization domain in discovery |
 | `AgentdClient.createSession(request)` | Create delegated agentd sessions |
-| `AgentdClient.createSignedSession(options)` | Create and sign a delegation token before opening a session |
+| `AgentdClient.createSignedSession(options)` | Create a canonical `SignedDelegationTokenV2` and open a session without an external public-key field |
 | `AgentdClient.recordRevocation(request)` | Submit signed authority revocations |
 | `AgentdClient.recordSignedRevocation(options)` | Create and sign an authority revocation before submission |
 | `AgentdClient.recordIncident(request)` | Submit signed authority incidents |

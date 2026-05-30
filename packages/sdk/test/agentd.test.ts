@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { deriveEd25519PublicKeyHex, didFromPublicKey } from '@fides/core'
 import { AgentdClient, AgentdError } from '../src/agentd/client.js'
 
 describe('AgentdClient', () => {
@@ -268,13 +269,15 @@ describe('AgentdClient', () => {
   })
 
   it('creates signed sessions from authority inputs', async () => {
+    const publicKeyHex = await deriveEd25519PublicKeyHex(privateKeyHex)
+    const delegator = didFromPublicKey(Uint8Array.from(Buffer.from(publicKeyHex, 'hex')))
     mockFetch.mockResolvedValueOnce({
       ok: true,
       text: async () => JSON.stringify({ authorized: true, session: { id: 'sess-1', token, sessionKey: 'redacted', expiresAt: token.expiresAt } }),
     })
 
     await expect(client.createSignedSession({
-      delegator: 'did:fides:principal',
+      delegator,
       delegatee: 'did:fides:agent',
       capabilities: ['payments.execute'],
       privateKey: privateKeyHex,
@@ -286,15 +289,39 @@ describe('AgentdClient', () => {
     const body = JSON.parse(init.body as string)
     expect(body.capabilityId).toBe('payments.execute')
     expect(body.audience).toBe('agentd')
-    expect(body.delegatorPublicKey).toMatch(/^[0-9a-f]{64}$/)
-    expect(body.token).toMatchObject({
+    expect(body.delegatorPublicKey).toBeUndefined()
+    expect(body.token).toBeUndefined()
+    expect(body.signedToken).toMatchObject({
+      payload: {
+        schema_version: 'fides.delegation_token.v1',
+        issuer: delegator,
+        subject: 'did:fides:agent',
+        delegator,
+        delegatee: 'did:fides:agent',
+        capabilities: ['payments.execute'],
+        expires_at: '2026-01-01T01:00:00.000Z',
+        audience: ['agentd'],
+      },
+      proof: {
+        proofPurpose: 'delegation',
+        verificationMethod: delegator,
+      },
+    })
+    expect(body.signedToken.payload.payload_hash).toMatch(/^sha256:[0-9a-f]{64}$/)
+  })
+
+  it('rejects signed sessions when the delegator DID does not match the private key', async () => {
+    await expect(client.createSignedSession({
       delegator: 'did:fides:principal',
       delegatee: 'did:fides:agent',
       capabilities: ['payments.execute'],
-      expiresAt: '2026-01-01T01:00:00.000Z',
-      audience: ['agentd'],
+      privateKey: privateKeyHex,
+      capabilityId: 'payments.execute',
+    })).rejects.toMatchObject({
+      name: 'AgentdError',
+      message: 'Delegator DID must match the supplied Ed25519 private key',
     })
-    expect(body.token.signature).toMatch(/^[0-9a-f]{128}$/)
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('records and reads authority revocations', async () => {

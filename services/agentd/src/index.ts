@@ -29,6 +29,7 @@ import { createTrustContext, evaluateGuard } from '@fides/guard'
 import {
   aggregateIncidentImpact,
   authorizeDelegation,
+  authorizeDelegationV2,
   authorizeSessionInvocation,
   createAgentIdentity,
   computeCapabilityReputation,
@@ -91,6 +92,7 @@ import {
   type IdentityTrustAnchor,
   type KillSwitchRule,
   type DelegationToken,
+  type SignedDelegationTokenV2,
   type PrincipalIdentity,
   type PublisherIdentity,
   type ReputationRecord,
@@ -4155,8 +4157,30 @@ app.post('/v1/policy/evaluate', async (c) => {
 // ─── Delegation Sessions (local) ─────────────────────────────────
 app.post('/v1/sessions', async (c) => {
   const body = await c.req.json()
+  const signedToken = body.signedToken ?? (body.token?.payload && body.token?.proof ? body.token : undefined)
+  if (signedToken) {
+    const result = await authorizeDelegationV2({
+      signedToken: signedToken as SignedDelegationTokenV2,
+      store: authorityStore,
+      capabilityId: body.capabilityId,
+      audience: body.audience,
+      boundTo: body.boundTo,
+      ttlMs: body.ttlMs,
+    })
+
+    if (!result.ok) {
+      return c.json({ authorized: false, errors: result.errors }, 409)
+    }
+
+    return c.json({
+      authorized: true,
+      session: redactSessionKey(result.session!),
+      signedDelegationVerified: true,
+    }, 201)
+  }
+
   if (!body.token) {
-    return c.json({ error: 'token is required' }, 400)
+    return c.json({ error: 'token or signedToken is required' }, 400)
   }
 
   const signatureErrors = await verifyOptionalSignature(
